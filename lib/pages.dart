@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'config.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 // ───────────────────────── common page shell ─────────────────────────
 class _Shell extends StatelessWidget {
@@ -346,11 +346,11 @@ class _MatureGateState extends State<_MatureGate> {
                   context: context,
                   builder: (BuildContext c) => AlertDialog(
                     backgroundColor: HC.surface,
-                    title: const Text('Age check'),
-                    content: const Text('Are you 18 years of age or older?'),
+                    title: const Text('Age Verification', style: TextStyle(color: Colors.white)),
+                    content: const Text('Are you 18 years of age or older?', style: TextStyle(color: Colors.white70)),
                     actions: <Widget>[
-                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
-                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes, I am 18+')),
+                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No', style: TextStyle(color: Colors.grey))),
+                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes, I am 18+', style: TextStyle(color: Colors.redAccent))),
                     ],
                   ),
                 );
@@ -558,7 +558,6 @@ void showNotifications(BuildContext context) {
                   icon: Icons.notifications_active_rounded,
                   color: HC.gold,
                   title: n.title,
-                  // 🔥 YAHAN n.image SE DATA READ HOGA TAAKI ERROR NA AAYE
                   imageUrl: n.image,
                   sub: n.body.isEmpty ? _ago(n.ts) : '${n.body}\n${_ago(n.ts)}',
                   onTap: n.url == null ? null : () => openUrl(n.url!),
@@ -571,7 +570,7 @@ void showNotifications(BuildContext context) {
                 children: <Widget>[
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
-                    child: Text('Notifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    child: Text('Notifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
@@ -635,7 +634,7 @@ class _SheetTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white)),
                       const SizedBox(height: 3),
                       Text(sub, style: const TextStyle(color: HC.dim, fontSize: 12.5, height: 1.35)),
                       if (imageUrl != null && imageUrl!.isNotEmpty) ...<Widget>[

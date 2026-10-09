@@ -9,11 +9,9 @@ import 'config.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 
-// 🔥 FIX: Ye 2 imports add kiye hain Player open karne ke liye 🔥
 import 'video_player_page.dart';
 import 'skippable_ad_screen.dart';
 
-// ───────────────────────── hooks (apne app se jodne ke liye) ─────────────────────────
 class DashboardHooks {
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
   final VoidCallback? onOpenLiveTv;
@@ -41,7 +39,6 @@ Future<void> openUrl(String url) async {
   } catch (_) {}
 }
 
-// ───────────────────────── primitives ─────────────────────────
 class ShimmerBox extends StatelessWidget {
   const ShimmerBox({super.key, this.w, this.h, this.r = 12});
   final double? w;
@@ -93,6 +90,7 @@ class PosterImage extends StatelessWidget {
   }
 }
 
+// 🔥 DEEP FIX: SMALLER & 100% TRANSPARENT NUMBER 🔥
 class RankNumber extends StatelessWidget {
   const RankNumber(this.n, {super.key, this.size = 56});
   final int n;
@@ -100,37 +98,37 @@ class RankNumber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextStyle base = TextStyle(
-      fontSize: size,
-      fontWeight: FontWeight.w900,
-      fontStyle: FontStyle.italic,
-      height: 1.0,
-      letterSpacing: -2,
-    );
     return Stack(
       children: <Widget>[
+        // Stroke (Bahar ki thin safed outline)
         Text(
           '$n',
-          style: base.copyWith(
+          style: TextStyle(
+            fontSize: size * 0.85, // Size chhota kar diya
+            fontWeight: FontWeight.w900,
+            fontStyle: FontStyle.italic,
+            height: 1.0,
+            letterSpacing: -3,
             foreground: Paint()
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 5
-              ..strokeJoin = StrokeJoin.round
-              ..color = Colors.black,
+              ..strokeWidth = 2.5
+              ..color = Colors.white.withOpacity(0.9), 
             shadows: <Shadow>[
-              Shadow(color: alpha(HC.accent, 0.95), offset: const Offset(3, 4), blurRadius: 0),
+              Shadow(color: Colors.black.withOpacity(0.6), offset: const Offset(2, 2), blurRadius: 4),
             ],
           ),
         ),
+        // Ander ka fill ekdum transparent kar diya (0.05 opacity)
+        // isse poster ka apna asli color apne aap number me jhalakega!
         Text(
           '$n',
-          style: base.copyWith(
-            foreground: Paint()
-              ..shader = const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[Colors.white, Color(0xFFC9A8FF)],
-              ).createShader(Rect.fromLTWH(0, 0, size, size)),
+          style: TextStyle(
+            fontSize: size * 0.85, // Same reduced size
+            fontWeight: FontWeight.w900,
+            fontStyle: FontStyle.italic,
+            height: 1.0,
+            letterSpacing: -3,
+            color: Colors.white.withOpacity(0.05), // Extremely transparent
           ),
         ),
       ],
@@ -165,47 +163,53 @@ class PosterCard extends StatelessWidget {
       onTap: onTap ?? () => Hooks.open(context, item),
       onLongPress: onLongPress,
       child: SizedBox(
-        width: width,
+        width: width + (rank != null ? 22 : 0), 
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             SizedBox(
-              width: width,
+              width: width + (rank != null ? 22 : 0),
               height: width * 1.5,
               child: Stack(
-                fit: StackFit.expand,
+                clipBehavior: Clip.none,
                 children: <Widget>[
-                  PosterImage(item: item, width: width),
+                  Positioned(
+                    right: 0,
+                    child: PosterImage(item: item, width: width),
+                  ),
                   if (rank != null)
                     Positioned(
-                      left: 0,
                       right: 0,
                       bottom: 0,
-                      height: width * 0.75,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: <Color>[Colors.transparent, alpha(Colors.black, 0.85)],
-                            ),
+                      child: Container(
+                        width: width,
+                        height: width * 0.75,
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[Colors.transparent, Colors.black.withOpacity(0.8)],
                           ),
                         ),
                       ),
                     ),
+                  // 🔥 NUMBER AT BOTTOM LEFT OVERLAPPING THE POSTER 🔥
                   if (rank != null)
-                    Positioned(left: 8, bottom: 4, child: RankNumber(rank!, size: width * 0.5)),
+                    Positioned(
+                      left: -8,
+                      bottom: -8,
+                      child: RankNumber(rank!, size: width * 0.8)
+                    ),
                   if (badge != null)
                     Positioned(
                       top: 6,
-                      left: 6,
+                      right: 6,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
-                          color: alpha(Colors.black, 0.7),
+                          color: Colors.black.withOpacity(0.7),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(badge!,
@@ -214,7 +218,7 @@ class PosterCard extends StatelessWidget {
                     ),
                   if (progress != null)
                     Positioned(
-                      left: 8,
+                      left: (rank != null ? 30 : 8),
                       right: 8,
                       bottom: 8,
                       child: ClipRRect(
@@ -231,7 +235,7 @@ class PosterCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: EdgeInsets.only(top: 6, left: (rank != null ? 28 : 0)),
               child: Text(
                 item.title,
                 maxLines: 1,
@@ -239,11 +243,14 @@ class PosterCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
               ),
             ),
-            Text(
-              item.rating > 0 ? '★ ${item.rating.toStringAsFixed(1)}   ${item.year}' : item.year,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11, color: HC.dim),
+            Padding(
+              padding: EdgeInsets.only(left: (rank != null ? 28 : 0)),
+              child: Text(
+                item.rating > 0 ? '★ ${item.rating.toStringAsFixed(1)}   ${item.year}' : item.year,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: HC.dim),
+              ),
             ),
           ],
         ),
@@ -518,18 +525,21 @@ class AdSlot extends StatelessWidget {
     final Widget Function(BuildContext)? b = builder;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
-      child: Container(
-        height: 62,
-        alignment: Alignment.center,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: HC.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white10),
+      child: Center(
+        child: Container(
+          height: 62,
+          width: 330, 
+          alignment: Alignment.center,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: HC.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: b != null
+              ? b(context)
+              : const CustomBannerAd(htmlBannerCode: kDashAdsterraSnippet),
         ),
-        child: b != null
-            ? b(context)
-            : const CustomBannerAd(htmlBannerCode: kDashAdsterraSnippet),
       ),
     );
   }
@@ -675,7 +685,6 @@ class _TitleSheet extends StatelessWidget {
                         child: GestureDetector(
                           onTap: () {
                             Navigator.of(context).pop(); 
-                            // 🔥 YAHAN PLAYER CONNECT KAR DIYA HAI 🔥
                             Navigator.push(
                               outer,
                               MaterialPageRoute(

@@ -4,11 +4,13 @@ import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config.dart';
 import 'tmdb_service.dart';
+import 'main.dart'; 
 
 Future<String> appVersion() async {
   try {
@@ -20,7 +22,6 @@ Future<String> appVersion() async {
 }
 
 // ═════════════════════════════ WATCHLIST ═════════════════════════════
-/// Player/details screen se bhi use karo:  WatchlistStore.I.toggle(item);
 class WatchlistStore extends ChangeNotifier {
   WatchlistStore._();
   static final WatchlistStore I = WatchlistStore._();
@@ -109,11 +110,6 @@ class CwEntry {
       );
 }
 
-/// PLAYER se call karo (har ~10 sec + pause/exit par):
-///   ContinueWatchingStore.I.update(item, positionMs: p, durationMs: d,
-///       season: s, episode: e, isLastEpisode: <series ka aakhri episode?>);
-/// Movie 95% dekhne par, ya series ka aakhri episode 95% par → list se hat jati hai.
-/// Adhi dekhi series tab tak rehti hai jab tak puri khatam na ho.
 class ContinueWatchingStore extends ChangeNotifier {
   ContinueWatchingStore._();
   static final ContinueWatchingStore I = ContinueWatchingStore._();
@@ -189,7 +185,7 @@ class ContinueWatchingStore extends ChangeNotifier {
   }
 }
 
-// ═════════════════════════════ NOTIFICATIONS (24h) + UPDATE ═════════════════════════════
+// ═════════════════════════════ NOTIFICATIONS ═════════════════════════════
 class AppNotification {
   final String id;
   final String title;
@@ -197,6 +193,7 @@ class AppNotification {
   final String? url;
   final String? image;
   final int ts;
+  
   const AppNotification({
     required this.id,
     required this.title,
@@ -224,19 +221,21 @@ class AppNotification {
     if (title.isEmpty && body.isEmpty) return null;
     final int ts = (m.sentTime ?? DateTime.now()).millisecondsSinceEpoch;
     final String? url = (m.data['url'] ?? m.data['link'])?.toString();
-    final String? image = (m.notification?.android?.imageUrl ??
+    
+    final String? imageUrl = (m.notification?.android?.imageUrl ??
             m.notification?.apple?.imageUrl ??
             m.data['image'] ??
             m.data['imageUrl'] ??
             m.data['image_url'])
         ?.toString();
+        
     return AppNotification(
       id: m.messageId ?? '${ts}_$title',
       title: title.isEmpty ? 'HANNUTV' : title,
       body: body,
       ts: ts,
       url: url,
-      image: image,
+      image: imageUrl,
     );
   }
 }
@@ -249,8 +248,6 @@ class UpdateInfo {
 
 const int _day = 24 * 60 * 60 * 1000;
 
-/// main.dart me ek baar register karo:
-///   FirebaseMessaging.onBackgroundMessage(hannuBackgroundHandler);
 @pragma('vm:entry-point')
 Future<void> hannuBackgroundHandler(RemoteMessage m) async {
   final AppNotification? n = AppNotification.fromMessage(m);
@@ -266,7 +263,6 @@ class NotificationStore extends ChangeNotifier {
   UpdateInfo? update;
   bool _inited = false;
 
-  /// Sirf pichle 24 ghante ke notifications.
   List<AppNotification> get active {
     final int cut = DateTime.now().millisecondsSinceEpoch - _day;
     final List<AppNotification> l = _all.where((AppNotification n) => n.ts >= cut).toList();
@@ -279,7 +275,7 @@ class NotificationStore extends ChangeNotifier {
   static Future<void> appendRaw(AppNotification n) async {
     try {
       final SharedPreferences p = await SharedPreferences.getInstance();
-      await p.reload(); // background isolate ne likha ho to latest padho
+      await p.reload(); 
       final List<AppNotification> list = _decode(p.getString(_k));
       if (list.any((AppNotification e) => e.id == n.id)) return;
       list.add(n);
@@ -322,6 +318,26 @@ class NotificationStore extends ChangeNotifier {
     if (n == null) return;
     await appendRaw(n);
     await _reload();
+    
+    final context = navigatorKey.currentContext;
+    if (context != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(n.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              if (n.body.isNotEmpty) Text(n.body, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+          backgroundColor: HC.accent2,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 4),
+        )
+      );
+    }
   }
 
   Future<void> init() async {
@@ -329,6 +345,18 @@ class NotificationStore extends ChangeNotifier {
     _inited = true;
     await _reload();
     try {
+      // 🔥 DEEP FIX: FORCING PERMISSION DIALOG ON ANDROID 13+ 🔥
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(
+        alert: true,
+        announcement: false,
+        badge: true,
+        carPlay: false,
+        criticalAlert: false,
+        provisional: false,
+        sound: true,
+      );
+
       FirebaseMessaging.onMessage.listen(_onMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_onMessage);
       final RemoteMessage? first = await FirebaseMessaging.instance.getInitialMessage();
@@ -336,10 +364,10 @@ class NotificationStore extends ChangeNotifier {
     } catch (e) {
       debugPrint('fcm listen error: $e');
     }
-    unawaited(_checkUpdate());
+    // ignore: unawaited_futures
+    _checkUpdate();
   }
 
-  /// Firebase Remote Config keys:  latest_version (e.g. "1.3.0")  &  update_url (hannutv direct link)
   Future<void> _checkUpdate() async {
     try {
       final FirebaseRemoteConfig rc = FirebaseRemoteConfig.instance;

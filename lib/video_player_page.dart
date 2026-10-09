@@ -15,7 +15,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
-import 'tmdb_service.dart'; // 🔥 YEH IMPORT MISSING THA 🔥
+import 'tmdb_service.dart';
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -161,7 +161,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchTvDetails() async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await http.get(Uri.parse('https://hannu-tv.hritikmishra862.workers.dev/3/tv/${widget.tmdbId}?language=en-US'), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.themoviedb.org/3/tv/${widget.tmdbId}?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { totalSeasons = data['number_of_seasons'] ?? 1; });
@@ -173,7 +173,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchEpisodes(int seasonNum) async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await http.get(Uri.parse('https://hannu-tv.hritikmishra862.workers.dev/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US'), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
@@ -212,7 +212,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     setState(() => isLoadingSimilar = true);
     try {
       final type = widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
-      final res = await http.get(Uri.parse('https://hannu-tv.hritikmishra862.workers.dev/3/$type/${widget.tmdbId}/recommendations?language=en-US'), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List results = data['results'] ?? [];
@@ -249,77 +249,41 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onPageFinished: (String url) {
             if (mounted && widget.customUrl != null) setState(() => isPageLoading = false);
 
+            // 🔥 DEEP FIX: FAST SERVER AD BLOCKER & WHITE SCREEN FIX 🔥
             String jsCode = '''
               document.documentElement.style.backgroundColor = '#000000';
               document.body.style.backgroundColor = '#000000';
+              
+              // Completely disable popup windows
               window.open = function() { return null; };
               window.alert = function() { return true; }; 
               window.confirm = function() { return true; }; 
-
+              
+              // Force hide all ad-related elements
               var style = document.createElement('style');
               style.innerHTML = `
-                header, nav, .navbar, footer, .footer, .server-select, .logo, a[href*="t.me"], a[href="/"],
-                iframe[src*="ads"], .ad-container, .ads, .popup-overlay, .dmca-notice, h1, h2, h3,
-                .human-verify, #captcha, [class*="verify"], #ad-overlay, .video-ad, .jw-ad, .ad-box, a[target="_blank"] { 
+                iframe[src*="ads"], iframe[src*="bet"], iframe[src*="casino"], .ad-container, .ads, .popup-overlay, 
+                [class*="verify"], #ad-overlay, .video-ad, .jw-ad, .ad-box, a[target="_blank"], div[style*="z-index: 2147483647"] { 
                     display: none !important; 
                     opacity: 0 !important; 
                     pointer-events: none !important; 
                     visibility: hidden !important; 
+                    height: 0 !important;
+                    width: 0 !important;
+                    z-index: -1 !important;
                 }
-                body, html { 
-                    background-color: #000000 !important; 
-                    overflow: hidden !important; 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    width: 100vw !important; 
-                    height: 100vh !important; 
-                }
-                /* MAIN MAGIC: IFRAME KO FULL SCREEN KARNA */
-                iframe:not([src*="ads"]):not([src*="bet"]):not([src*="casino"]) {
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100vw !important;
-                    height: 100vh !important;
-                    z-index: 99999 !important;
-                    border: none !important;
-                    background-color: #000000 !important;
-                }
+                body, html { background-color: #000000 !important; overflow: hidden !important; }
               `;
               document.head.appendChild(style);
 
-              setInterval(function() {
-                var adSelectors = ['iframe[src*="ads"]', 'iframe[src*="bet"]', '.ad-container', '.ads', '.popup-overlay', '[class*="ad-"]', '[id*="ad-"]', '.jw-ad', '.video-ad', 'a[target="_blank"]'];
-                adSelectors.forEach(function(s) {
-                    var els = document.querySelectorAll(s);
-                    els.forEach(function(e) { e.remove(); });
-                });
-              }, 400);
-
-              function hannuReady() {
-                if (window.__hannuReady) return;
-                window.__hannuReady = true;
-                VideoState.postMessage('ready');
-              }
-              function hannuCheck() {
-                if (window.__hannuReady) return;
-                var frames = document.querySelectorAll('iframe:not([src*="ads"])');
-                var entries = performance.getEntriesByType('resource');
-                for (var i = 0; i < frames.length; i++) {
-                  var f = frames[i];
-                  if ((f.src || '').indexOf('http') !== 0) continue;
-                  if (!f.__hannuWatch) {
-                    f.__hannuWatch = Date.now();
-                    f.addEventListener('load', hannuReady);
-                  }
-                  for (var j = 0; j < entries.length; j++) {
-                    if (entries[j].initiatorType === 'iframe' && entries[j].name === f.src) { hannuReady(); break; }
-                  }
-                  if (Date.now() - f.__hannuWatch > 6000) hannuReady();
+              // Block fake clicks
+              document.addEventListener('click', function(e) {
+                var target = e.target.closest('a');
+                if(target && target.href && (target.href.includes('ad') || target.href.includes('bet') || target.href.includes('pop'))) {
+                    e.preventDefault();
+                    e.stopPropagation();
                 }
-              }
-              hannuCheck();
-              setInterval(hannuCheck, 100);
+              }, true);
 
               setInterval(function() {
                 var vids = document.getElementsByTagName('video');
@@ -331,21 +295,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   v.style.top = '0'; v.style.left = '0'; v.style.width = '100vw'; v.style.height = '100vh'; v.style.zIndex = '999999';
                   if (v.currentTime > 0.5 && !v.paused) VideoState.postMessage('playing');
                 }
-                var playBtns = document.querySelectorAll('.play-btn, .vjs-big-play-button, .play-icon, #play-button');
-                playBtns.forEach(function(b) { b.click(); });
               }, 200);
             ''';
             _controller.runJavaScript(jsCode);
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-            if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('bet365') || url.contains('onclick') || url.contains('adult') || url.contains('telegram') || url.contains('t.me') || url.contains('adsterra') || url.contains('captcha') || url.contains('verify') || url.contains('/ad/') || url.contains('sponsor')) {
+            // Block all known ad networks unconditionally
+            if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('bet365') || url.contains('onclick') || url.contains('adsterra') || url.contains('/ad/') || url.contains('sponsor')) {
                 return NavigationDecision.prevent;
             }
-            if (url.contains('pantyflix.com') || url.contains('vercel.app') || url.contains('vidbolt') || url.contains('vidsrc') || url.contains('vidlink') || url.contains('multiembed') || url.contains('autoembed') || url.startsWith('about:blank') || url.startsWith('data:')) {
-                return NavigationDecision.navigate;
-            }
-            return NavigationDecision.prevent;
+            return NavigationDecision.navigate;
           },
         ),
       );
@@ -533,7 +493,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (mounted) setState(() => isLoadingDetails = true);
     try {
       final res = await http.get(
-        Uri.parse('https://hannu-tv.hritikmishra862.workers.dev/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null'),
+        Uri.parse('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null'),
         headers: kApiHeaders,
       );
       if (res.statusCode == 200) {
@@ -676,7 +636,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (path.isEmpty) {
       try {
         final res = await http
-            .get(Uri.parse('https://hannu-tv.hritikmishra862.workers.dev/3/$_tmdbType/${widget.tmdbId}?language=en-US'), headers: kApiHeaders)
+            .get(Uri.parse('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US'), headers: kApiHeaders)
             .timeout(const Duration(seconds: 6));
         if (res.statusCode == 200) {
           final data = json.decode(res.body);
@@ -684,13 +644,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         }
       } catch (_) {}
     }
-    return path;
+    return path.isNotEmpty ? 'https://image.tmdb.org/t/p/w500$path' : '';
   }
 
+  // 🔥 WATCHLIST SYNC DEEP FIX 🔥
   Future<void> _toggleWatchlist() async {
     final Map<String, dynamic> tmdbData = {
       'id': widget.tmdbId,
-      'media_type': _tmdbType,
+      'is_tv': _tmdbType == 'tv', 
       'title': widget.movieTitle,
       'name': widget.movieTitle,
       'release_date': widget.year,
@@ -1014,6 +975,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (isTvDevice) return _buildTVLayout(); 
 
     if (isFullScreen) {
+      // 🔥 BLACK BACKGROUND FIX 🔥
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
@@ -1093,9 +1055,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       child: Row(
                         children: [
                           if (widget.customUrl == null) ...[
-                            ValueListenableBuilder<List<Map<String, dynamic>>>(
-                              valueListenable: WatchlistStore.I.items as ValueNotifier<List<Map<String, dynamic>>>,
-                              builder: (context, list, _) {
+                            AnimatedBuilder(
+                              animation: WatchlistStore.I,
+                              builder: (context, _) {
                                 final bool saved = WatchlistStore.I.items.any((e) => e.id == widget.tmdbId && (e.isTv ? 'tv' : 'movie') == _tmdbType);
                                 return _buildFocusableItem(
                                   onTap: _toggleWatchlist,
@@ -1128,8 +1090,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       const SizedBox(height: 10),
                       const Text("Sponsored Ads", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                       const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
@@ -1542,7 +1502,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     setState(() { _loading = true; _lastQuery = q; });
     try {
       final res = await http.get(
-        Uri.parse('https://hannu-tv.hritikmishra862.workers.dev/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1'),
+        Uri.parse('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1'),
         headers: kApiHeaders,
       );
       if (!mounted || q != _lastQuery) return;
@@ -1721,7 +1681,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   Future<void> _load() async {
     try {
       final res = await http.get(
-        Uri.parse('https://hannu-tv.hritikmishra862.workers.dev/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids'),
+        Uri.parse('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids'),
         headers: kApiHeaders,
       );
       if (!mounted) return;

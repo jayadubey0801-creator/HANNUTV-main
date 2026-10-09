@@ -283,7 +283,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
                 badge: NotificationStore.I.badge,
               ),
             ),
-            // jaha pehle anime avatar tha → ab Support
             GestureDetector(
               onTap: () => showSupportSheet(context),
               child: Padding(
@@ -316,7 +315,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
         itemCount: _tabs.length,
         separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 10),
         itemBuilder: (BuildContext _, int i) {
-          final bool sel = i == 0; // dashboard hamesha HANNU TRENDING par hai
+          final bool sel = i == 0; 
           return GestureDetector(
             onTap: () => _onTab(i),
             child: Container(
