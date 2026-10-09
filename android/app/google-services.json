@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "964421965385",
+    "project_id": "hannutv-54545",
+    "storage_bucket": "hannutv-54545.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:964421965385:android:937b2e35a1e7bc96ef1198",
+        "android_client_info": {
+          "package_name": "com.example.onyxtube"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJiihdidbX6g6TAdkk4CfthgGcU0nAIns"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
