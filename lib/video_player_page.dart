@@ -16,6 +16,7 @@ import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
 import 'tmdb_service.dart';
+import 'config.dart' show kAllGenres, GenreDef;
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -94,6 +95,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
+  // region-wise glow: 8 zones = TL, T, TR, R, BR, B, BL, L
+  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
+  List<List<Color>> _ambientZonePalette = <List<Color>>[];
+  // two-finger zoom (1.0 = normal)
+  final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
   final List<Map<String, String>> servers = const [
     {'key': 'vidrift', 'name': 'Rift'},          
@@ -518,21 +524,28 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
 
     final List<Color> palette = [];
+    final List<List<Color>> zonePalette = [];
     for (final p in paths) {
       if (!mounted) return;
       final Color? c = await _dominantColorFromUrl('https://image.tmdb.org/t/p/w300$p');
       if (!mounted) return;
+      final List<Color>? z = await _zoneColorsFromUrl('https://image.tmdb.org/t/p/w300$p');
+      if (!mounted) return;
       if (c != null) {
         palette.add(c);
+        zonePalette.add(z ?? List<Color>.filled(8, c));
         if (palette.length == 1) {
           _ambientTimer?.cancel();
           _ambientPalette = [c];
+          _ambientZonePalette = [zonePalette.first];
           _ambientColor.value = c;
+          _ambientZones.value = zonePalette.first;
         }
       }
     }
     if (!mounted || palette.isEmpty) return;
     _ambientPalette = palette;
+    _ambientZonePalette = zonePalette;
     _startAmbientCycle();
   }
 
@@ -608,11 +621,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (_ambientPalette.isEmpty) return;
     _ambientIndex = 0;
     _ambientColor.value = _ambientPalette[0];
+    _applyZones(0);
     if (_ambientPalette.length < 2) return;
     _ambientTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted || _ambientPalette.isEmpty) return;
       _ambientIndex = (_ambientIndex + 1) % _ambientPalette.length;
       _ambientColor.value = _ambientPalette[_ambientIndex];
+      _applyZones(_ambientIndex);
     });
   }
 
@@ -631,10 +646,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         }
       } catch (_) {}
     }
-    return path.isNotEmpty ? 'https://image.tmdb.org/t/p/w500$path' : '';
+    return path;
   }
 
   Future<void> _toggleWatchlist() async {
+    final String posterPath = await _posterUrlForWatchlist();
     final Map<String, dynamic> tmdbData = {
       'id': widget.tmdbId,
       'is_tv': _tmdbType == 'tv', 
@@ -644,7 +660,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       'first_air_date': widget.year,
       'vote_average': num.tryParse(widget.rating) ?? 0.0,
       'overview': widget.overview.isNotEmpty ? widget.overview : (details?['overview'] ?? ''),
-      'poster_path': await _posterUrlForWatchlist(),
+      'poster_path': posterPath.isEmpty ? null : posterPath,
     };
     final item = TmdbItem.fromStored(tmdbData);
     await WatchlistStore.I.toggle(item);
@@ -659,6 +675,159 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  void _applyZones(int i) {
+    if (i < _ambientZonePalette.length) {
+      _ambientZones.value = _ambientZonePalette[i];
+    } else {
+      _ambientZones.value = List<Color>.filled(8, _ambientColor.value);
+    }
+  }
+
+  // Movie ke still (backdrop/poster) ko 3x3 grid me baant ke bahar ke 8 hisson ka alag-alag colour nikaalta hai
+  Future<List<Color>?> _zoneColorsFromUrl(String url) async {
+    try {
+      final Completer<ui.Image> completer = Completer<ui.Image>();
+      final ImageStream stream = NetworkImage(url).resolve(const ImageConfiguration());
+      late ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (ImageInfo info, bool _) {
+          if (!completer.isCompleted) completer.complete(info.image);
+          stream.removeListener(listener);
+        },
+        onError: (Object error, StackTrace? stackTrace) {
+          if (!completer.isCompleted) completer.completeError(error);
+          stream.removeListener(listener);
+        },
+      );
+      stream.addListener(listener);
+      final ui.Image img = await completer.future.timeout(const Duration(seconds: 10));
+      final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) return null;
+      final Uint8List bytes = data.buffer.asUint8List();
+      final int w = img.width;
+      final int h = img.height;
+      const List<List<int>> cells = <List<int>>[
+        [0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1],
+      ];
+      final List<Color?> raw = <Color?>[];
+      for (final List<int> c in cells) {
+        raw.add(_zoneCellColor(
+          bytes, w,
+          (w * c[0] / 3).floor(), (w * (c[0] + 1) / 3).floor(),
+          (h * c[1] / 3).floor(), (h * (c[1] + 1) / 3).floor(),
+        ));
+      }
+      Color fallback = const Color(0xFF3A2A6A);
+      for (final Color? c in raw) {
+        if (c != null) {
+          fallback = c;
+          break;
+        }
+      }
+      final HSVColor fh = HSVColor.fromColor(fallback);
+      final Color dim = HSVColor.fromAHSV(1.0, fh.hue, fh.saturation, (fh.value * 0.6).clamp(0.0, 1.0).toDouble()).toColor();
+      return raw.map((Color? c) => c ?? dim).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Color? _zoneCellColor(Uint8List bytes, int w, int x0, int x1, int y0, int y1) {
+    final List<double> wS = List<double>.filled(12, 0);
+    final List<double> rS = List<double>.filled(12, 0);
+    final List<double> gS = List<double>.filled(12, 0);
+    final List<double> bS = List<double>.filled(12, 0);
+    for (int y = y0; y < y1; y += 3) {
+      for (int x = x0; x < x1; x += 3) {
+        final int i = (y * w + x) * 4;
+        if (i + 2 >= bytes.length) continue;
+        final int r = bytes[i];
+        final int g = bytes[i + 1];
+        final int b = bytes[i + 2];
+        final HSVColor hsv = HSVColor.fromColor(Color.fromARGB(255, r, g, b));
+        final double wgt = hsv.saturation * hsv.value;
+        if (wgt < 0.04) continue;
+        int bin = (hsv.hue / 30).floor();
+        if (bin > 11) bin = 11;
+        if (bin < 0) bin = 0;
+        wS[bin] += wgt;
+        rS[bin] += r * wgt;
+        gS[bin] += g * wgt;
+        bS[bin] += b * wgt;
+      }
+    }
+    int best = -1;
+    double bestW = 0;
+    for (int k = 0; k < 12; k++) {
+      if (wS[k] > bestW) {
+        bestW = wS[k];
+        best = k;
+      }
+    }
+    if (best < 0 || bestW < 0.5) return null;
+    final Color base = Color.fromARGB(
+      255,
+      (rS[best] / bestW).round().clamp(0, 255).toInt(),
+      (gS[best] / bestW).round().clamp(0, 255).toInt(),
+      (bS[best] / bestW).round().clamp(0, 255).toInt(),
+    );
+    final HSVColor hh = HSVColor.fromColor(base);
+    return HSVColor.fromAHSV(
+      1.0,
+      hh.hue,
+      hh.saturation.clamp(0.45, 1.0).toDouble(),
+      hh.value.clamp(0.5, 0.95).toDouble(),
+    ).toColor();
+  }
+
+  Future<List<TmdbItem>> _sameGenreLoader() async {
+    final dynamic gl = details?['genres'];
+    final List<String> ids = <String>[];
+    if (gl is List) {
+      for (final dynamic g in gl) {
+        if (g is Map && g['id'] != null) ids.add('${g['id']}');
+        if (ids.length >= 2) break;
+      }
+    }
+    if (ids.isEmpty) return <TmdbItem>[];
+    return Tmdb.I.discover(tv: _tmdbType == 'tv', genres: ids.join(','), count: 20);
+  }
+
+  List<Widget> _buildMoreSuggestions() {
+    final bool tv = _tmdbType == 'tv';
+    void open(TmdbItem it) => _openTitle(
+          id: it.id,
+          mediaType: it.isTv ? 'tv' : 'movie',
+          title: it.title,
+          rating: it.rating.toStringAsFixed(1),
+          year: it.year,
+          overview: it.overview,
+        );
+    final List<Widget> rows = <Widget>[const SizedBox(height: 10)];
+    if (details != null) {
+      rows.add(_SuggestRow(
+        key: ValueKey('same-${widget.tmdbId}'),
+        title: 'More Like This',
+        excludeId: widget.tmdbId,
+        loader: _sameGenreLoader,
+        onOpen: open,
+        focusable: _buildFocusableItem,
+      ));
+    }
+    for (final String label in const <String>['Action', 'Comedy', 'Romance', 'Horror', 'Thriller']) {
+      final GenreDef g = kAllGenres.firstWhere((GenreDef d) => d.label == label, orElse: () => kAllGenres.first);
+      rows.add(_SuggestRow(
+        key: ValueKey('$label-${widget.tmdbId}'),
+        title: tv ? '$label Series' : '$label Movies',
+        excludeId: widget.tmdbId,
+        loader: () => Tmdb.I.genreRow(g, tv ? RowKind.series : RowKind.movie, count: 20),
+        onOpen: open,
+        focusable: _buildFocusableItem,
+      ));
+    }
+    return rows;
   }
 
   void _openTitle({
@@ -946,6 +1115,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     commentInputController.dispose();
     _ambientTimer?.cancel();
     _ambientColor.dispose();
+    _ambientZones.dispose();
+    _videoZoom.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
@@ -954,7 +1125,74 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
-  Widget _buildTVLayout() { return const Scaffold(backgroundColor: Colors.black, body: Center(child: Text("TV Layout Mode", style: TextStyle(color: Colors.white)))); }
+  // Android TV / badi screen: movie hamesha full screen, top-right HANNUTV logo (OK dabane par controls)
+  Widget _buildTVLayout() {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+          if (isPageLoading && !isVideoPlaying)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black,
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)),
+                      SizedBox(height: 10),
+                      Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            top: 14,
+            right: 20,
+            child: SafeArea(
+              child: _buildFocusableItem(
+                onTap: _startControlsTimer,
+                borderRadius: BorderRadius.circular(12),
+                child: Opacity(
+                  opacity: 0.9,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (showControls) ...[
+            Positioned(
+              top: 20,
+              left: 20,
+              child: SafeArea(
+                child: _buildFocusableItem(
+                  onTap: () => Navigator.pop(context),
+                  borderRadius: BorderRadius.circular(22),
+                  child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 26)),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: SafeArea(
+                child: _buildFocusableItem(
+                  onTap: _cycleAspectRatio,
+                  borderRadius: BorderRadius.circular(22),
+                  child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.aspect_ratio, color: Colors.white, size: 24)),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -965,7 +1203,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            Positioned.fill(child: WebViewWidget(controller: _controller)),
+            Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
             if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
             Positioned(top: 14, right: 20, child: SafeArea(child: IgnorePointer(child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
             if (showControls) ...[
@@ -991,12 +1229,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _AmbientGlow(
-              color: _ambientColor,
+              zones: _ambientZones,
               child: GestureDetector(
               onTap: _startControlsTimer,
               child: Stack(
                 children: [
-                  Container(width: double.infinity, height: 230, color: Colors.black, child: WebViewWidget(controller: _controller)),
+                  Container(width: double.infinity, height: 230, color: Colors.black, child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
                   Positioned(
                     top: 10, right: 14,
                     child: GestureDetector(
@@ -1297,6 +1535,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         ),
                       ),
                     ],
+                    if (widget.customUrl == null) ..._buildMoreSuggestions(),
                   ],
                 ),
               ),
@@ -1347,27 +1586,66 @@ class _TvFocusButtonState extends State<_TvFocusButton> {
 }
 
 class _AmbientGlow extends StatelessWidget {
-  final ValueNotifier<Color> color;
+  final ValueNotifier<List<Color>> zones;
   final Widget child;
-  const _AmbientGlow({required this.color, required this.child});
+  const _AmbientGlow({required this.zones, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Color>(
-      valueListenable: color,
+    return ValueListenableBuilder<List<Color>>(
+      valueListenable: zones,
       child: child,
-      builder: (context, c, ch) {
-        return AnimatedContainer(
+      builder: (context, z, ch) {
+        return TweenAnimationBuilder<List<Color>>(
+          tween: _ZonesTween(end: z),
           duration: const Duration(milliseconds: 2500),
           curve: Curves.easeInOut,
-          decoration: BoxDecoration(
-            boxShadow: [BoxShadow(color: c.withOpacity(0.55), blurRadius: 46, spreadRadius: 5)],
-          ),
           child: ch,
+          builder: (context, colors, c) {
+            return CustomPaint(painter: _GlowPainter(colors), child: c);
+          },
         );
       },
     );
   }
+}
+
+class _ZonesTween extends Tween<List<Color>> {
+  _ZonesTween({List<Color>? begin, required List<Color> end}) : super(begin: begin, end: end);
+
+  @override
+  List<Color> lerp(double t) {
+    final List<Color> a = begin ?? end!;
+    final List<Color> b = end!;
+    return List<Color>.generate(b.length, (int i) => Color.lerp(i < a.length ? a[i] : b[i], b[i], t) ?? b[i]);
+  }
+}
+
+// 8 zone colours (TL, T, TR, R, BR, B, BL, L) ko player ke kinaron par blur karke glow banata hai
+class _GlowPainter extends CustomPainter {
+  final List<Color> zones;
+  _GlowPainter(this.zones);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (zones.length < 8 || size.isEmpty) return;
+    final double w = size.width;
+    final double h = size.height;
+    final List<Offset> pts = <Offset>[
+      Offset(0, 0), Offset(w / 2, 0), Offset(w, 0), Offset(w, h / 2),
+      Offset(w, h), Offset(w / 2, h), Offset(0, h), Offset(0, h / 2),
+    ];
+    final double radius = h * 0.40;
+    for (int i = 0; i < 8; i++) {
+      final Paint p = Paint()
+        ..color = zones[i].withAlpha(150)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 34);
+      canvas.drawCircle(pts[i], radius, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlowPainter old) => old.zones != zones;
 }
 
 class _AmbientBackground extends StatelessWidget {
@@ -1969,6 +2247,170 @@ class _ActorSheetState extends State<_ActorSheet> {
           child: body,
         );
       },
+    );
+  }
+}
+
+
+// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
+class _PinchZoom extends StatefulWidget {
+  final ValueNotifier<double> zoom;
+  final Widget child;
+  const _PinchZoom({required this.zoom, required this.child});
+
+  @override
+  State<_PinchZoom> createState() => _PinchZoomState();
+}
+
+class _PinchZoomState extends State<_PinchZoom> {
+  final Map<int, Offset> _pointers = <int, Offset>{};
+  double _startDist = 0;
+  double _startZoom = 1.0;
+
+  double _dist() {
+    final List<Offset> v = _pointers.values.toList();
+    return (v[0] - v[1]).distance;
+  }
+
+  void _down(PointerDownEvent e) {
+    _pointers[e.pointer] = e.position;
+    if (_pointers.length == 2) {
+      _startDist = _dist();
+      _startZoom = widget.zoom.value;
+    }
+  }
+
+  void _move(PointerMoveEvent e) {
+    if (!_pointers.containsKey(e.pointer)) return;
+    _pointers[e.pointer] = e.position;
+    if (_pointers.length == 2 && _startDist > 0) {
+      widget.zoom.value = (_startZoom * _dist() / _startDist).clamp(1.0, 2.2).toDouble();
+    }
+  }
+
+  void _up(PointerEvent e) {
+    _pointers.remove(e.pointer);
+    if (_pointers.length < 2) {
+      _startDist = 0;
+      if (widget.zoom.value < 1.06) widget.zoom.value = 1.0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: _up,
+      onPointerCancel: _up,
+      child: ClipRect(
+        child: ValueListenableBuilder<double>(
+          valueListenable: widget.zoom,
+          child: widget.child,
+          builder: (context, z, ch) => Transform.scale(scale: z, child: ch),
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestRow extends StatefulWidget {
+  final String title;
+  final int excludeId;
+  final Future<List<TmdbItem>> Function() loader;
+  final void Function(TmdbItem item) onOpen;
+  final Widget Function({required Widget child, required VoidCallback onTap, BorderRadius? borderRadius}) focusable;
+  const _SuggestRow({
+    super.key,
+    required this.title,
+    required this.excludeId,
+    required this.loader,
+    required this.onOpen,
+    required this.focusable,
+  });
+
+  @override
+  State<_SuggestRow> createState() => _SuggestRowState();
+}
+
+class _SuggestRowState extends State<_SuggestRow> {
+  List<TmdbItem>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    List<TmdbItem> r = <TmdbItem>[];
+    try {
+      r = await widget.loader();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _items = r.where((TmdbItem e) => e.id != widget.excludeId).toList());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<TmdbItem>? items = _items;
+    if (items != null && items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 175,
+            child: items == null
+                ? ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: 5,
+                    itemBuilder: (context, index) => Container(
+                      width: 110,
+                      margin: const EdgeInsets.only(right: 10, bottom: 20),
+                      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(8)),
+                    ),
+                  )
+                : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final TmdbItem it = items[index];
+                      return widget.focusable(
+                        onTap: () => widget.onOpen(it),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: 110,
+                          margin: const EdgeInsets.only(right: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: CachedNetworkImage(
+                                    imageUrl: it.posterUrl('w342'),
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    placeholder: (BuildContext _, String __) => Container(color: Colors.grey[900]),
+                                    errorWidget: (BuildContext _, String __, Object ___) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.white24)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
