@@ -300,7 +300,6 @@ class OttPage extends StatelessWidget {
   }
 }
 
-// 🔥 YAHAN POPUP TEXT PURI TARAH ENGLISH MEIN KAR DIYA HAI 🔥
 class _MatureGate extends StatefulWidget {
   const _MatureGate({required this.ott});
   final Ott ott;
@@ -553,7 +552,7 @@ void showNotifications(BuildContext context) {
                   title: n.title,
                   sub: n.body.isEmpty ? _ago(n.ts) : '${n.body}\n${_ago(n.ts)}',
                   onTap: n.url == null ? null : () => openUrl(n.url!),
-                  imageUrl: n.imageUrl, // 🔥 IMAGE SUPPORT ADDED HERE 🔥
+                  imageUrl: n.imageUrl, // 🔥 FIX: Yahan 'imageUrl' kar diya hai
                 ),
             ];
             return SafeArea(
@@ -565,7 +564,6 @@ void showNotifications(BuildContext context) {
                     padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
                     child: Text('Notifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                   ),
-                  // 🔥 NOTIFICATION TEXT ENGLISH MEIN 🔥
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
                     child: Text('Notifications are kept for 24 hours',
@@ -594,7 +592,6 @@ void showNotifications(BuildContext context) {
   );
 }
 
-// 🔥 _SheetTile MEIN IMAGE SUPPORT ADD KIYA GAYA HAI 🔥
 class _SheetTile extends StatelessWidget {
   const _SheetTile({required this.icon, required this.color, required this.title, required this.sub, this.onTap, this.imageUrl});
   final IconData icon;

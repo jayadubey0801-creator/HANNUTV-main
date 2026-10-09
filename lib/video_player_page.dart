@@ -14,7 +14,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
-import 'stores.dart'; // 🔥 Yahan WatchlistStore use hoga ab
+import 'stores.dart'; 
+import 'tmdb_service.dart'; // 🔥 YEH IMPORT MISSING THA 🔥
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -287,7 +288,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
-              // 🔥 AGGRESSIVE FAST SERVER AD BLOCKER 🔥
               setInterval(function() {
                 var adSelectors = ['iframe[src*="ads"]', 'iframe[src*="bet"]', '.ad-container', '.ads', '.popup-overlay', '[class*="ad-"]', '[id*="ad-"]', '.jw-ad', '.video-ad', 'a[target="_blank"]'];
                 adSelectors.forEach(function(s) {
@@ -339,7 +339,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-            // 🔥 URL BASED AD BLOCKER 🔥
             if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('bet365') || url.contains('onclick') || url.contains('adult') || url.contains('telegram') || url.contains('t.me') || url.contains('adsterra') || url.contains('captcha') || url.contains('verify') || url.contains('/ad/') || url.contains('sponsor')) {
                 return NavigationDecision.prevent;
             }
@@ -685,10 +684,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         }
       } catch (_) {}
     }
-    return path; // 🔥 FIREBASE STORE MEIN SIRF PATH STORE HOTA HAI 🔥
+    return path;
   }
 
-  // 🔥 YAHAN WATCHLIST STORE KI SYNC FIX KAR DI HAI 🔥
   Future<void> _toggleWatchlist() async {
     final Map<String, dynamic> tmdbData = {
       'id': widget.tmdbId,
@@ -1095,9 +1093,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       child: Row(
                         children: [
                           if (widget.customUrl == null) ...[
-                            AnimatedBuilder(
-                              animation: WatchlistStore.I,
-                              builder: (context, _) {
+                            ValueListenableBuilder<List<Map<String, dynamic>>>(
+                              valueListenable: WatchlistStore.I.items as ValueNotifier<List<Map<String, dynamic>>>,
+                              builder: (context, list, _) {
                                 final bool saved = WatchlistStore.I.items.any((e) => e.id == widget.tmdbId && (e.isTv ? 'tv' : 'movie') == _tmdbType);
                                 return _buildFocusableItem(
                                   onTap: _toggleWatchlist,

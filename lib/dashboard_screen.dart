@@ -1,368 +1,302 @@
-import 'dart:async';
-
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'config.dart';
+import 'hero.dart';
+import 'pages.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
 
-// ───────────────────────── common page shell ─────────────────────────
-class _Shell extends StatelessWidget {
-  const _Shell({required this.title, required this.children, this.lead, this.tint = HC.accent});
-  final String title;
-  final Widget? lead;
-  final Color tint;
-  final List<Widget> children;
+/// HANNUTV main dashboard.
+///
+/// Use:
+///   HannuDashboard(hooks: DashboardHooks(
+///     onOpenTitle: (ctx, item) => Navigator.push(ctx, MaterialPageRoute(builder: (_) => YourPlayer(item))),
+///     onOpenLiveTv: () => Navigator.push(context, ...LiveTvScreen),   // Live TV bilkul untouched
+///   ))
+class HannuDashboard extends StatefulWidget {
+  const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
+  final DashboardHooks hooks;
 
   @override
+  State<HannuDashboard> createState() => _HannuDashboardState();
+}
+
+class _HannuDashboardState extends State<HannuDashboard> {
+  static const List<String> _tabs = <String>[
+    'HANNU TRENDING',
+    'Anime',
+    'Movies',
+    'Series',
+    'Kids',
+    'Live TV',
+  ];
+
+  final ScrollController _scroll = ScrollController();
+  final ValueNotifier<Color> _ambient = ValueNotifier<Color>(HC.accent);
+  late Future<List<TmdbItem>> _hero;
+  int _epoch = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    Hooks.cfg = widget.hooks;
+    WatchlistStore.I.load();
+    ContinueWatchingStore.I.load();
+    NotificationStore.I.init();
+    _hero = Tmdb.I.heroItems();
+  }
+
+  @override
+  void didUpdateWidget(covariant HannuDashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    Hooks.cfg = widget.hooks;
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _ambient.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    Tmdb.I.clearCache();
+    final Future<List<TmdbItem>> f = Tmdb.I.heroItems();
+    setState(() {
+      _epoch++;
+      _hero = f;
+    });
+    await f;
+  }
+
+  void _onTab(int i) {
+    switch (i) {
+      case 0:
+        if (_scroll.hasClients) {
+          _scroll.animateTo(0, duration: const Duration(milliseconds: 400), curve: Curves.easeOut);
+        }
+        break;
+      case 1:
+        openCategory(context, CategoryKind.anime);
+        break;
+      case 2:
+        openCategory(context, CategoryKind.movies);
+        break;
+      case 3:
+        openCategory(context, CategoryKind.series);
+        break;
+      case 4:
+        openCategory(context, CategoryKind.kids);
+        break;
+      case 5:
+        final VoidCallback? f = widget.hooks.onOpenLiveTv;
+        if (f != null) {
+          f();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Live TV: DashboardHooks.onOpenLiveTv me apni Live TV screen do.')),
+          );
+        }
+        break;
+    }
+  }
+
+  // ───────────────────────── build ─────────────────────────
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: HC.bg,
-      body: Stack(
-        children: <Widget>[
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 360,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[alpha(tint, 0.55), HC.bg],
-                ),
+    return Theme(
+      data: hannuTheme(),
+      child: Scaffold(
+        backgroundColor: HC.bg,
+        body: Stack(
+          children: <Widget>[
+            _ambientBackground(),
+            RefreshIndicator(
+              color: HC.accent2,
+              backgroundColor: HC.surface,
+              onRefresh: _refresh,
+              child: CustomScrollView(
+                controller: _scroll,
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                cacheExtent: 900,
+                slivers: <Widget>[
+                  SliverList(delegate: SliverChildListDelegate(_children())),
+                ],
               ),
             ),
-          ),
-          CustomScrollView(
-            cacheExtent: 800,
-            slivers: <Widget>[
-              SliverAppBar(
-                pinned: true,
-                backgroundColor: alpha(HC.bg, 0.92),
-                surfaceTintColor: Colors.transparent,
-                elevation: 0,
-                titleSpacing: 0,
-                title: Row(
-                  children: <Widget>[
-                    if (lead != null) ...<Widget>[lead!, const SizedBox(width: 10)],
-                    Expanded(
-                      child: Text(title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-                    ),
-                  ],
-                ),
-              ),
-              SliverList(
-                delegate: SliverChildListDelegate(<Widget>[
-                  const SizedBox(height: 8),
-                  ...children,
-                  const SizedBox(height: 40),
-                ]),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-}
 
-Future<void> _push(BuildContext c, Widget page, {bool dialog = false}) =>
-    Navigator.of(c).push(MaterialPageRoute<void>(
-      builder: (_) => Theme(data: hannuTheme(), child: page),
-      fullscreenDialog: dialog,
-    ));
-
-void openGenre(BuildContext c, GenreDef g) => _push(c, GenrePage(g: g), dialog: true);
-void openOtt(BuildContext c, Ott o) => _push(c, OttPage(ott: o));
-void openCategory(BuildContext c, CategoryKind k) => _push(c, CategoryPage(kind: k), dialog: true);
-void openWatchlist(BuildContext c) => _push(c, const WatchlistPage());
-void openSearch(BuildContext c) => _push(c, const SearchPage());
-
-// ───────────────────────── GENRE popup ─────────────────────────
-/// Action/Romance/... par click → Movies, Web Series, Anime (aur Drama me K-Drama) — top 50 each.
-class GenrePage extends StatelessWidget {
-  const GenrePage({super.key, required this.g});
-  final GenreDef g;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Shell(
-      title: g.label,
-      tint: g.c1,
-      lead: Icon(g.icon, color: Colors.white),
-      children: <Widget>[
-        PosterRow(
-          title: 'Movies',
-          subtitle: 'Top 50 ${g.label}',
-          width: 118,
-          hideIfEmpty: false,
-          loader: () => Tmdb.I.genreRow(g, RowKind.movie),
-        ),
-        PosterRow(
-          title: 'Web Series',
-          subtitle: 'Top 50 ${g.label}',
-          width: 118,
-          loader: () => Tmdb.I.genreRow(g, RowKind.series),
-        ),
-        PosterRow(
-          title: 'Anime',
-          subtitle: 'Top 50 ${g.label}',
-          width: 118,
-          loader: () => Tmdb.I.genreRow(g, RowKind.anime),
-        ),
-        if (g.hasKdrama)
-          PosterRow(
-            title: 'K-Drama',
-            subtitle: 'Top 50 Korean drama',
-            width: 118,
-            loader: () => Tmdb.I.genreRow(g, RowKind.kdrama),
-          ),
-      ],
-    );
-  }
-}
-
-// ───────────────────────── CATEGORY popup (Anime / Movies / Series / Kids) ─────────────────────────
-enum CategoryKind { anime, movies, series, kids }
-
-class CategoryPage extends StatelessWidget {
-  const CategoryPage({super.key, required this.kind});
-  final CategoryKind kind;
-
-  @override
-  Widget build(BuildContext context) {
-    switch (kind) {
-      case CategoryKind.anime:
-        return _Shell(
-          title: 'Anime',
-          tint: const Color(0xFF6D28D9),
-          children: <Widget>[
-            PosterRow(
-              title: 'Trending Anime',
-              width: 118,
-              hideIfEmpty: false,
-              loader: () => Tmdb.I.discover(tv: true, genres: '16', lang: 'ja', count: 30),
-            ),
-            PosterRow(
-              title: 'Top Rated Anime',
-              width: 118,
-              loader: () => Tmdb.I.discover(
-                  tv: true, genres: '16', lang: 'ja', sort: 'vote_average.desc', count: 30),
-            ),
-            PosterRow(
-              title: 'Anime Movies',
-              width: 118,
-              loader: () => Tmdb.I.discover(tv: false, genres: '16', lang: 'ja', count: 30),
-            ),
-            for (final GenreDef g in kAllGenres)
-              PosterRow(
-                title: '${g.label} Anime',
-                width: 118,
-                loader: () => Tmdb.I.genreRow(g, RowKind.anime),
-              ),
-          ],
-        );
-      case CategoryKind.movies:
-        return _Shell(
-          title: 'Movies',
-          tint: const Color(0xFFB91C1C),
-          children: <Widget>[
-            PosterRow(
-              title: 'Trending Movies',
-              width: 118,
-              hideIfEmpty: false,
-              loader: () => Tmdb.I.list('/trending/movie/week', <String, String>{}, count: 30, tv: false),
-            ),
-            PosterRow(
-              title: 'Top Rated',
-              width: 118,
-              loader: () => Tmdb.I.list('/movie/top_rated', <String, String>{}, count: 30, tv: false),
-            ),
-            PosterRow(
-              title: 'Hollywood',
-              width: 118,
-              loader: () => Tmdb.I.discover(tv: false, lang: 'en', count: 30),
-            ),
-            PosterRow(
-              title: 'Bollywood',
-              width: 118,
-              loader: () => Tmdb.I.discover(tv: false, lang: 'hi', count: 30),
-            ),
-            for (final GenreDef g in kAllGenres)
-              PosterRow(
-                title: '${g.label} Movies',
-                width: 118,
-                loader: () => Tmdb.I.genreRow(g, RowKind.movie),
-              ),
-          ],
-        );
-      case CategoryKind.series:
-        return _Shell(
-          title: 'Web Series',
-          tint: const Color(0xFF0369A1),
-          children: <Widget>[
-            PosterRow(
-              title: 'Trending Series',
-              width: 118,
-              hideIfEmpty: false,
-              loader: () => Tmdb.I.list('/trending/tv/week', <String, String>{}, count: 30, tv: true),
-            ),
-            // har OTT ka alag Top 10 series
-            for (final Ott o in kOtts)
-              PosterRow(
-                title: 'Top 10 on ${o.name}',
-                leading: OttLogo(o, w: 46, h: 32, radius: 8),
-                ranked: true,
-                width: 124,
-                loader: () => Tmdb.I.ottRow(o, tvOnly: true, count: 10),
-              ),
-            for (final GenreDef g in kAllGenres)
-              PosterRow(
-                title: '${g.label} Series',
-                width: 118,
-                loader: () => Tmdb.I.genreRow(g, RowKind.series),
-              ),
-          ],
-        );
-      case CategoryKind.kids:
-        return _Shell(
-          title: 'Kids',
-          tint: const Color(0xFF16A34A),
-          children: <Widget>[
-            PosterRow(
-              title: 'Kids Movies',
-              width: 118,
-              hideIfEmpty: false,
-              loader: () => Tmdb.I.discover(
-                tv: false,
-                genres: '16|10751',
-                count: 30,
-                extra: <String, String>{'certification_country': 'US', 'certification.lte': 'PG'},
-              ),
-            ),
-            PosterRow(
-              title: 'Kids Shows',
-              width: 118,
-              loader: () => Tmdb.I.discover(tv: true, genres: '10762', count: 30),
-            ),
-            PosterRow(
-              title: 'Family Series',
-              width: 118,
-              loader: () => Tmdb.I.discover(tv: true, genres: '10751', count: 30),
-            ),
-          ],
-        );
+  List<Widget> _children() {
+    final List<Widget> c = <Widget>[
+      _header(),
+      _tabsRow(),
+      const SizedBox(height: 8),
+      _heroSection(),
+      const ContinueWatchingRow(),
+      _ottSection(),
+      PosterRow(
+        key: ValueKey<String>('india$_epoch'),
+        title: 'Top 10 in India',
+        subtitle: 'India ke OTTs par abhi sabse zyada trending',
+        ranked: true,
+        width: 128,
+        hideIfEmpty: false,
+        loader: () => Tmdb.I.topIndia(),
+      ),
+      const AdSlot(),
+      PosterRow(
+        key: ValueKey<String>('world$_epoch'),
+        title: 'Top 10 Worldwide',
+        subtitle: 'Duniya bhar me trending',
+        ranked: true,
+        width: 128,
+        hideIfEmpty: false,
+        loader: () => Tmdb.I.topWorld(),
+      ),
+      _genreChips(),
+    ];
+    for (int i = 0; i < kDashGenres.length; i++) {
+      final GenreDef g = kDashGenres[i];
+      c.add(GenreBlock(
+        key: ValueKey<String>('${g.key}$_epoch'),
+        g: g,
+        onSeeAll: () => openGenre(context, g),
+      ));
+      if (i == 2) c.add(const AdSlot());
     }
+    c.add(const SizedBox(height: 40));
+    return c;
   }
-}
 
-// ───────────────────────── OTT page ─────────────────────────
-/// Ek OTT par click → us OTT ki saari categories (TMDB watch-provider filter se).
-class OttPage extends StatelessWidget {
-  const OttPage({super.key, required this.ott});
-  final Ott ott;
-
-  @override
-  Widget build(BuildContext context) {
-    final Ott o = ott;
-    return _Shell(
-      title: o.name,
-      lead: OttLogo(o, w: 56, h: 36, radius: 10),
-      children: <Widget>[
-        PosterRow(
-          title: 'Top 10 on ${o.name}',
-          ranked: true,
-          width: 128,
-          hideIfEmpty: false,
-          loader: () => Tmdb.I.ottRow(o, count: 10),
-        ),
-        PosterRow(
-          title: 'Top 10 Web Series',
-          ranked: true,
-          width: 124,
-          loader: () => Tmdb.I.ottRow(o, tvOnly: true, count: 10),
-        ),
-        PosterRow(
-          title: 'Top 10 Movies',
-          ranked: true,
-          width: 124,
-          loader: () => Tmdb.I.ottRow(o, movieOnly: true, count: 10),
-        ),
-        PosterRow(title: 'Hollywood', loader: () => Tmdb.I.ottRow(o, lang: 'en', count: 30)),
-        PosterRow(title: 'Bollywood', loader: () => Tmdb.I.ottRow(o, lang: 'hi', count: 30)),
-        PosterRow(title: 'K-Drama', loader: () => Tmdb.I.ottRow(o, kdrama: true, count: 30)),
-        PosterRow(title: 'Anime', loader: () => Tmdb.I.ottRow(o, animeOnly: true, count: 30)),
-        for (final GenreDef g in kAllGenres)
-          PosterRow(title: g.label, loader: () => Tmdb.I.ottRow(o, genre: g, count: 30)),
-        _MatureGate(ott: o),
-      ],
-    );
-  }
-}
-
-/// 18+ row — pehle age confirm.
-class _MatureGate extends StatefulWidget {
-  const _MatureGate({required this.ott});
-  final Ott ott;
-  @override
-  State<_MatureGate> createState() => _MatureGateState();
-}
-
-class _MatureGateState extends State<_MatureGate> {
-  bool _ok = false;
-
-  @override
-  Widget build(BuildContext context) {
-    if (_ok) {
-      return PosterRow(
-        title: '18+ Mature',
-        subtitle: 'R / A-rated movies',
-        loader: () => Tmdb.I.ottRow(widget.ott, mature: true, count: 30),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: HC.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Row(
-          children: <Widget>[
-            const Icon(Icons.lock_outline_rounded, color: HC.dim),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text('18+ Mature category', style: TextStyle(fontWeight: FontWeight.w700)),
-            ),
-            GestureDetector(
-              onTap: () async {
-                final bool? yes = await showDialog<bool>(
-                  context: context,
-                  builder: (BuildContext c) => AlertDialog(
-                    backgroundColor: HC.surface,
-                    title: const Text('Age Verification'),
-                    content: const Text('Are you 18 years of age or older?'),
-                    actions: <Widget>[
-                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
-                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes, 18+')),
-                    ],
+  // ───────────────────────── ambient background (poster ke hisaab se smooth color) ─────────────────────────
+  Widget _ambientBackground() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 620,
+      child: IgnorePointer(
+        child: ValueListenableBuilder<Color>(
+          valueListenable: _ambient,
+          builder: (BuildContext _, Color target, Widget? __) {
+            return TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: target),
+              duration: const Duration(milliseconds: 1100),
+              curve: Curves.easeInOutCubic,
+              builder: (BuildContext _, Color? v, Widget? __) {
+                final Color col = v ?? target;
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[alpha(col, 0.9), alpha(col, 0.35), HC.bg],
+                      stops: const <double>[0.0, 0.5, 1.0],
+                    ),
                   ),
                 );
-                if (yes == true && mounted) setState(() => _ok = true);
               },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // ───────────────────────── header ─────────────────────────
+  Widget _iconBtn(IconData icon, VoidCallback onTap, {int badge = 0}) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        IconButton(
+          onPressed: onTap,
+          icon: Icon(icon, size: 26, color: Colors.white),
+        ),
+        if (badge > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: IgnorePointer(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(gradient: HC.primary, borderRadius: BorderRadius.circular(10)),
-                child: const Text('Unlock', style: TextStyle(fontWeight: FontWeight.w800)),
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: HC.accent2, borderRadius: BorderRadius.circular(9)),
+                child: Text(
+                  badge > 9 ? '9+' : '$badge',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _header() {
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 4, 2),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Image.asset(
+                  'assets/logo.png',
+                  height: 34,
+                  fit: BoxFit.contain,
+                  errorBuilder: (BuildContext _, Object __, StackTrace? ___) => const Text(
+                    'HANNUTV',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  ),
+                ),
+              ),
+            ),
+            _iconBtn(Icons.search_rounded, () {
+              final VoidCallback? f = widget.hooks.onOpenSearch;
+              if (f != null) {
+                f();
+              } else {
+                openSearch(context);
+              }
+            }),
+            AnimatedBuilder(
+              animation: WatchlistStore.I,
+              builder: (BuildContext _, Widget? __) => _iconBtn(
+                Icons.bookmark_border_rounded,
+                () => openWatchlist(context),
+                badge: WatchlistStore.I.length,
+              ),
+            ),
+            AnimatedBuilder(
+              animation: NotificationStore.I,
+              builder: (BuildContext _, Widget? __) => _iconBtn(
+                Icons.notifications_none_rounded,
+                () => showNotifications(context),
+                badge: NotificationStore.I.badge,
+              ),
+            ),
+            GestureDetector(
+              onTap: () => showSupportSheet(context),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 10, 0),
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    gradient: HC.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: const Icon(Icons.support_agent_rounded, size: 21, color: Colors.white),
+                ),
               ),
             ),
           ],
@@ -370,352 +304,170 @@ class _MatureGateState extends State<_MatureGate> {
       ),
     );
   }
-}
 
-// ───────────────────────── Watchlist ─────────────────────────
-class WatchlistPage extends StatelessWidget {
-  const WatchlistPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: HC.bg,
-      appBar: AppBar(
-        backgroundColor: HC.bg,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('My Watchlist', style: TextStyle(fontWeight: FontWeight.w800)),
-      ),
-      body: AnimatedBuilder(
-        animation: WatchlistStore.I,
-        builder: (BuildContext ctx, Widget? _) {
-          final List<TmdbItem> items = WatchlistStore.I.items;
-          if (items.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Text(
-                  'Watchlist khali hai.\nKisi bhi movie/series par "My List" dabao.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: HC.dim, height: 1.5),
+  Widget _tabsRow() {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        itemCount: _tabs.length,
+        separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 10),
+        itemBuilder: (BuildContext _, int i) {
+          final bool sel = i == 0; // dashboard hamesha HANNU TRENDING par hai
+          return GestureDetector(
+            onTap: () => _onTab(i),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                gradient: sel ? HC.primary : null,
+                color: sel ? null : alpha(Colors.white, 0.06),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: sel ? Colors.transparent : Colors.white24),
+              ),
+              child: Text(
+                _tabs[i],
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: sel ? FontWeight.w800 : FontWeight.w600,
+                  color: sel ? Colors.white : Colors.white70,
                 ),
               ),
-            );
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 14,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.52,
             ),
-            itemCount: items.length,
-            itemBuilder: (BuildContext _, int i) {
-              final TmdbItem it = items[i];
-              return LayoutBuilder(
-                builder: (BuildContext _, BoxConstraints c) => Stack(
-                  children: <Widget>[
-                    PosterCard(item: it, width: c.maxWidth),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: GestureDetector(
-                        onTap: () => WatchlistStore.I.toggle(it),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(color: alpha(Colors.black, 0.7), shape: BoxShape.circle),
-                          child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
           );
         },
       ),
     );
   }
-}
 
-// ───────────────────────── Search ─────────────────────────
-class SearchPage extends StatefulWidget {
-  const SearchPage({super.key});
-  @override
-  State<SearchPage> createState() => _SearchPageState();
-}
-
-class _SearchPageState extends State<SearchPage> {
-  final TextEditingController _c = TextEditingController();
-  Timer? _deb;
-  List<TmdbItem> _res = const <TmdbItem>[];
-  bool _busy = false;
-  int _seq = 0;
-
-  void _onChanged(String q) {
-    _deb?.cancel();
-    final String t = q.trim();
-    if (t.length < 2) {
-      _seq++; // in-flight search ka result ab ignore hoga
-      setState(() {
-        _res = const <TmdbItem>[];
-        _busy = false;
-      });
-      return;
-    }
-    _deb = Timer(const Duration(milliseconds: 400), () async {
-      final int my = ++_seq;
-      setState(() => _busy = true);
-      final List<TmdbItem> r = await Tmdb.I.search(t);
-      if (!mounted || my != _seq) return; // purani query ka result ignore
-      setState(() {
-        _res = r;
-        _busy = false;
-      });
-    });
+  // ───────────────────────── hero ─────────────────────────
+  Widget _heroSection() {
+    return FutureBuilder<List<TmdbItem>>(
+      future: _hero,
+      builder: (BuildContext ctx, AsyncSnapshot<List<TmdbItem>> s) {
+        if (s.connectionState != ConnectionState.done) return const HeroSkeleton();
+        final List<TmdbItem> items = s.data ?? const <TmdbItem>[];
+        if (items.isEmpty) return _heroError();
+        return HeroCarousel(
+          key: ValueKey<String>('hero$_epoch'),
+          items: items,
+          onColor: (Color c) => _ambient.value = c,
+        );
+      },
+    );
   }
 
-  @override
-  void dispose() {
-    _deb?.cancel();
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: HC.bg,
-      appBar: AppBar(
-        backgroundColor: HC.bg,
-        surfaceTintColor: Colors.transparent,
-        title: TextField(
-          controller: _c,
-          autofocus: true,
-          onChanged: _onChanged,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Movie, series, anime search karo…',
-            hintStyle: TextStyle(color: HC.dim),
-            border: InputBorder.none,
+  Widget _heroError() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+      child: GestureDetector(
+        onTap: _refresh,
+        child: Container(
+          height: 170,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: HC.surface, borderRadius: BorderRadius.circular(20)),
+          child: Text(
+            tmdbKeyMissing
+                ? 'TMDB API key nahi mili.\nlib/dashboard/config.dart me paste karo.'
+                : 'Trending load nahi hua.\nInternet check karo — tap karke retry karo.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: HC.dim, height: 1.5),
           ),
         ),
       ),
-      body: _busy
-          ? const Center(child: CircularProgressIndicator())
-          : (_res.isEmpty
-              ? const Center(child: Text('Kuch type karo', style: TextStyle(color: HC.dim)))
-              : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.52,
-                  ),
-                  itemCount: _res.length,
-                  itemBuilder: (BuildContext _, int i) => LayoutBuilder(
-                    builder: (BuildContext _, BoxConstraints c) =>
-                        PosterCard(item: _res[i], width: c.maxWidth),
-                  ),
-                )),
     );
   }
-}
 
-// ───────────────────────── Notifications sheet ─────────────────────────
-String _ago(int ts) {
-  final Duration d = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
-  if (d.inMinutes < 1) return 'Just now';
-  if (d.inMinutes < 60) return '${d.inMinutes} mins ago';
-  return '${d.inHours} hours ago';
-}
-
-void showNotifications(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: HC.surface,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-    builder: (BuildContext sheetCtx) {
-      return ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetCtx).size.height * 0.75),
-        child: AnimatedBuilder(
-          animation: NotificationStore.I,
-          builder: (BuildContext _, Widget? __) {
-            final NotificationStore s = NotificationStore.I;
-            final List<AppNotification> list = s.active;
-            final UpdateInfo? u = s.update;
-            final List<Widget> tiles = <Widget>[
-              if (u != null)
-                _SheetTile(
-                  icon: Icons.system_update_rounded,
-                  color: HC.accent2,
-                  title: 'Update your app',
-                  sub: 'New version v${u.version} is available. Tap to update.',
-                  onTap: () => openUrl(u.url),
-                ),
-              for (final AppNotification n in list)
-                _SheetTile(
-                  icon: Icons.notifications_active_rounded,
-                  color: HC.gold,
-                  title: n.title,
-                  sub: n.body.isEmpty ? _ago(n.ts) : '${n.body}\n${_ago(n.ts)}',
-                  imageUrl: n.image,
-                  onTap: n.url == null ? null : () => openUrl(n.url!),
-                ),
-            ];
-            return SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
-                    child: Text('Notifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-                    child: Text('Notifications are kept for 24 hours',
-                        style: TextStyle(color: HC.dim, fontSize: 12)),
-                  ),
-                  if (tiles.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(20, 20, 20, 40),
-                      child: Text('No new notifications at the moment.', style: TextStyle(color: HC.dim)),
-                    )
-                  else
-                    Flexible(
-                      child: ListView(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                        children: tiles,
-                      ),
-                    ),
-                ],
-              ),
-            );
-          },
+  // ───────────────────────── OTT logos ─────────────────────────
+  Widget _ottSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionTitle('Streaming on'),
+        SizedBox(
+          height: 62,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: kOtts.length,
+            separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
+            itemBuilder: (BuildContext _, int i) => GestureDetector(
+              onTap: () => openOtt(context, kOtts[i]),
+              child: OttLogo(kOtts[i], w: 96, h: 60),
+            ),
+          ),
         ),
-      );
-    },
-  );
-}
+        const SizedBox(height: 20),
+      ],
+    );
+  }
 
-class _SheetTile extends StatelessWidget {
-  const _SheetTile({required this.icon, required this.color, required this.title, required this.sub, this.imageUrl, this.onTap});
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String sub;
-  final String? imageUrl;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: HC.card,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(color: alpha(color, 0.18), shape: BoxShape.circle),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+  // ───────────────────────── genre chips ─────────────────────────
+  Widget _genreChips() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionTitle('Genres'),
+        SizedBox(
+          height: 66,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: kAllGenres.length,
+            separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 10),
+            itemBuilder: (BuildContext _, int i) {
+              final GenreDef g = kAllGenres[i];
+              return GestureDetector(
+                onTap: () => openGenre(context, g),
+                child: Container(
+                  width: 112,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[g.c1, g.c2],
+                    ),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Stack(
                     children: <Widget>[
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                      const SizedBox(height: 3),
-                      Text(sub, style: const TextStyle(color: HC.dim, fontSize: 12.5, height: 1.35)),
-                      if (imageUrl != null && imageUrl!.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: CachedNetworkImage(
-                            imageUrl: imageUrl!,
-                            height: 120,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
+                      Positioned(
+                        right: -8,
+                        bottom: -8,
+                        child: Icon(g.icon, size: 52, color: alpha(Colors.white, 0.18)),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            g.label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
-                if (onTap != null) ...[
-                  const SizedBox(width: 8),
-                  const Icon(Icons.chevron_right_rounded, color: HC.dim)
-                ],
-              ],
-            ),
+              );
+            },
           ),
         ),
-      ),
+        const SizedBox(height: 20),
+      ],
     );
   }
-}
-
-// ───────────────────────── Support sheet ─────────────────────────
-void showSupportSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: HC.surface,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-    builder: (BuildContext _) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(8, 0, 8, 4),
-              child: Text('Support', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(8, 0, 8, 12),
-              child: Text('Join us for support or updates', style: TextStyle(color: HC.dim, fontSize: 12)),
-            ),
-            _SheetTile(
-              icon: Icons.send_rounded,
-              color: const Color(0xFF229ED9),
-              title: 'Telegram',
-              sub: 'Support & new releases',
-              onTap: () => openUrl(kTelegramUrl),
-            ),
-            _SheetTile(
-              icon: Icons.chat_rounded,
-              color: const Color(0xFF25D366),
-              title: 'WhatsApp Channel',
-              sub: 'Get latest updates on WhatsApp',
-              onTap: () => openUrl(kWhatsappChannelUrl),
-            ),
-            const SizedBox(height: 6),
-            Center(
-              child: FutureBuilder<String>(
-                future: appVersion(),
-                builder: (BuildContext _, AsyncSnapshot<String> s) => Text(
-                  'HANNUTV v${s.data ?? kVersionFallback}',
-                  style: const TextStyle(color: HC.dim, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
