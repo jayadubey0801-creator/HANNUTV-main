@@ -4,7 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'banner_ad_widget.dart';
 import 'config.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
@@ -501,14 +500,6 @@ class OttLogo extends StatelessWidget {
   }
 }
 
-// Dashboard ke AdSlot me jo asli banner chalta hai (Adsterra 320x50) — player wale snippet jaisa hi.
-const String kDashAdsterraSnippet = '''
-<script type="text/javascript">
-  atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-</script>
-<script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
-''';
-
 // ───────────────────────── ad slot ─────────────────────────
 class AdSlot extends StatelessWidget {
   const AdSlot({super.key});
@@ -532,7 +523,26 @@ class AdSlot extends StatelessWidget {
         ),
         child: b != null
             ? b(context)
-            : const CustomBannerAd(htmlBannerCode: kDashAdsterraSnippet),
+            : Stack(
+                children: <Widget>[
+                  const Center(
+                    child: Text('Advertisement', style: TextStyle(color: HC.dim, fontSize: 12)),
+                  ),
+                  Positioned(
+                    top: 6,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: alpha(HC.gold, 0.9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('Ad',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.black)),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
