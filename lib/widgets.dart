@@ -4,14 +4,12 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'banner_ad_widget.dart';
 import 'config.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
+import 'banner_ad_widget.dart'; // 🔥 Yahan Adsterra ke liye import lagaya gaya hai 🔥
 
-// ───────────────────────── hooks (apne app se jodne ke liye) ─────────────────────────
 class DashboardHooks {
-  /// Poster/Watch Now par tap → apni details/player screen kholo.
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
   final VoidCallback? onOpenLiveTv;
   final VoidCallback? onOpenSearch;
@@ -38,7 +36,6 @@ Future<void> openUrl(String url) async {
   } catch (_) {}
 }
 
-// ───────────────────────── primitives ─────────────────────────
 class ShimmerBox extends StatelessWidget {
   const ShimmerBox({super.key, this.w, this.h, this.r = 12});
   final double? w;
@@ -90,7 +87,6 @@ class PosterImage extends StatelessWidget {
   }
 }
 
-/// Poster ke upar lagne wala bada 3D number (Top 10 ke liye).
 class RankNumber extends StatelessWidget {
   const RankNumber(this.n, {super.key, this.size = 56});
   final int n;
@@ -292,9 +288,8 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-const double kRowExtra = 52; // poster ke neeche title+rating ki jagah
+const double kRowExtra = 52; 
 
-/// Lazy poster row: tabhi load hota hai jab screen ke paas aata hai.
 class PosterRow extends StatefulWidget {
   const PosterRow({
     super.key,
@@ -441,7 +436,6 @@ class ContinueWatchingRow extends StatelessWidget {
   }
 }
 
-// ───────────────────────── OTT logo ─────────────────────────
 class OttLogo extends StatelessWidget {
   const OttLogo(this.ott, {super.key, this.w = 84, this.h = 54, this.radius = 14});
   final Ott ott;
@@ -501,18 +495,10 @@ class OttLogo extends StatelessWidget {
   }
 }
 
-// ───────────────────────── ad slot ─────────────────────────
-const String _adsterraBannerSnippet = '''
-  <script type="text/javascript">
-    atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-  </script>
-  <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
-''';
-
+// 🔥 YAHAN DASHBOARD ADS KE LIYE CUSTOM BANNER AD FIX KIYA GAYA HAI 🔥
 class AdSlot extends StatelessWidget {
   const AdSlot({super.key});
 
-  /// AdMob jodna ho to:  AdSlot.builder = (ctx) => AdWidget(ad: myBannerAd);
   static Widget Function(BuildContext)? builder;
 
   @override
@@ -531,13 +517,19 @@ class AdSlot extends StatelessWidget {
         ),
         child: b != null
             ? b(context)
-            : const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+            : const CustomBannerAd(
+                htmlBannerCode: '''
+                  <script type="text/javascript">
+                    atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
+                  </script>
+                  <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
+                ''',
+              ),
       ),
     );
   }
 }
 
-// ───────────────────────── genre block (dashboard + popup dono me) ─────────────────────────
 class GenreBlock extends StatelessWidget {
   const GenreBlock({super.key, required this.g, this.onSeeAll});
   final GenreDef g;
@@ -604,7 +596,6 @@ class GenreBlock extends StatelessWidget {
   }
 }
 
-// ───────────────────────── default title sheet ─────────────────────────
 void showTitleSheet(BuildContext context, TmdbItem item) {
   showModalBottomSheet<void>(
     context: context,
