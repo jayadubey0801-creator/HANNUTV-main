@@ -95,10 +95,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
-  // region-wise glow: 8 zones = TL, T, TR, R, BR, B, BL, L
   final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
   List<List<Color>> _ambientZonePalette = <List<Color>>[];
-  // two-finger zoom (1.0 = normal)
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
   final List<Map<String, String>> servers = const [
@@ -238,7 +236,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  // 🔥 ORIGINAL "PURANI CODING" FOR VIDEO PLAYER 🔥
+  // 🔥 ORIGINAL PLAYER CODE FROM 7-8 TARIK 🔥
+  // EXACTLY AS IT WAS, WITHOUT ANY NEW AD-BLOCK HACKS THAT BROKE IT!
   void _initStream() {
     setState(() { isPageLoading = true; isVideoPlaying = false; showIntroAnimation = false; });
 
@@ -258,10 +257,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             if (mounted) setState(() => isPageLoading = true); 
           },
           onPageFinished: (String url) {
-            // 🔥 DEEP FIX: SPINNER HAMESHA YAHAN BAND HOGA 🔥
+            // Yaha aate hi connecting spinner band ho jata hai!
             if (mounted) setState(() => isPageLoading = false);
 
-            // TERA ORIGINAL CLEAN CODE (NO OVER-BLOCKING)
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               var style = document.createElement('style');
@@ -294,7 +292,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-            // Basic ad block without breaking the server
+            // Basic ad block taaki Vercel aur original server pass ho sake!
             if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('adsterra')) {
                 return NavigationDecision.prevent;
             }
@@ -685,7 +683,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     }
   }
 
-  // Movie ke still (backdrop/poster) ko 3x3 grid me baant ke bahar ke 8 hisson ka alag-alag colour nikaalta hai
   Future<List<Color>?> _zoneColorsFromUrl(String url) async {
     try {
       final Completer<ui.Image> completer = Completer<ui.Image>();
@@ -1125,7 +1122,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
-  // Android TV / badi screen: movie hamesha full screen, top-right HANNUTV logo (OK dabane par controls)
   Widget _buildTVLayout() {
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1621,7 +1617,6 @@ class _ZonesTween extends Tween<List<Color>> {
   }
 }
 
-// 8 zone colours (TL, T, TR, R, BR, B, BL, L) ko player ke kinaron par blur karke glow banata hai
 class _GlowPainter extends CustomPainter {
   final List<Color> zones;
   _GlowPainter(this.zones);
@@ -2250,7 +2245,6 @@ class _ActorSheetState extends State<_ActorSheet> {
     );
   }
 }
-
 
 // Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
