@@ -16,20 +16,12 @@ import 'tmdb_service.dart';
 import 'video_player_page.dart';
 import 'widgets.dart';
 
-// 🔥 YEH TEEN IMPORTS TERE PURANE CODE MEIN MISSING THE 🔥
-import 'pages.dart';
-import 'stores.dart';
-import 'hero.dart';
-
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
-    debugPrint('Background Notification Hit: ${message.messageId}');
-    final AppNotification? n = AppNotification.fromMessage(message);
-    if (n != null) await NotificationStore.appendRaw(n);
   } catch (e) {
     debugPrint('Background Error: $e');
   }
@@ -38,7 +30,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 🔥 FIREBASE SAFE BOOT 🔥 (App crash nahi hogi)
   try {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -53,7 +44,7 @@ Future<void> main() async {
     await remoteConfig.setDefaults(const {'show_ads': true, 'maintenance_mode': false});
     await remoteConfig.fetchAndActivate();
   } catch (error) {
-    debugPrint('🔥 Firebase Startup error (Bypassed for Safe Boot): $error');
+    debugPrint('Firebase Startup error (Bypassed for Safe Boot): $error');
   }
 
   runApp(const HannuTvApp());
@@ -134,7 +125,6 @@ class _HannuTvAppState extends State<HannuTvApp> {
   }
 }
 
-// 🔥 TERA PURANA SPLASH SCREEN WAAPAS LA DIYA 🔥
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
   @override
@@ -149,7 +139,14 @@ class _SplashScreenState extends State<SplashScreen> {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const HannuDashboard()),
+          MaterialPageRoute(builder: (context) => HannuDashboard(
+            // 🔥 YAHAN TERI LIVE TV SCREEN CONNECT HO GAYI HAI 🔥
+            hooks: DashboardHooks(
+              onOpenLiveTv: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
+              }
+            ),
+          )),
         );
       }
     });
@@ -173,181 +170,6 @@ class _SplashScreenState extends State<SplashScreen> {
       ),
     );
   }
-}
-
-/// -------------------------------------------------------------------------
-/// 🔥 MISSING HANNUDASHBOARD WALI CLASS YAHAN ADD KAR DI HAI 🔥
-class HannuDashboard extends StatefulWidget {
-  const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
-  final DashboardHooks hooks;
-  @override
-  State<HannuDashboard> createState() => _HannuDashboardState();
-}
-
-class _HannuDashboardState extends State<HannuDashboard> {
-  @override
-  void initState() {
-    super.initState();
-    Hooks.cfg = widget.hooks;
-    WatchlistStore.I.load();
-    ContinueWatchingStore.I.load();
-    NotificationStore.I.init();
-  }
-
-  @override
-  void didUpdateWidget(covariant HannuDashboard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    Hooks.cfg = widget.hooks;
-  }
-
-  void _openSearch() {
-    if (widget.hooks.onOpenSearch != null) {
-      widget.hooks.onOpenSearch!();
-      return;
-    }
-    openSearch(context);
-  }
-
-  void _openLiveTv() {
-    if (widget.hooks.onOpenLiveTv != null) {
-      widget.hooks.onOpenLiveTv!();
-      return;
-    }
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LiveTvScreen()));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: HC.bg,
-      body: CustomScrollView(
-        cacheExtent: 1200,
-        slivers: <Widget>[
-          SliverAppBar(
-            pinned: true, floating: true, backgroundColor: HC.bg, surfaceTintColor: Colors.transparent, elevation: 0, titleSpacing: 16,
-            title: const Text('HANNUTV', style: TextStyle(color: Colors.redAccent, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-            actions: <Widget>[
-              IconButton(tooltip: 'Search', onPressed: _openSearch, icon: const Icon(Icons.search_rounded)),
-              IconButton(tooltip: 'Live TV', onPressed: _openLiveTv, icon: const Icon(Icons.live_tv_rounded)),
-              IconButton(tooltip: 'Watchlist', onPressed: () => openWatchlist(context), icon: const Icon(Icons.bookmark_outline_rounded)),
-              IconButton(tooltip: 'Notifications', onPressed: () => showNotifications(context), icon: const Icon(Icons.notifications_none_rounded)),
-              const SizedBox(width: 4),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                _DashboardHero(onWatchNow: _openLiveTv, onSearch: _openSearch),
-                const SizedBox(height: 10),
-                const ContinueWatchingRow(),
-                PosterRow(title: 'Trending Movies', subtitle: 'This week', width: 124, hideIfEmpty: false, loader: () => Tmdb.I.list('/trending/movie/week', <String, String>{}, count: 30, tv: false)),
-                PosterRow(title: 'Trending Web Series', subtitle: 'This week', width: 124, hideIfEmpty: false, loader: () => Tmdb.I.list('/trending/tv/week', <String, String>{}, count: 30, tv: true)),
-                const AdSlot(),
-                PosterRow(title: 'Popular Movies', subtitle: 'Most watched right now', width: 118, loader: () => Tmdb.I.list('/movie/popular', <String, String>{}, count: 30, tv: false)),
-                PosterRow(title: 'Top Rated Movies', subtitle: 'Highest rated', ranked: true, width: 118, loader: () => Tmdb.I.list('/movie/top_rated', <String, String>{}, count: 30, tv: false)),
-                PosterRow(title: 'Top Rated Series', subtitle: 'Highest rated web series', ranked: true, width: 118, loader: () => Tmdb.I.list('/tv/top_rated', <String, String>{}, count: 30, tv: true)),
-                const _DashboardSectionTitle('Browse Categories'),
-                _CategoryGrid(onTap: (CategoryKind kind) => openCategory(context, kind)),
-                const SizedBox(height: 8),
-                const _DashboardSectionTitle('Browse by Genre'),
-                for (final GenreDef genre in kAllGenres) GenreBlock(g: genre, onSeeAll: () => openGenre(context, genre)),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashboardHero extends StatelessWidget {
-  const _DashboardHero({required this.onWatchNow, required this.onSearch});
-  final VoidCallback onWatchNow;
-  final VoidCallback onSearch;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 12), padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[Color(0xFFE50914), Color(0xFF7A0710), Color(0xFF161616)]), borderRadius: BorderRadius.circular(22)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('Unlimited Entertainment', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
-          const SizedBox(height: 8),
-          const Text('Movies, web series, anime aur live TV ek hi jagah.', style: TextStyle(fontSize: 14, color: Colors.white70, height: 1.4)),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 10, runSpacing: 10,
-            children: <Widget>[
-              ElevatedButton.icon(onPressed: onWatchNow, icon: const Icon(Icons.live_tv_rounded), label: const Text('Live TV'), style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13))),
-              OutlinedButton.icon(onPressed: onSearch, icon: const Icon(Icons.search_rounded), label: const Text('Search'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54), padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13))),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashboardSectionTitle extends StatelessWidget {
-  const _DashboardSectionTitle(this.title);
-  final String title;
-  @override
-  Widget build(BuildContext context) {
-    return Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 10), child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)));
-  }
-}
-
-class _CategoryGrid extends StatelessWidget {
-  const _CategoryGrid({required this.onTap});
-  final void Function(CategoryKind kind) onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const List<_CategoryData> categories = <_CategoryData>[
-      _CategoryData(title: 'Movies', icon: Icons.local_movies_rounded, color: Color(0xFFB91C1C), kind: CategoryKind.movies),
-      _CategoryData(title: 'Web Series', icon: Icons.tv_rounded, color: Color(0xFF0369A1), kind: CategoryKind.series),
-      _CategoryData(title: 'Anime', icon: Icons.animation_rounded, color: Color(0xFF6D28D9), kind: CategoryKind.anime),
-      _CategoryData(title: 'Kids', icon: Icons.child_care_rounded, color: Color(0xFF16A34A), kind: CategoryKind.kids),
-    ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GridView.builder(
-        shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: categories.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 2.45),
-        itemBuilder: (_, int index) {
-          final _CategoryData item = categories[index];
-          return InkWell(
-            borderRadius: BorderRadius.circular(16), onTap: () => onTap(item.kind),
-            child: Ink(
-              decoration: BoxDecoration(color: item.color, borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: <Widget>[
-                    Icon(item.icon, color: Colors.white, size: 27),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800))),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _CategoryData {
-  const _CategoryData({required this.title, required this.icon, required this.color, required this.kind});
-  final String title;
-  final IconData icon;
-  final Color color;
-  final CategoryKind kind;
 }
 
 class LiveTvScreen extends StatefulWidget {

@@ -4,13 +4,17 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'banner_ad_widget.dart';
 import 'config.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 
+// 🔥 FIX: Ye 2 imports add kiye hain Player open karne ke liye 🔥
+import 'video_player_page.dart';
+import 'skippable_ad_screen.dart';
+
 // ───────────────────────── hooks (apne app se jodne ke liye) ─────────────────────────
 class DashboardHooks {
-  /// Poster/Watch Now par tap → apni details/player screen kholo.
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
   final VoidCallback? onOpenLiveTv;
   final VoidCallback? onOpenSearch;
@@ -89,7 +93,6 @@ class PosterImage extends StatelessWidget {
   }
 }
 
-/// Poster ke upar lagne wala bada 3D number (Top 10 ke liye).
 class RankNumber extends StatelessWidget {
   const RankNumber(this.n, {super.key, this.size = 56});
   final int n;
@@ -291,9 +294,8 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-const double kRowExtra = 52; // poster ke neeche title+rating ki jagah
+const double kRowExtra = 52; 
 
-/// Lazy poster row: tabhi load hota hai jab screen ke paas aata hai.
 class PosterRow extends StatefulWidget {
   const PosterRow({
     super.key,
@@ -440,7 +442,6 @@ class ContinueWatchingRow extends StatelessWidget {
   }
 }
 
-// ───────────────────────── OTT logo ─────────────────────────
 class OttLogo extends StatelessWidget {
   const OttLogo(this.ott, {super.key, this.w = 84, this.h = 54, this.radius = 14});
   final Ott ott;
@@ -500,11 +501,16 @@ class OttLogo extends StatelessWidget {
   }
 }
 
-// ───────────────────────── ad slot ─────────────────────────
+const String kDashAdsterraSnippet = '''
+<script type="text/javascript">
+  atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
+</script>
+<script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
+''';
+
 class AdSlot extends StatelessWidget {
   const AdSlot({super.key});
 
-  /// AdMob jodna ho to:  AdSlot.builder = (ctx) => AdWidget(ad: myBannerAd);
   static Widget Function(BuildContext)? builder;
 
   @override
@@ -523,32 +529,12 @@ class AdSlot extends StatelessWidget {
         ),
         child: b != null
             ? b(context)
-            : Stack(
-                children: <Widget>[
-                  const Center(
-                    child: Text('Advertisement', style: TextStyle(color: HC.dim, fontSize: 12)),
-                  ),
-                  Positioned(
-                    top: 6,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: alpha(HC.gold, 0.9),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text('Ad',
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.black)),
-                    ),
-                  ),
-                ],
-              ),
+            : const CustomBannerAd(htmlBannerCode: kDashAdsterraSnippet),
       ),
     );
   }
 }
 
-// ───────────────────────── genre block (dashboard + popup dono me) ─────────────────────────
 class GenreBlock extends StatelessWidget {
   const GenreBlock({super.key, required this.g, this.onSeeAll});
   final GenreDef g;
@@ -615,7 +601,6 @@ class GenreBlock extends StatelessWidget {
   }
 }
 
-// ───────────────────────── default title sheet ─────────────────────────
 void showTitleSheet(BuildContext context, TmdbItem item) {
   showModalBottomSheet<void>(
     context: context,
@@ -689,10 +674,24 @@ class _TitleSheet extends StatelessWidget {
                       Expanded(
                         child: GestureDetector(
                           onTap: () {
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(outer).showSnackBar(const SnackBar(
-                              content: Text('Player connect nahi hai — DashboardHooks.onOpenTitle me apna player do.'),
-                            ));
+                            Navigator.of(context).pop(); 
+                            // 🔥 YAHAN PLAYER CONNECT KAR DIYA HAI 🔥
+                            Navigator.push(
+                              outer,
+                              MaterialPageRoute(
+                                builder: (_) => SkippableAdScreen(
+                                  adDuration: 10,
+                                  nextScreen: VideoPlayerPage(
+                                    tmdbId: item.id,
+                                    mediaType: item.isTv ? 'tv' : 'movie',
+                                    movieTitle: item.title,
+                                    overview: item.overview,
+                                    rating: item.rating.toStringAsFixed(1),
+                                    year: item.year,
+                                  ),
+                                ),
+                              ),
+                            );
                           },
                           child: Container(
                             height: 48,

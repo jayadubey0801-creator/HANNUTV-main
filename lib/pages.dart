@@ -8,6 +8,7 @@ import 'tmdb_service.dart';
 import 'widgets.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+// ───────────────────────── common page shell ─────────────────────────
 class _Shell extends StatelessWidget {
   const _Shell({required this.title, required this.children, this.lead, this.tint = HC.accent});
   final String title;
@@ -84,6 +85,7 @@ void openCategory(BuildContext c, CategoryKind k) => _push(c, CategoryPage(kind:
 void openWatchlist(BuildContext c) => _push(c, const WatchlistPage());
 void openSearch(BuildContext c) => _push(c, const SearchPage());
 
+// ───────────────────────── GENRE popup ─────────────────────────
 class GenrePage extends StatelessWidget {
   const GenrePage({super.key, required this.g});
   final GenreDef g;
@@ -126,6 +128,7 @@ class GenrePage extends StatelessWidget {
   }
 }
 
+// ───────────────────────── CATEGORY popup ─────────────────────────
 enum CategoryKind { anime, movies, series, kids }
 
 class CategoryPage extends StatelessWidget {
@@ -258,6 +261,7 @@ class CategoryPage extends StatelessWidget {
   }
 }
 
+// ───────────────────────── OTT page ─────────────────────────
 class OttPage extends StatelessWidget {
   const OttPage({super.key, required this.ott});
   final Ott ott;
@@ -300,6 +304,7 @@ class OttPage extends StatelessWidget {
   }
 }
 
+// ───────────────────────── 18+ Gate ─────────────────────────
 class _MatureGate extends StatefulWidget {
   const _MatureGate({required this.ott});
   final Ott ott;
@@ -345,7 +350,7 @@ class _MatureGateState extends State<_MatureGate> {
                     content: const Text('Are you 18 years of age or older?'),
                     actions: <Widget>[
                       TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
-                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes, 18+')),
+                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes, I am 18+')),
                     ],
                   ),
                 );
@@ -364,6 +369,7 @@ class _MatureGateState extends State<_MatureGate> {
   }
 }
 
+// ───────────────────────── Watchlist ─────────────────────────
 class WatchlistPage extends StatelessWidget {
   const WatchlistPage({super.key});
 
@@ -430,6 +436,7 @@ class WatchlistPage extends StatelessWidget {
   }
 }
 
+// ───────────────────────── Search ─────────────────────────
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
   @override
@@ -514,10 +521,11 @@ class _SearchPageState extends State<SearchPage> {
   }
 }
 
+// ───────────────────────── Notifications sheet ─────────────────────────
 String _ago(int ts) {
   final Duration d = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
-  if (d.inMinutes < 1) return 'Just now';
-  if (d.inMinutes < 60) return '${d.inMinutes} mins ago';
+  if (d.inMinutes < 1) return 'just now';
+  if (d.inMinutes < 60) return '${d.inMinutes} min ago';
   return '${d.inHours} hours ago';
 }
 
@@ -542,7 +550,7 @@ void showNotifications(BuildContext context) {
                   icon: Icons.system_update_rounded,
                   color: HC.accent2,
                   title: 'Update your app',
-                  sub: 'New version v${u.version} is available. Tap to update.',
+                  sub: 'A new version v${u.version} is available. Tap to update.',
                   onTap: () => openUrl(u.url),
                 ),
               for (final AppNotification n in list)
@@ -550,9 +558,10 @@ void showNotifications(BuildContext context) {
                   icon: Icons.notifications_active_rounded,
                   color: HC.gold,
                   title: n.title,
+                  // 🔥 YAHAN n.image SE DATA READ HOGA TAAKI ERROR NA AAYE
+                  imageUrl: n.image,
                   sub: n.body.isEmpty ? _ago(n.ts) : '${n.body}\n${_ago(n.ts)}',
                   onTap: n.url == null ? null : () => openUrl(n.url!),
-                  imageUrl: n.imageUrl, // 🔥 FIX: Yahan 'imageUrl' kar diya hai
                 ),
             ];
             return SafeArea(
@@ -566,13 +575,13 @@ void showNotifications(BuildContext context) {
                   ),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-                    child: Text('Notifications are kept for 24 hours',
+                    child: Text('Every notification stays visible for 24 hours',
                         style: TextStyle(color: HC.dim, fontSize: 12)),
                   ),
                   if (tiles.isEmpty)
                     const Padding(
                       padding: EdgeInsets.fromLTRB(20, 20, 20, 40),
-                      child: Text('No new notifications.', style: TextStyle(color: HC.dim)),
+                      child: Text('No new notifications right now.', style: TextStyle(color: HC.dim)),
                     )
                   else
                     Flexible(
@@ -599,7 +608,7 @@ class _SheetTile extends StatelessWidget {
   final String title;
   final String sub;
   final VoidCallback? onTap;
-  final String? imageUrl; 
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -616,27 +625,11 @@ class _SheetTile extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                if (imageUrl != null && imageUrl!.isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: imageUrl!,
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        width: 50, height: 50,
-                        decoration: BoxDecoration(color: alpha(color, 0.18), borderRadius: BorderRadius.circular(8)),
-                        child: Icon(icon, color: color, size: 20),
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(color: alpha(color, 0.18), shape: BoxShape.circle),
-                    child: Icon(icon, color: color, size: 20),
-                  ),
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(color: alpha(color, 0.18), shape: BoxShape.circle),
+                  child: Icon(icon, color: color, size: 20),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -645,6 +638,21 @@ class _SheetTile extends StatelessWidget {
                       Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                       const SizedBox(height: 3),
                       Text(sub, style: const TextStyle(color: HC.dim, fontSize: 12.5, height: 1.35)),
+                      if (imageUrl != null && imageUrl!.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: CachedNetworkImage(
+                              imageUrl: imageUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (BuildContext _, String __) => Container(color: HC.surface),
+                              errorWidget: (BuildContext _, String __, Object ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -658,6 +666,7 @@ class _SheetTile extends StatelessWidget {
   }
 }
 
+// ───────────────────────── Support sheet ─────────────────────────
 void showSupportSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
