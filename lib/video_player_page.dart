@@ -95,10 +95,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
-  // region-wise glow: 8 zones = TL, T, TR, R, BR, B, BL, L
   final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
   List<List<Color>> _ambientZonePalette = <List<Color>>[];
-  // two-finger zoom (1.0 = normal)
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
   final List<Map<String, String>> servers = const [
@@ -238,6 +236,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
+  // 🔥 DEEP FIXED STREAM INITIALIZATION 🔥
   void _initStream() {
     setState(() { isPageLoading = true; isVideoPlaying = false; showIntroAnimation = false; });
 
@@ -257,17 +256,19 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             if (mounted) setState(() => isPageLoading = true); 
           },
           onPageFinished: (String url) {
-            if (mounted) setState(() => isPageLoading = false);
+            
+            // 🔥 FIX 1: 0.1s Flash Hatane Ke Liye Loading Spinner Ko 800ms Delay Ke Sath Hataya 🔥
+            Future.delayed(const Duration(milliseconds: 800), () {
+              if (mounted) setState(() => isPageLoading = false);
+            });
 
-            // 🔥 DEEP FIX: PANTYFLIX & GOOGLE ISSUE RESOLVED 🔥
-            // Yahan code sirf website elements ko chhupata hai, iframe ko destroy nahi karta.
+            // 🔥 FIX 2: Deep JS Ad-Blocker (Google/Ads pe touch nahi hone dega) 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
               
               var style = document.createElement('style');
               style.innerHTML = `
-                /* Pantyflix/VidSrc Faltu UI Gayab Kar Diya */
                 header, nav, footer, .navbar, .logo, .search, form, 
                 h1, h2, h3, p, span, .menu,
                 .ad-container, .ads, [class*="ad-"] { 
@@ -284,7 +285,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     padding: 0 !important; 
                 }
                 
-                /* Video Iframe ko zinda rakha hai aur screen ke upar laya hai */
                 iframe {
                     position: fixed !important;
                     top: 0 !important;
@@ -298,8 +298,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
-              // Faltu Popups Band Kar Diye
+              // 🚫 Faltu New Tab / Google Popups Band
               window.open = function() { return null; };
+              window.alert = function() { return true; };
+
+              // 🚫 Screen pe fake play button touch hone par us ad ko completely block karega
+              document.addEventListener('click', function(e) {
+                  var target = e.target;
+                  if(target.tagName === 'A' || target.closest('a')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                  }
+              }, true);
 
               setInterval(function() {
                 var vids = document.getElementsByTagName('video');
@@ -318,6 +328,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     VideoState.postMessage('playing');
                   }
                 }
+                
+                // 🚀 Auto-click the real play button so user doesn't have to touch the screen!
+                var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
+                if (playBtns.length > 0) {
+                    playBtns[0].click();
+                }
               }, 500);
             ''';
             _controller.runJavaScript(jsCode);
@@ -325,13 +341,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
             
-            // 🔥 DEEP FIX: GOOGLE / SEARCH ENGINE BLOCK 🔥
-            // Agar link directly google.com ya kisi ad network ka hai toh usko rok dega.
+            // 🔥 FIX 3: Deep URL Blocker (Kisi bhi haal me Google ya third party ad nahi khulega) 🔥
             if (url.contains('google.com') || 
                 url.contains('doubleclick') || 
                 url.contains('popads') || 
                 url.contains('1xbet') || 
                 url.contains('adsterra') ||
+                url.contains('redirect') ||
+                url.contains('onclick') ||
+                url.contains('bet365') ||
+                url.startsWith('intent://') ||
+                url.startsWith('market://') ||
                 url.contains('about:blank')) {
                 return NavigationDecision.prevent;
             }
@@ -1161,7 +1181,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
-  // Android TV / badi screen: movie hamesha full screen, top-right HANNUTV logo (OK dabane par controls)
   Widget _buildTVLayout() {
     return Scaffold(
       backgroundColor: Colors.black,
