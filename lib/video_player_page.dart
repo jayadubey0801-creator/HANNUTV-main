@@ -95,10 +95,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
+  // region-wise glow: 8 zones = TL, T, TR, R, BR, B, BL, L
   final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
   List<List<Color>> _ambientZonePalette = <List<Color>>[];
-  
-  // 🔥 MISSING PINCH ZOOM VARIABLE WAPAS ADD KIYA 🔥
+  // two-finger zoom (1.0 = normal)
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
   final List<Map<String, String>> servers = const [
@@ -259,15 +259,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onPageFinished: (String url) {
             if (mounted) setState(() => isPageLoading = false);
 
-            // 🔥 DEEP FIX: PANTYFLIX WEBSITE HIDE LOGIC 🔥
+            // 🔥 DEEP FIX: PANTYFLIX & GOOGLE ISSUE RESOLVED 🔥
+            // Yahan code sirf website elements ko chhupata hai, iframe ko destroy nahi karta.
             String jsCode = '''
-              document.documentElement.style.backgroundColor = '#000000';
               document.body.style.backgroundColor = '#000000';
+              document.documentElement.style.backgroundColor = '#000000';
               
               var style = document.createElement('style');
               style.innerHTML = `
-                header, nav, footer, .navbar, .navbar-custom, .logo, ul, li, .search, form, h1, h2, h3, p, span,
-                .ad-container, .ads, a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"] { 
+                /* Pantyflix/VidSrc Faltu UI Gayab Kar Diya */
+                header, nav, footer, .navbar, .logo, .search, form, 
+                h1, h2, h3, p, span, .menu,
+                .ad-container, .ads, [class*="ad-"] { 
                     display: none !important; 
                     opacity: 0 !important; 
                     visibility: hidden !important; 
@@ -281,7 +284,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     padding: 0 !important; 
                 }
                 
-                iframe:not([src*="ads"]) {
+                /* Video Iframe ko zinda rakha hai aur screen ke upar laya hai */
+                iframe {
                     position: fixed !important;
                     top: 0 !important;
                     left: 0 !important;
@@ -293,6 +297,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 }
               `;
               document.head.appendChild(style);
+
+              // Faltu Popups Band Kar Diye
+              window.open = function() { return null; };
 
               setInterval(function() {
                 var vids = document.getElementsByTagName('video');
@@ -317,7 +324,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-            if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('adsterra')) {
+            
+            // 🔥 DEEP FIX: GOOGLE / SEARCH ENGINE BLOCK 🔥
+            // Agar link directly google.com ya kisi ad network ka hai toh usko rok dega.
+            if (url.contains('google.com') || 
+                url.contains('doubleclick') || 
+                url.contains('popads') || 
+                url.contains('1xbet') || 
+                url.contains('adsterra') ||
+                url.contains('about:blank')) {
                 return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
@@ -1146,6 +1161,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
+  // Android TV / badi screen: movie hamesha full screen, top-right HANNUTV logo (OK dabane par controls)
   Widget _buildTVLayout() {
     return Scaffold(
       backgroundColor: Colors.black,
