@@ -19,6 +19,8 @@ Future<String> appVersion() async {
   }
 }
 
+// ═════════════════════════════ WATCHLIST ═════════════════════════════
+/// Player/details screen se bhi use karo:  WatchlistStore.I.toggle(item);
 class WatchlistStore extends ChangeNotifier {
   WatchlistStore._();
   static final WatchlistStore I = WatchlistStore._();
@@ -66,6 +68,7 @@ class WatchlistStore extends ChangeNotifier {
   }
 }
 
+// ═════════════════════════════ CONTINUE WATCHING ═════════════════════════════
 class CwEntry {
   final TmdbItem item;
   final int positionMs;
@@ -106,6 +109,11 @@ class CwEntry {
       );
 }
 
+/// PLAYER se call karo (har ~10 sec + pause/exit par):
+///   ContinueWatchingStore.I.update(item, positionMs: p, durationMs: d,
+///       season: s, episode: e, isLastEpisode: <series ka aakhri episode?>);
+/// Movie 95% dekhne par, ya series ka aakhri episode 95% par → list se hat jati hai.
+/// Adhi dekhi series tab tak rehti hai jab tak puri khatam na ho.
 class ContinueWatchingStore extends ChangeNotifier {
   ContinueWatchingStore._();
   static final ContinueWatchingStore I = ContinueWatchingStore._();
@@ -181,12 +189,13 @@ class ContinueWatchingStore extends ChangeNotifier {
   }
 }
 
+// ═════════════════════════════ NOTIFICATIONS (24h) + UPDATE ═════════════════════════════
 class AppNotification {
   final String id;
   final String title;
   final String body;
   final String? url;
-  final String? imageUrl; 
+  final String? image;
   final int ts;
   const AppNotification({
     required this.id,
@@ -194,18 +203,18 @@ class AppNotification {
     required this.body,
     required this.ts,
     this.url,
-    this.imageUrl,
+    this.image,
   });
 
   Map<String, dynamic> toJson() =>
-      <String, dynamic>{'id': id, 'title': title, 'body': body, 'url': url, 'imageUrl': imageUrl, 'ts': ts};
+      <String, dynamic>{'id': id, 'title': title, 'body': body, 'url': url, 'image': image, 'ts': ts};
 
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
         id: (j['id'] ?? '').toString(),
         title: (j['title'] ?? '').toString(),
         body: (j['body'] ?? '').toString(),
         url: j['url'] as String?,
-        imageUrl: j['imageUrl'] as String?,
+        image: j['image'] as String?,
         ts: (j['ts'] as num?)?.toInt() ?? 0,
       );
 
@@ -215,23 +224,19 @@ class AppNotification {
     if (title.isEmpty && body.isEmpty) return null;
     final int ts = (m.sentTime ?? DateTime.now()).millisecondsSinceEpoch;
     final String? url = (m.data['url'] ?? m.data['link'])?.toString();
-    
-    String? img;
-    if (m.notification?.android?.imageUrl != null) {
-      img = m.notification!.android!.imageUrl;
-    } else if (m.notification?.apple?.imageUrl != null) {
-      img = m.notification!.apple!.imageUrl;
-    } else {
-      img = (m.data['image'] ?? m.data['imageUrl'] ?? m.data['picture'])?.toString();
-    }
-
+    final String? image = (m.notification?.android?.imageUrl ??
+            m.notification?.apple?.imageUrl ??
+            m.data['image'] ??
+            m.data['imageUrl'] ??
+            m.data['image_url'])
+        ?.toString();
     return AppNotification(
       id: m.messageId ?? '${ts}_$title',
       title: title.isEmpty ? 'HANNUTV' : title,
       body: body,
       ts: ts,
       url: url,
-      imageUrl: img,
+      image: image,
     );
   }
 }
@@ -244,6 +249,8 @@ class UpdateInfo {
 
 const int _day = 24 * 60 * 60 * 1000;
 
+/// main.dart me ek baar register karo:
+///   FirebaseMessaging.onBackgroundMessage(hannuBackgroundHandler);
 @pragma('vm:entry-point')
 Future<void> hannuBackgroundHandler(RemoteMessage m) async {
   final AppNotification? n = AppNotification.fromMessage(m);
@@ -259,6 +266,7 @@ class NotificationStore extends ChangeNotifier {
   UpdateInfo? update;
   bool _inited = false;
 
+  /// Sirf pichle 24 ghante ke notifications.
   List<AppNotification> get active {
     final int cut = DateTime.now().millisecondsSinceEpoch - _day;
     final List<AppNotification> l = _all.where((AppNotification n) => n.ts >= cut).toList();
@@ -271,7 +279,7 @@ class NotificationStore extends ChangeNotifier {
   static Future<void> appendRaw(AppNotification n) async {
     try {
       final SharedPreferences p = await SharedPreferences.getInstance();
-      await p.reload(); 
+      await p.reload(); // background isolate ne likha ho to latest padho
       final List<AppNotification> list = _decode(p.getString(_k));
       if (list.any((AppNotification e) => e.id == n.id)) return;
       list.add(n);
@@ -321,11 +329,6 @@ class NotificationStore extends ChangeNotifier {
     _inited = true;
     await _reload();
     try {
-      await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
       FirebaseMessaging.onMessage.listen(_onMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_onMessage);
       final RemoteMessage? first = await FirebaseMessaging.instance.getInitialMessage();
@@ -336,6 +339,7 @@ class NotificationStore extends ChangeNotifier {
     unawaited(_checkUpdate());
   }
 
+  /// Firebase Remote Config keys:  latest_version (e.g. "1.3.0")  &  update_url (hannutv direct link)
   Future<void> _checkUpdate() async {
     try {
       final FirebaseRemoteConfig rc = FirebaseRemoteConfig.instance;

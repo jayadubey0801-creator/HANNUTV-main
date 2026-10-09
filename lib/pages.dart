@@ -1,13 +1,14 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'config.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
+// ───────────────────────── common page shell ─────────────────────────
 class _Shell extends StatelessWidget {
   const _Shell({required this.title, required this.children, this.lead, this.tint = HC.accent});
   final String title;
@@ -84,6 +85,8 @@ void openCategory(BuildContext c, CategoryKind k) => _push(c, CategoryPage(kind:
 void openWatchlist(BuildContext c) => _push(c, const WatchlistPage());
 void openSearch(BuildContext c) => _push(c, const SearchPage());
 
+// ───────────────────────── GENRE popup ─────────────────────────
+/// Action/Romance/... par click → Movies, Web Series, Anime (aur Drama me K-Drama) — top 50 each.
 class GenrePage extends StatelessWidget {
   const GenrePage({super.key, required this.g});
   final GenreDef g;
@@ -126,6 +129,7 @@ class GenrePage extends StatelessWidget {
   }
 }
 
+// ───────────────────────── CATEGORY popup (Anime / Movies / Series / Kids) ─────────────────────────
 enum CategoryKind { anime, movies, series, kids }
 
 class CategoryPage extends StatelessWidget {
@@ -210,6 +214,7 @@ class CategoryPage extends StatelessWidget {
               hideIfEmpty: false,
               loader: () => Tmdb.I.list('/trending/tv/week', <String, String>{}, count: 30, tv: true),
             ),
+            // har OTT ka alag Top 10 series
             for (final Ott o in kOtts)
               PosterRow(
                 title: 'Top 10 on ${o.name}',
@@ -258,6 +263,8 @@ class CategoryPage extends StatelessWidget {
   }
 }
 
+// ───────────────────────── OTT page ─────────────────────────
+/// Ek OTT par click → us OTT ki saari categories (TMDB watch-provider filter se).
 class OttPage extends StatelessWidget {
   const OttPage({super.key, required this.ott});
   final Ott ott;
@@ -300,6 +307,7 @@ class OttPage extends StatelessWidget {
   }
 }
 
+/// 18+ row — pehle age confirm.
 class _MatureGate extends StatefulWidget {
   const _MatureGate({required this.ott});
   final Ott ott;
@@ -342,11 +350,10 @@ class _MatureGateState extends State<_MatureGate> {
                   builder: (BuildContext c) => AlertDialog(
                     backgroundColor: HC.surface,
                     title: const Text('Age check'),
-                    // 🔥 POPUP ENGLISH TEXT 🔥
                     content: const Text('Are you 18 years of age or older?'),
                     actions: <Widget>[
                       TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
-                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes, 18+')),
+                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes, I am 18+')),
                     ],
                   ),
                 );
@@ -365,6 +372,7 @@ class _MatureGateState extends State<_MatureGate> {
   }
 }
 
+// ───────────────────────── Watchlist ─────────────────────────
 class WatchlistPage extends StatelessWidget {
   const WatchlistPage({super.key});
 
@@ -386,7 +394,7 @@ class WatchlistPage extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(32),
                 child: Text(
-                  'Watchlist is empty.\nTap "My List" on any movie/series.',
+                  'Watchlist khali hai.\nKisi bhi movie/series par "My List" dabao.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: HC.dim, height: 1.5),
                 ),
@@ -431,6 +439,7 @@ class WatchlistPage extends StatelessWidget {
   }
 }
 
+// ───────────────────────── Search ─────────────────────────
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
   @override
@@ -448,7 +457,7 @@ class _SearchPageState extends State<SearchPage> {
     _deb?.cancel();
     final String t = q.trim();
     if (t.length < 2) {
-      _seq++; 
+      _seq++; // in-flight search ka result ab ignore hoga
       setState(() {
         _res = const <TmdbItem>[];
         _busy = false;
@@ -459,7 +468,7 @@ class _SearchPageState extends State<SearchPage> {
       final int my = ++_seq;
       setState(() => _busy = true);
       final List<TmdbItem> r = await Tmdb.I.search(t);
-      if (!mounted || my != _seq) return; 
+      if (!mounted || my != _seq) return; // purani query ka result ignore
       setState(() {
         _res = r;
         _busy = false;
@@ -487,7 +496,7 @@ class _SearchPageState extends State<SearchPage> {
           onChanged: _onChanged,
           style: const TextStyle(color: Colors.white),
           decoration: const InputDecoration(
-            hintText: 'Search movies, series, anime...',
+            hintText: 'Movie, series, anime search karo…',
             hintStyle: TextStyle(color: HC.dim),
             border: InputBorder.none,
           ),
@@ -496,7 +505,7 @@ class _SearchPageState extends State<SearchPage> {
       body: _busy
           ? const Center(child: CircularProgressIndicator())
           : (_res.isEmpty
-              ? const Center(child: Text('Type to search', style: TextStyle(color: HC.dim)))
+              ? const Center(child: Text('Kuch type karo', style: TextStyle(color: HC.dim)))
               : GridView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -515,10 +524,11 @@ class _SearchPageState extends State<SearchPage> {
   }
 }
 
+// ───────────────────────── Notifications sheet ─────────────────────────
 String _ago(int ts) {
   final Duration d = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
-  if (d.inMinutes < 1) return 'Just now';
-  if (d.inMinutes < 60) return '${d.inMinutes} mins ago';
+  if (d.inMinutes < 1) return 'just now';
+  if (d.inMinutes < 60) return '${d.inMinutes} min ago';
   return '${d.inHours} hours ago';
 }
 
@@ -543,7 +553,7 @@ void showNotifications(BuildContext context) {
                   icon: Icons.system_update_rounded,
                   color: HC.accent2,
                   title: 'Update your app',
-                  sub: 'New version v${u.version} is available. Tap to update.',
+                  sub: 'A new version v${u.version} is available. Tap to update.',
                   onTap: () => openUrl(u.url),
                 ),
               for (final AppNotification n in list)
@@ -551,9 +561,9 @@ void showNotifications(BuildContext context) {
                   icon: Icons.notifications_active_rounded,
                   color: HC.gold,
                   title: n.title,
+                  imageUrl: n.image,
                   sub: n.body.isEmpty ? _ago(n.ts) : '${n.body}\n${_ago(n.ts)}',
                   onTap: n.url == null ? null : () => openUrl(n.url!),
-                  imageUrl: n.imageUrl, 
                 ),
             ];
             return SafeArea(
@@ -565,16 +575,15 @@ void showNotifications(BuildContext context) {
                     padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
                     child: Text('Notifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                   ),
-                  // 🔥 NOTIFICATION ENGLISH TEXT 🔥
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-                    child: Text('Notifications are kept for 24 hours',
+                    child: Text('Every notification stays visible for 24 hours',
                         style: TextStyle(color: HC.dim, fontSize: 12)),
                   ),
                   if (tiles.isEmpty)
                     const Padding(
                       padding: EdgeInsets.fromLTRB(20, 20, 20, 40),
-                      child: Text('No new notifications.', style: TextStyle(color: HC.dim)),
+                      child: Text('No new notifications right now.', style: TextStyle(color: HC.dim)),
                     )
                   else
                     Flexible(
@@ -601,7 +610,7 @@ class _SheetTile extends StatelessWidget {
   final String title;
   final String sub;
   final VoidCallback? onTap;
-  final String? imageUrl; 
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -618,27 +627,11 @@ class _SheetTile extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                if (imageUrl != null && imageUrl!.isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: imageUrl!,
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        width: 50, height: 50,
-                        decoration: BoxDecoration(color: alpha(color, 0.18), borderRadius: BorderRadius.circular(8)),
-                        child: Icon(icon, color: color, size: 20),
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(color: alpha(color, 0.18), shape: BoxShape.circle),
-                    child: Icon(icon, color: color, size: 20),
-                  ),
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(color: alpha(color, 0.18), shape: BoxShape.circle),
+                  child: Icon(icon, color: color, size: 20),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -647,6 +640,21 @@ class _SheetTile extends StatelessWidget {
                       Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                       const SizedBox(height: 3),
                       Text(sub, style: const TextStyle(color: HC.dim, fontSize: 12.5, height: 1.35)),
+                      if (imageUrl != null && imageUrl!.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: CachedNetworkImage(
+                              imageUrl: imageUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (BuildContext _, String __) => Container(color: HC.surface),
+                              errorWidget: (BuildContext _, String __, Object ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -660,6 +668,7 @@ class _SheetTile extends StatelessWidget {
   }
 }
 
+// ───────────────────────── Support sheet ─────────────────────────
 void showSupportSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
@@ -678,7 +687,7 @@ void showSupportSheet(BuildContext context) {
             ),
             const Padding(
               padding: EdgeInsets.fromLTRB(8, 0, 8, 12),
-              child: Text('Join us for support and updates', style: TextStyle(color: HC.dim, fontSize: 12)),
+              child: Text('Madad ya updates ke liye hume join karo', style: TextStyle(color: HC.dim, fontSize: 12)),
             ),
             _SheetTile(
               icon: Icons.send_rounded,
@@ -691,7 +700,7 @@ void showSupportSheet(BuildContext context) {
               icon: Icons.chat_rounded,
               color: const Color(0xFF25D366),
               title: 'WhatsApp Channel',
-              sub: 'Latest updates directly on WhatsApp',
+              sub: 'Latest updates seedha WhatsApp par',
               onTap: () => openUrl(kWhatsappChannelUrl),
             ),
             const SizedBox(height: 6),

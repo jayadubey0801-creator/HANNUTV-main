@@ -28,6 +28,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
     debugPrint('Background Notification Hit: ${message.messageId}');
+    final AppNotification? n = AppNotification.fromMessage(message);
+    if (n != null) await NotificationStore.appendRaw(n);
   } catch (e) {
     debugPrint('Background Error: $e');
   }
@@ -187,6 +189,9 @@ class _HannuDashboardState extends State<HannuDashboard> {
   void initState() {
     super.initState();
     Hooks.cfg = widget.hooks;
+    WatchlistStore.I.load();
+    ContinueWatchingStore.I.load();
+    NotificationStore.I.init();
   }
 
   @override
