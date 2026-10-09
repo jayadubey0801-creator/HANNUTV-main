@@ -10,14 +10,16 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'config.dart';
+import 'dashboard_screen.dart';
 import 'skippable_ad_screen.dart';
 import 'tmdb_service.dart';
 import 'video_player_page.dart';
 import 'widgets.dart';
 
-// 🔥 MISSING IMPORT JO ERRORS DE RAHA THA 🔥
+// 🔥 YEH TEEN IMPORTS TERE PURANE CODE MEIN MISSING THE 🔥
 import 'pages.dart';
 import 'stores.dart';
+import 'hero.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -130,6 +132,7 @@ class _HannuTvAppState extends State<HannuTvApp> {
   }
 }
 
+// 🔥 TERA PURANA SPLASH SCREEN WAAPAS LA DIYA 🔥
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
   @override
@@ -171,7 +174,7 @@ class _SplashScreenState extends State<SplashScreen> {
 }
 
 /// -------------------------------------------------------------------------
-/// 🔥 HANNUDASHBOARD CLASS WITH FIXED METHODS 🔥
+/// 🔥 MISSING HANNUDASHBOARD WALI CLASS YAHAN ADD KAR DI HAI 🔥
 class HannuDashboard extends StatefulWidget {
   const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
   final DashboardHooks hooks;
