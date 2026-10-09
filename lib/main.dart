@@ -1,129 +1,113 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+
+import 'package:app_links/app_links.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
-import 'package:firebase_analytics/firebase_analytics.dart'; 
-import 'package:app_links/app_links.dart'; 
-import 'package:package_info_plus/package_info_plus.dart'; 
-import 'package:url_launcher/url_launcher.dart'; 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
-// 🔥 MODULE IMPORTS (Tumhari nayi files) 🔥
-import 'dashboard_screen.dart'; 
-import 'widgets.dart'; 
-import 'tmdb_service.dart'; 
-import 'video_player_page.dart';
+import 'config.dart';
+import 'dashboard_screen.dart';
 import 'skippable_ad_screen.dart';
+import 'tmdb_service.dart';
+import 'video_player_page.dart';
+import 'widgets.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  debugPrint("🔥 Background Notification Hit: ${message.messageId}");
+  try {
+    await Firebase.initializeApp();
+    debugPrint('Background Notification Hit: ${message.messageId}');
+  } catch (e) {
+    debugPrint('Background Error: $e');
+  }
 }
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  await Firebase.initializeApp();
+  // 🔥 FIREBASE SAFE BOOT 🔥 (App crash nahi hogi)
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // 🚀 LIVE ANALYTICS INITIALIZATION
-  FirebaseAnalytics analytics = FirebaseAnalytics.instance;
-  analytics.logEvent(name: 'app_open_hannutv_v1_3_0');
-
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
-  await messaging.requestPermission(
-    alert: true,
-    announcement: true,
-    badge: true,
-    carPlay: false,
-    criticalAlert: true,
-    provisional: false,
-    sound: true,
-  );
-
-  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-    alert: true, 
-    badge: true, 
-    sound: true, 
-  );
-
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    debugPrint('🔥 Foreground Notification Hit!');
-  });
-
-  messaging.getToken().then((token) {
-    debugPrint("📲 FIREBASE DEVICE TOKEN: $token");
-  });
+    final FirebaseRemoteConfig remoteConfig = FirebaseRemoteConfig.instance;
+    await remoteConfig.setConfigSettings(
+      RemoteConfigSettings(
+        fetchTimeout: const Duration(seconds: 10),
+        minimumFetchInterval: const Duration(hours: 1),
+      ),
+    );
+    await remoteConfig.setDefaults(const {'show_ads': true, 'maintenance_mode': false});
+    await remoteConfig.fetchAndActivate();
+  } catch (error) {
+    debugPrint('🔥 Firebase Startup error (Bypassed for Safe Boot): $error');
+  }
 
   runApp(const HannuTvApp());
 }
 
-class HannuTvApp extends StatelessWidget {
-  const HannuTvApp({Key? key}) : super(key: key);
+class HannuTvApp extends StatefulWidget {
+  const HannuTvApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const HannuTvAppWrapper();
-  }
+  State<HannuTvApp> createState() => _HannuTvAppState();
 }
 
-class HannuTvAppWrapper extends StatefulWidget {
-  const HannuTvAppWrapper({Key? key}) : super(key: key);
-  @override
-  State<HannuTvAppWrapper> createState() => _HannuTvAppWrapperState();
-}
-
-class _HannuTvAppWrapperState extends State<HannuTvAppWrapper> {
-  late AppLinks _appLinks; 
-  StreamSubscription<Uri>? _sub;
+class _HannuTvAppState extends State<HannuTvApp> {
+  late final AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
 
   @override
   void initState() {
     super.initState();
-    _initDeepLinkListener(); 
+    _initDeepLinks();
   }
 
-  void _initDeepLinkListener() async {
+  Future<void> _initDeepLinks() async {
     _appLinks = AppLinks();
     try {
-      final initialUri = await _appLinks.getInitialLink();
+      final Uri? initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) _handleDeepLink(initialUri);
-    } catch (e) { debugPrint(e.toString()); }
+    } catch (error) {
+      debugPrint('Initial deep-link error: $error');
+    }
 
-    _sub = _appLinks.uriLinkStream.listen((Uri? uri) {
+    _linkSubscription = _appLinks.uriLinkStream.listen((Uri? uri) {
       if (uri != null) _handleDeepLink(uri);
-    }, onError: (err) {});
+    }, onError: (Object error) {
+      debugPrint('Deep-link stream error: $error');
+    });
   }
 
   void _handleDeepLink(Uri uri) {
-    if (uri.path.contains('/watch')) {
-      String? idStr = uri.queryParameters['id'];
-      String? type = uri.queryParameters['type'] ?? 'movie';
-      if (idStr != null) {
-        int id = int.tryParse(idStr) ?? 0;
-        if (id != 0) {
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => VideoPlayerPage(
-                tmdbId: id, mediaType: type, movieTitle: "Shared Stream",
-              )
-            )
-          );
-        }
-      }
+    if (uri.pathSegments.isEmpty || uri.pathSegments.first != 'watch') return;
+    String type = uri.queryParameters['type'] ?? 'movie';
+    int id = int.tryParse(uri.queryParameters['id'] ?? '') ?? 0;
+    if (uri.pathSegments.length >= 3) {
+      type = uri.pathSegments[1];
+      id = int.tryParse(uri.pathSegments[2]) ?? id;
     }
+    if (id <= 0) return;
+
+    navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => SkippableAdScreen(
+          adDuration: 10,
+          nextScreen: VideoPlayerPage(tmdbId: id, mediaType: type, movieTitle: 'Loading...'),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _linkSubscription?.cancel();
     super.dispose();
   }
 
@@ -143,169 +127,40 @@ class _HannuTvAppWrapperState extends State<HannuTvAppWrapper> {
   }
 }
 
-// ── SPLASH SCREEN (Deep Kill Switch, Anti-Space Bug & Version Logic) ──
+// 🔥 TERA PURANA SPLASH SCREEN WAAPAS LA DIYA 🔥
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
-
+  const SplashScreen({super.key});
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  bool isMaintenance = false;
-  bool isUpdateRequired = false; 
-  String maintenanceMsg = "System Upgrade in Progress. Please update HANNUTV.";
-  String updateLink = "https://hannutv.blogspot.com/"; 
-  bool isLoading = true;
-
   @override
   void initState() {
     super.initState();
-    checkMaintenance();
-  }
-
-  Future<void> checkMaintenance() async {
-    try {
-      final remoteConfig = FirebaseRemoteConfig.instance;
-      await remoteConfig.setConfigSettings(RemoteConfigSettings(
-        fetchTimeout: const Duration(seconds: 15),
-        minimumFetchInterval: const Duration(seconds: 0), 
-      ));
-      await remoteConfig.fetchAndActivate();
-
-      // Firebase se values fetch ho rahi hain, but abhi testing ke liye hum unhe ignore karenge
-      String fbUpdateLink = remoteConfig.getString('update_link').trim();
-      String fbMsg = remoteConfig.getString('maintenance_message').trim();
-
-      setState(() {
-        // 🔥 TESTING BYPASS: Isko false set kar diya taaki screen block na ho 🔥
-        isMaintenance = false; 
-        isUpdateRequired = false; 
-        
-        if (fbUpdateLink.isNotEmpty) updateLink = fbUpdateLink;
-        if (fbMsg.isNotEmpty) maintenanceMsg = fbMsg;
-      });
-    } catch (e) {
-      debugPrint("⚠️ Remote Config Error: $e");
-    }
-
-    // 🔥 TESTING BYPASS: Seedha Dashboard par bhej rahe hain 🔥
     Timer(const Duration(milliseconds: 2500), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HannuDashboard(
-            hooks: DashboardHooks(
-              onOpenTitle: (ctx, TmdbItem item) {
-                Navigator.push(
-                  ctx,
-                  MaterialPageRoute(
-                    builder: (_) => SkippableAdScreen(
-                      adDuration: 10,
-                      nextScreen: VideoPlayerPage(
-                        tmdbId: item.id,
-                        mediaType: item.isTv ? 'tv' : 'movie',
-                        movieTitle: item.title,
-                        overview: item.overview,
-                        rating: item.rating.toStringAsFixed(1),
-                        year: item.year,
-                      ),
-                    ),
-                  ),
-                );
-              },
-              onOpenLiveTv: () {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (_) => const LiveTvChannelsPage())
-                );
-              },
-            ),
-          ),
-        ), 
-      );
-    });
-  }
-
-  Future<void> _launchUpdateURL() async {
-    try {
-      final Uri url = Uri.parse(updateLink);
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        debugPrint('Could not launch $url');
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HannuDashboard()),
+        );
       }
-    } catch (e) {
-      debugPrint('URL Launch Error: $e');
-    }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Yeh screen abhi kabhi show nahi hogi kyunki update bypass kar diya gaya hai
-    if ((isMaintenance || isUpdateRequired) && !isLoading) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F0F0F),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.warning_rounded, color: Colors.redAccent, size: 85),
-                const SizedBox(height: 25),
-                const Text(
-                  'MANDATORY UPDATE',
-                  style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 1.5),
-                ),
-                const SizedBox(height: 15),
-                Text(
-                  maintenanceMsg,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 16, height: 1.5),
-                ),
-                const SizedBox(height: 45),
-                ElevatedButton.icon(
-                  onPressed: _launchUpdateURL,
-                  icon: const Icon(Icons.download, color: Colors.white),
-                  label: const Text(
-                    "UPDATE NOW",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F0F),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(
-              'assets/logo.png',
-              height: 130,
-              errorBuilder: (_, __, ___) => const Text(
-                'HANNUTV',
-                style: TextStyle(color: Colors.red, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 2),
-              ),
-            ),
+            Image.asset('assets/logo.png', height: 130, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 2))),
             const SizedBox(height: 50),
             const CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 3),
             const SizedBox(height: 25),
-            const Text(
-              'Connecting to Secure Servers...',
-              style: TextStyle(color: Colors.grey, fontSize: 14, letterSpacing: 0.5),
-            ),
+            const Text('Connecting to Secure Servers...', style: TextStyle(color: Colors.grey, fontSize: 14)),
           ],
         ),
       ),
@@ -313,130 +168,245 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// =====================================================================
-// 🔥 LIVE TV CHANNELS (Restored here so it won't break if dashboard.dart is deleted) 🔥
-// =====================================================================
-class LiveTvChannelsPage extends StatefulWidget {
-  const LiveTvChannelsPage({super.key});
+/// -------------------------------------------------------------------------
+/// 🔥 MISSING HANNUDASHBOARD WALI CLASS YAHAN ADD KAR DI HAI 🔥
+class HannuDashboard extends StatefulWidget {
+  const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
+  final DashboardHooks hooks;
   @override
-  State<LiveTvChannelsPage> createState() => LiveTvChannelsPageState();
+  State<HannuDashboard> createState() => _HannuDashboardState();
 }
-class LiveTvChannelsPageState extends State<LiveTvChannelsPage> {
-  List<Map<String, String>> allChannels = [];
-  List<Map<String, String>> filteredChannels = [];
-  bool isLoading = true;
-  final TextEditingController tvSearchController = TextEditingController();
-  List<String> categories = ['All'];
-  Map<String, int> categoryCounts = {};
-  String selectedCategory = 'All';
 
+class _HannuDashboardState extends State<HannuDashboard> {
   @override
   void initState() {
     super.initState();
-    fetchIptvData();
+    Hooks.cfg = widget.hooks;
   }
 
-  Future<void> fetchIptvData() async {
-    try {
-      final response = await http.get(Uri.parse('https://iptv-org.github.io/iptv/index.category.m3u'));
-      if (response.statusCode == 200) {
-        List<String> lines = response.body.split('\n');
-        final Map<String, Map<String, String>> byUrl = {}; 
-        final Map<String, Set<String>> catsByUrl = {};
-        String currentName = ''; String currentLogo = ''; String currentGroup = '';
-
-        for (String rawLine in lines) {
-          final String line = rawLine.trim();
-          if (line.startsWith('#EXTINF:')) {
-            RegExp logoRegex = RegExp(r'tvg-logo="([^"]*)"');
-            var match = logoRegex.firstMatch(line);
-            currentLogo = match != null ? match.group(1)! : '';
-            var groupMatch = RegExp(r'group-title="([^"]*)"').firstMatch(line);
-            currentGroup = groupMatch != null ? groupMatch.group(1)!.trim() : '';
-            List<String> splitComma = line.split(',');
-            if (splitComma.length > 1) currentName = splitComma.last.trim();
-          } else if (line.startsWith('http')) {
-            if (currentName.isNotEmpty) {
-              final cats = currentGroup.split(';').map((c) => c.trim()).where((c) => c.isNotEmpty).map((c) => c.toLowerCase() == 'undefined' ? 'Other' : c).toList();
-              if (cats.isEmpty) cats.add('Other');
-              if (!cats.any((c) => c.toLowerCase() == 'xxx')) {
-                byUrl.putIfAbsent(line, () => {'name': currentName, 'logo': currentLogo, 'url': line});
-                catsByUrl.putIfAbsent(line, () => <String>{}).addAll(cats);
-              }
-            }
-          }
-        }
-
-        final List<Map<String, String>> parsed = [];
-        final Map<String, int> counts = {};
-        byUrl.forEach((url, ch) {
-          final cats = catsByUrl[url]!;
-          ch['group'] = cats.join(';');
-          for (final c in cats) { counts[c] = (counts[c] ?? 0) + 1; }
-          parsed.add(ch);
-        });
-
-        final List<String> sortedCats = counts.keys.toList()..sort((a, b) {
-            if (a == 'Other') return 1;
-            if (b == 'Other') return -1;
-            return counts[b]!.compareTo(counts[a]!);
-          });
-
-        setState(() {
-          allChannels = parsed; filteredChannels = parsed; categoryCounts = counts;
-          categories = ['All', ...sortedCats]; isLoading = false;
-        });
-      }
-    } catch (_) { setState(() => isLoading = false); }
+  @override
+  void didUpdateWidget(covariant HannuDashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    Hooks.cfg = widget.hooks;
   }
 
-  void filterChannels(String query) {
-    setState(() {
-      filteredChannels = allChannels.where((c) {
-        final matchesName = c['name']!.toLowerCase().contains(query.toLowerCase());
-        final matchesCategory = selectedCategory == 'All' || (c['group'] ?? '').split(';').contains(selectedCategory);
-        return matchesName && matchesCategory;
-      }).toList();
-    });
+  void _openSearch() {
+    if (widget.hooks.onOpenSearch != null) {
+      widget.hooks.onOpenSearch!();
+      return;
+    }
+    openSearch(context);
+  }
+
+  void _openLiveTv() {
+    if (widget.hooks.onOpenLiveTv != null) {
+      widget.hooks.onOpenLiveTv!();
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LiveTvScreen()));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
-      appBar: AppBar(backgroundColor: const Color(0xFF151515), title: const Text('Live TV Channels', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), iconTheme: const IconThemeData(color: Colors.white)),
-      body: Column(
-        children: [
-          Padding(padding: const EdgeInsets.all(16.0), child: TextField(controller: tvSearchController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Search Live Channels...', hintStyle: const TextStyle(color: Colors.grey), filled: true, fillColor: Colors.black87, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), prefixIcon: const Icon(Icons.search, color: Colors.redAccent)), onChanged: filterChannels)),
-          SizedBox(
-            height: 44,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, i) {
-                final cat = categories[i]; final bool selected = cat == selectedCategory;
-                return ChoiceChip(label: Text('$cat (${cat == 'All' ? allChannels.length : categoryCounts[cat]})'), selected: selected, selectedColor: Colors.redAccent, backgroundColor: const Color(0xFF1A1A1A), side: const BorderSide(color: Colors.white12), labelStyle: TextStyle(color: Colors.white, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal), onSelected: (_) { selectedCategory = cat; filterChannels(tvSearchController.text); });
-              },
+      backgroundColor: HC.bg,
+      body: CustomScrollView(
+        cacheExtent: 1200,
+        slivers: <Widget>[
+          SliverAppBar(
+            pinned: true, floating: true, backgroundColor: HC.bg, surfaceTintColor: Colors.transparent, elevation: 0, titleSpacing: 16,
+            title: const Text('HANNUTV', style: TextStyle(color: Colors.redAccent, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+            actions: <Widget>[
+              IconButton(tooltip: 'Search', onPressed: _openSearch, icon: const Icon(Icons.search_rounded)),
+              IconButton(tooltip: 'Live TV', onPressed: _openLiveTv, icon: const Icon(Icons.live_tv_rounded)),
+              IconButton(tooltip: 'Watchlist', onPressed: () => openWatchlist(context), icon: const Icon(Icons.bookmark_outline_rounded)),
+              IconButton(tooltip: 'Notifications', onPressed: () => showNotifications(context), icon: const Icon(Icons.notifications_none_rounded)),
+              const SizedBox(width: 4),
+            ],
+          ),
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _DashboardHero(onWatchNow: _openLiveTv, onSearch: _openSearch),
+                const SizedBox(height: 10),
+                const ContinueWatchingRow(),
+                PosterRow(title: 'Trending Movies', subtitle: 'This week', width: 124, hideIfEmpty: false, loader: () => Tmdb.I.list('/trending/movie/week', <String, String>{}, count: 30, tv: false)),
+                PosterRow(title: 'Trending Web Series', subtitle: 'This week', width: 124, hideIfEmpty: false, loader: () => Tmdb.I.list('/trending/tv/week', <String, String>{}, count: 30, tv: true)),
+                const AdSlot(),
+                PosterRow(title: 'Popular Movies', subtitle: 'Most watched right now', width: 118, loader: () => Tmdb.I.list('/movie/popular', <String, String>{}, count: 30, tv: false)),
+                PosterRow(title: 'Top Rated Movies', subtitle: 'Highest rated', ranked: true, width: 118, loader: () => Tmdb.I.list('/movie/top_rated', <String, String>{}, count: 30, tv: false)),
+                PosterRow(title: 'Top Rated Series', subtitle: 'Highest rated web series', ranked: true, width: 118, loader: () => Tmdb.I.list('/tv/top_rated', <String, String>{}, count: 30, tv: true)),
+                const _DashboardSectionTitle('Browse Categories'),
+                _CategoryGrid(onTap: (CategoryKind kind) => openCategory(context, kind)),
+                const SizedBox(height: 8),
+                const _DashboardSectionTitle('Browse by Genre'),
+                for (final GenreDef genre in kAllGenres) GenreBlock(g: genre, onSeeAll: () => openGenre(context, genre)),
+                const SizedBox(height: 20),
+              ],
             ),
           ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16), gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.8), itemCount: filteredChannels.length,
-                    itemBuilder: (context, index) {
-                      final ch = filteredChannels[index];
-                      return InkWell(
-                        onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => SkippableAdScreen(adDuration: 30, nextScreen: VideoPlayerPage(tmdbId: 0, mediaType: 'tv', season: 1, episode: 1, movieTitle: ch['name']!, overview: 'Live TV Broadcast', rating: 'Live', year: 'Now', customUrl: ch['url'])))); },
-                        child: Container(
-                          decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Expanded(child: Padding(padding: const EdgeInsets.all(8.0), child: ch['logo']!.isNotEmpty ? CachedNetworkImage(imageUrl: ch['logo']!, errorWidget: (_, __, ___) => const Icon(Icons.tv, color: Colors.white54, size: 40)) : const Icon(Icons.tv, color: Colors.white54, size: 40))), Container(padding: const EdgeInsets.all(8), width: double.infinity, decoration: const BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.vertical(bottom: Radius.circular(12))), child: Text(ch['name']!, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center))]),
-                        ),
-                      );
-                    },
-                  ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardHero extends StatelessWidget {
+  const _DashboardHero({required this.onWatchNow, required this.onSearch});
+  final VoidCallback onWatchNow;
+  final VoidCallback onSearch;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 12), padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[Color(0xFFE50914), Color(0xFF7A0710), Color(0xFF161616)]), borderRadius: BorderRadius.circular(22)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('Unlimited Entertainment', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
+          const SizedBox(height: 8),
+          const Text('Movies, web series, anime aur live TV ek hi jagah.', style: TextStyle(fontSize: 14, color: Colors.white70, height: 1.4)),
+          const SizedBox(height: 20),
+          Wrap(
+            spacing: 10, runSpacing: 10,
+            children: <Widget>[
+              ElevatedButton.icon(onPressed: onWatchNow, icon: const Icon(Icons.live_tv_rounded), label: const Text('Live TV'), style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13))),
+              OutlinedButton.icon(onPressed: onSearch, icon: const Icon(Icons.search_rounded), label: const Text('Search'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54), padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13))),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DashboardSectionTitle extends StatelessWidget {
+  const _DashboardSectionTitle(this.title);
+  final String title;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 10), child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)));
+  }
+}
+
+class _CategoryGrid extends StatelessWidget {
+  const _CategoryGrid({required this.onTap});
+  final void Function(CategoryKind kind) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const List<_CategoryData> categories = <_CategoryData>[
+      _CategoryData(title: 'Movies', icon: Icons.local_movies_rounded, color: Color(0xFFB91C1C), kind: CategoryKind.movies),
+      _CategoryData(title: 'Web Series', icon: Icons.tv_rounded, color: Color(0xFF0369A1), kind: CategoryKind.series),
+      _CategoryData(title: 'Anime', icon: Icons.animation_rounded, color: Color(0xFF6D28D9), kind: CategoryKind.anime),
+      _CategoryData(title: 'Kids', icon: Icons.child_care_rounded, color: Color(0xFF16A34A), kind: CategoryKind.kids),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: categories.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 2.45),
+        itemBuilder: (_, int index) {
+          final _CategoryData item = categories[index];
+          return InkWell(
+            borderRadius: BorderRadius.circular(16), onTap: () => onTap(item.kind),
+            child: Ink(
+              decoration: BoxDecoration(color: item.color, borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: <Widget>[
+                    Icon(item.icon, color: Colors.white, size: 27),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800))),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CategoryData {
+  const _CategoryData({required this.title, required this.icon, required this.color, required this.kind});
+  final String title;
+  final IconData icon;
+  final Color color;
+  final CategoryKind kind;
+}
+
+class LiveTvScreen extends StatefulWidget {
+  const LiveTvScreen({super.key});
+  @override
+  State<LiveTvScreen> createState() => _LiveTvScreenState();
+}
+
+class _LiveTvScreenState extends State<LiveTvScreen> {
+  List<Map<String, String>> channels = <Map<String, String>>[];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchChannels();
+  }
+
+  Future<void> _fetchChannels() async {
+    try {
+      final http.Response response = await http.get(Uri.parse('https://raw.githubusercontent.com/Hritik862/Onyxtube/refs/heads/main/assets/channels.json'));
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+        setState(() {
+          channels = data.map((dynamic entry) {
+            final Map<dynamic, dynamic> item = entry as Map<dynamic, dynamic>;
+            return <String, String>{'name': item['name']?.toString() ?? 'Live TV', 'logo': item['logo']?.toString() ?? '', 'url': item['url']?.toString() ?? ''};
+          }).toList();
+          isLoading = false;
+        });
+      } else {
+        setState(() => isLoading = false);
+      }
+    } catch (error) {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(title: const Text('Live TV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF111111), iconTheme: const IconThemeData(color: Colors.white)),
+      body: isLoading ? const Center(child: CircularProgressIndicator(color: Colors.redAccent)) : channels.isEmpty ? const Center(child: Text('No Live Channels Available', style: TextStyle(color: Colors.white))) : GridView.builder(
+        padding: const EdgeInsets.all(12), gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.85), itemCount: channels.length,
+        itemBuilder: (_, int index) {
+          final Map<String, String> channel = channels[index];
+          final String name = channel['name'] ?? 'Live TV';
+          final String logo = channel['logo'] ?? '';
+          final String url = channel['url'] ?? '';
+
+          return InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: url.isEmpty ? null : () {
+              Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SkippableAdScreen(adDuration: 30, nextScreen: VideoPlayerPage(tmdbId: 0, mediaType: 'tv', season: 1, episode: 1, movieTitle: name, overview: 'Live TV Broadcast', rating: 'Live', year: 'Now', customUrl: url))));
+            },
+            child: Container(
+              decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Expanded(child: Padding(padding: const EdgeInsets.all(8), child: logo.isNotEmpty ? CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_, __, ___) => const Icon(Icons.tv, color: Colors.white54, size: 40)) : const Icon(Icons.tv, color: Colors.white54, size: 40))),
+                  Container(width: double.infinity, padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.vertical(bottom: Radius.circular(12))), child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
