@@ -232,6 +232,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
+  // 🔥 ORIGINAL "PURANI CODING" FOR VIDEO PLAYER 🔥
   void _initStream() {
     setState(() { isPageLoading = true; isVideoPlaying = false; showIntroAnimation = false; });
 
@@ -242,48 +243,27 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         isTvDevice ? "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1"
                    : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       )
-      ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { if (message.message == 'playing' && mounted) _triggerCinematicPlayAnimation(); if (message.message == 'ready' && mounted) setState(() => isPageLoading = false); })
+      ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { 
+        if (message.message == 'playing' && mounted) _triggerCinematicPlayAnimation(); 
+      })
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) { if (mounted) setState(() => isPageLoading = true); },
+          onPageStarted: (String url) { 
+            if (mounted) setState(() => isPageLoading = true); 
+          },
           onPageFinished: (String url) {
-            if (mounted && widget.customUrl != null) setState(() => isPageLoading = false);
+            // 🔥 DEEP FIX: SPINNER HAMESHA YAHAN BAND HOGA 🔥
+            if (mounted) setState(() => isPageLoading = false);
 
-            // 🔥 DEEP FIX: FAST SERVER AD BLOCKER & WHITE SCREEN FIX 🔥
+            // TERA ORIGINAL CLEAN CODE (NO OVER-BLOCKING)
             String jsCode = '''
-              document.documentElement.style.backgroundColor = '#000000';
               document.body.style.backgroundColor = '#000000';
-              
-              // Completely disable popup windows
-              window.open = function() { return null; };
-              window.alert = function() { return true; }; 
-              window.confirm = function() { return true; }; 
-              
-              // Force hide all ad-related elements
               var style = document.createElement('style');
               style.innerHTML = `
-                iframe[src*="ads"], iframe[src*="bet"], iframe[src*="casino"], .ad-container, .ads, .popup-overlay, 
-                [class*="verify"], #ad-overlay, .video-ad, .jw-ad, .ad-box, a[target="_blank"], div[style*="z-index: 2147483647"] { 
-                    display: none !important; 
-                    opacity: 0 !important; 
-                    pointer-events: none !important; 
-                    visibility: hidden !important; 
-                    height: 0 !important;
-                    width: 0 !important;
-                    z-index: -1 !important;
-                }
-                body, html { background-color: #000000 !important; overflow: hidden !important; }
+                iframe[src*="ads"], .ad-container, .ads, a[target="_blank"] { display: none !important; }
+                body, html { background-color: #000000 !important; overflow: hidden !important; margin: 0; padding: 0; }
               `;
               document.head.appendChild(style);
-
-              // Block fake clicks
-              document.addEventListener('click', function(e) {
-                var target = e.target.closest('a');
-                if(target && target.href && (target.href.includes('ad') || target.href.includes('bet') || target.href.includes('pop'))) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-              }, true);
 
               setInterval(function() {
                 var vids = document.getElementsByTagName('video');
@@ -292,17 +272,24 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   v.style.backgroundColor = '#000000';
                   v.style.objectFit = '$currentAspectRatio';
                   v.style.position = 'fixed';
-                  v.style.top = '0'; v.style.left = '0'; v.style.width = '100vw'; v.style.height = '100vh'; v.style.zIndex = '999999';
-                  if (v.currentTime > 0.5 && !v.paused) VideoState.postMessage('playing');
+                  v.style.top = '0'; 
+                  v.style.left = '0'; 
+                  v.style.width = '100vw'; 
+                  v.style.height = '100vh'; 
+                  v.style.zIndex = '999999';
+                  
+                  if (v.currentTime > 0.5 && !v.paused) {
+                    VideoState.postMessage('playing');
+                  }
                 }
-              }, 200);
+              }, 500);
             ''';
             _controller.runJavaScript(jsCode);
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-            // Block all known ad networks unconditionally
-            if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('bet365') || url.contains('onclick') || url.contains('adsterra') || url.contains('/ad/') || url.contains('sponsor')) {
+            // Basic ad block without breaking the server
+            if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('adsterra')) {
                 return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
@@ -647,7 +634,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return path.isNotEmpty ? 'https://image.tmdb.org/t/p/w500$path' : '';
   }
 
-  // 🔥 WATCHLIST SYNC DEEP FIX 🔥
   Future<void> _toggleWatchlist() async {
     final Map<String, dynamic> tmdbData = {
       'id': widget.tmdbId,
@@ -975,7 +961,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (isTvDevice) return _buildTVLayout(); 
 
     if (isFullScreen) {
-      // 🔥 BLACK BACKGROUND FIX 🔥
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
