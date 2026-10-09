@@ -95,8 +95,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
+  // region-wise glow: 8 zones = TL, T, TR, R, BR, B, BL, L
   final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
   List<List<Color>> _ambientZonePalette = <List<Color>>[];
+  // two-finger zoom (1.0 = normal)
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
   final List<Map<String, String>> servers = const [
@@ -236,8 +238,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  // 🔥 ORIGINAL PLAYER CODE FROM 7-8 TARIK 🔥
-  // EXACTLY AS IT WAS, WITHOUT ANY NEW AD-BLOCK HACKS THAT BROKE IT!
   void _initStream() {
     setState(() { isPageLoading = true; isVideoPlaying = false; showIntroAnimation = false; });
 
@@ -257,15 +257,43 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             if (mounted) setState(() => isPageLoading = true); 
           },
           onPageFinished: (String url) {
-            // Yaha aate hi connecting spinner band ho jata hai!
             if (mounted) setState(() => isPageLoading = false);
 
+            // 🔥 DEEP FIX: PANTYFLIX WEBSITE HIDE LOGIC 🔥
+            // Sirf Pantyflix website ke UI (headers, nav, logo) ko hide karke iframe/video ko screen par layega
             String jsCode = '''
+              document.documentElement.style.backgroundColor = '#000000';
               document.body.style.backgroundColor = '#000000';
+              
               var style = document.createElement('style');
               style.innerHTML = `
-                iframe[src*="ads"], .ad-container, .ads, a[target="_blank"] { display: none !important; }
-                body, html { background-color: #000000 !important; overflow: hidden !important; margin: 0; padding: 0; }
+                /* YAHAN PANTYFLIX KI WEBSITE KO HIDE KIYA HAI (HEADER, NAV, FOOTER, LOGO) */
+                header, nav, footer, .navbar, .navbar-custom, .logo, ul, li, .search, form, h1, h2, h3, p, span,
+                .ad-container, .ads, a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"] { 
+                    display: none !important; 
+                    opacity: 0 !important; 
+                    visibility: hidden !important; 
+                    pointer-events: none !important;
+                }
+                
+                body, html { 
+                    background-color: #000000 !important; 
+                    overflow: hidden !important; 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                }
+                
+                /* SIRF VIDEO WALE IFRAME/PLAYER KO FULL SCREEN KIYA HAI */
+                iframe:not([src*="ads"]) {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    z-index: 99998 !important;
+                    border: none !important;
+                    background-color: #000000 !important;
+                }
               `;
               document.head.appendChild(style);
 
@@ -292,7 +320,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-            // Basic ad block taaki Vercel aur original server pass ho sake!
+            // Tera original working ad-block navigation logic jisme tere servers pass hote the
             if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('adsterra')) {
                 return NavigationDecision.prevent;
             }
@@ -1122,6 +1150,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
+  // Android TV / badi screen: movie hamesha full screen, top-right HANNUTV logo (OK dabane par controls)
   Widget _buildTVLayout() {
     return Scaffold(
       backgroundColor: Colors.black,
@@ -2242,169 +2271,6 @@ class _ActorSheetState extends State<_ActorSheet> {
           child: body,
         );
       },
-    );
-  }
-}
-
-// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
-class _PinchZoom extends StatefulWidget {
-  final ValueNotifier<double> zoom;
-  final Widget child;
-  const _PinchZoom({required this.zoom, required this.child});
-
-  @override
-  State<_PinchZoom> createState() => _PinchZoomState();
-}
-
-class _PinchZoomState extends State<_PinchZoom> {
-  final Map<int, Offset> _pointers = <int, Offset>{};
-  double _startDist = 0;
-  double _startZoom = 1.0;
-
-  double _dist() {
-    final List<Offset> v = _pointers.values.toList();
-    return (v[0] - v[1]).distance;
-  }
-
-  void _down(PointerDownEvent e) {
-    _pointers[e.pointer] = e.position;
-    if (_pointers.length == 2) {
-      _startDist = _dist();
-      _startZoom = widget.zoom.value;
-    }
-  }
-
-  void _move(PointerMoveEvent e) {
-    if (!_pointers.containsKey(e.pointer)) return;
-    _pointers[e.pointer] = e.position;
-    if (_pointers.length == 2 && _startDist > 0) {
-      widget.zoom.value = (_startZoom * _dist() / _startDist).clamp(1.0, 2.2).toDouble();
-    }
-  }
-
-  void _up(PointerEvent e) {
-    _pointers.remove(e.pointer);
-    if (_pointers.length < 2) {
-      _startDist = 0;
-      if (widget.zoom.value < 1.06) widget.zoom.value = 1.0;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: _down,
-      onPointerMove: _move,
-      onPointerUp: _up,
-      onPointerCancel: _up,
-      child: ClipRect(
-        child: ValueListenableBuilder<double>(
-          valueListenable: widget.zoom,
-          child: widget.child,
-          builder: (context, z, ch) => Transform.scale(scale: z, child: ch),
-        ),
-      ),
-    );
-  }
-}
-
-class _SuggestRow extends StatefulWidget {
-  final String title;
-  final int excludeId;
-  final Future<List<TmdbItem>> Function() loader;
-  final void Function(TmdbItem item) onOpen;
-  final Widget Function({required Widget child, required VoidCallback onTap, BorderRadius? borderRadius}) focusable;
-  const _SuggestRow({
-    super.key,
-    required this.title,
-    required this.excludeId,
-    required this.loader,
-    required this.onOpen,
-    required this.focusable,
-  });
-
-  @override
-  State<_SuggestRow> createState() => _SuggestRowState();
-}
-
-class _SuggestRowState extends State<_SuggestRow> {
-  List<TmdbItem>? _items;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    List<TmdbItem> r = <TmdbItem>[];
-    try {
-      r = await widget.loader();
-    } catch (_) {}
-    if (!mounted) return;
-    setState(() => _items = r.where((TmdbItem e) => e.id != widget.excludeId).toList());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final List<TmdbItem>? items = _items;
-    if (items != null && items.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 175,
-            child: items == null
-                ? ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: 5,
-                    itemBuilder: (context, index) => Container(
-                      width: 110,
-                      margin: const EdgeInsets.only(right: 10, bottom: 20),
-                      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(8)),
-                    ),
-                  )
-                : ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final TmdbItem it = items[index];
-                      return widget.focusable(
-                        onTap: () => widget.onOpen(it),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          width: 110,
-                          margin: const EdgeInsets.only(right: 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: CachedNetworkImage(
-                                    imageUrl: it.posterUrl('w342'),
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                    placeholder: (BuildContext _, String __) => Container(color: Colors.grey[900]),
-                                    errorWidget: (BuildContext _, String __, Object ___) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.white24)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
     );
   }
 }
