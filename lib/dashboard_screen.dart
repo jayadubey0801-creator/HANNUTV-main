@@ -283,7 +283,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
                 badge: NotificationStore.I.badge,
               ),
             ),
-            // jaha pehle anime avatar tha → ab Support
             GestureDetector(
               onTap: () => showSupportSheet(context),
               child: Padding(

@@ -14,7 +14,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
-import 'watchlist_service.dart'; 
+import 'stores.dart'; 
+import 'tmdb_service.dart'; // 🔥 YEH IMPORT MISSING THA 🔥
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -85,7 +86,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   final TextEditingController commentInputController = TextEditingController();
 
-  // NEW: details / cast / description / ambient colours
   Map<String, dynamic>? details;
   List castList = [];
   bool isLoadingDetails = false;
@@ -154,7 +154,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     }
 
     _checkDeviceType();
-    WatchlistService.instance.ensureLoaded();
+    WatchlistStore.I.load();
     _startAmbientCycle(); 
   }
 
@@ -260,7 +260,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               style.innerHTML = `
                 header, nav, .navbar, footer, .footer, .server-select, .logo, a[href*="t.me"], a[href="/"],
                 iframe[src*="ads"], .ad-container, .ads, .popup-overlay, .dmca-notice, h1, h2, h3,
-                .human-verify, #captcha, [class*="verify"] { 
+                .human-verify, #captcha, [class*="verify"], #ad-overlay, .video-ad, .jw-ad, .ad-box, a[target="_blank"] { 
                     display: none !important; 
                     opacity: 0 !important; 
                     pointer-events: none !important; 
@@ -274,8 +274,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     width: 100vw !important; 
                     height: 100vh !important; 
                 }
-                /* MAIN MAGIC: IFRAME KO FULL SCREEN KARNA JAISE PURANI SETTING MEIN THA */
-                iframe:not([src*="ads"]) {
+                /* MAIN MAGIC: IFRAME KO FULL SCREEN KARNA */
+                iframe:not([src*="ads"]):not([src*="bet"]):not([src*="casino"]) {
                     position: fixed !important;
                     top: 0 !important;
                     left: 0 !important;
@@ -287,6 +287,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 }
               `;
               document.head.appendChild(style);
+
+              setInterval(function() {
+                var adSelectors = ['iframe[src*="ads"]', 'iframe[src*="bet"]', '.ad-container', '.ads', '.popup-overlay', '[class*="ad-"]', '[id*="ad-"]', '.jw-ad', '.video-ad', 'a[target="_blank"]'];
+                adSelectors.forEach(function(s) {
+                    var els = document.querySelectorAll(s);
+                    els.forEach(function(e) { e.remove(); });
+                });
+              }, 400);
 
               function hannuReady() {
                 if (window.__hannuReady) return;
@@ -331,7 +339,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-            if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('bet365') || url.contains('onclick') || url.contains('adult') || url.contains('telegram') || url.contains('t.me') || url.contains('adsterra') || url.contains('captcha') || url.contains('verify')) {
+            if (url.contains('doubleclick') || url.contains('popads') || url.contains('1xbet') || url.contains('bet365') || url.contains('onclick') || url.contains('adult') || url.contains('telegram') || url.contains('t.me') || url.contains('adsterra') || url.contains('captcha') || url.contains('verify') || url.contains('/ad/') || url.contains('sponsor')) {
                 return NavigationDecision.prevent;
             }
             if (url.contains('pantyflix.com') || url.contains('vercel.app') || url.contains('vidbolt') || url.contains('vidsrc') || url.contains('vidlink') || url.contains('multiembed') || url.contains('autoembed') || url.startsWith('about:blank') || url.startsWith('data:')) {
@@ -463,7 +471,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  // 🔥 ERROR FIXED: YEH WOH MISSING FUNCTION HAI JO CHHUT GAYA THA 🔥
   void _showAudioServerPingMenu() {
     showModalBottomSheet(
       context: context, backgroundColor: const Color(0xFF151515),
@@ -677,28 +684,31 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         }
       } catch (_) {}
     }
-    return path.isNotEmpty ? 'https://image.tmdb.org/t/p/w500$path' : '';
+    return path;
   }
 
   Future<void> _toggleWatchlist() async {
-    final bool already = WatchlistService.instance.contains(widget.tmdbId, _tmdbType);
-    final String fetchedOverview = (details?['overview'] ?? '').toString();
-    final Map<String, dynamic> item = <String, dynamic>{
+    final Map<String, dynamic> tmdbData = {
       'id': widget.tmdbId,
-      'mediaType': _tmdbType,
+      'media_type': _tmdbType,
       'title': widget.movieTitle,
-      'year': widget.year,
-      'rating': widget.rating,
-      'overview': widget.overview.isNotEmpty ? widget.overview : fetchedOverview,
-      'posterUrl': already ? '' : await _posterUrlForWatchlist(),
+      'name': widget.movieTitle,
+      'release_date': widget.year,
+      'first_air_date': widget.year,
+      'vote_average': num.tryParse(widget.rating) ?? 0.0,
+      'overview': widget.overview.isNotEmpty ? widget.overview : (details?['overview'] ?? ''),
+      'poster_path': await _posterUrlForWatchlist(),
     };
-    final bool added = await WatchlistService.instance.toggle(item);
+    final item = TmdbItem.fromStored(tmdbData);
+    await WatchlistStore.I.toggle(item);
+
     if (!mounted) return;
+    final bool saved = WatchlistStore.I.contains(item);
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(added ? 'Added to Watchlist' : 'Removed from Watchlist'),
-        backgroundColor: added ? Colors.green : Colors.grey[800],
+        content: Text(saved ? 'Added to Watchlist' : 'Removed from Watchlist'),
+        backgroundColor: saved ? Colors.green : Colors.grey[800],
         duration: const Duration(seconds: 2),
       ),
     );
@@ -1084,9 +1094,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         children: [
                           if (widget.customUrl == null) ...[
                             ValueListenableBuilder<List<Map<String, dynamic>>>(
-                              valueListenable: WatchlistService.instance.items,
+                              valueListenable: WatchlistStore.I.items as ValueNotifier<List<Map<String, dynamic>>>,
                               builder: (context, list, _) {
-                                final bool saved = WatchlistService.instance.contains(widget.tmdbId, _tmdbType);
+                                final bool saved = WatchlistStore.I.items.any((e) => e.id == widget.tmdbId && (e.isTv ? 'tv' : 'movie') == _tmdbType);
                                 return _buildFocusableItem(
                                   onTap: _toggleWatchlist,
                                   borderRadius: BorderRadius.circular(20),
@@ -1708,7 +1718,6 @@ class _ActorSheetState extends State<_ActorSheet> {
     _load();
   }
 
-  // combined_credits me actor ki POORI filmography aati hai (movies + TV), koi 10-20 ki limit nahi
   Future<void> _load() async {
     try {
       final res = await http.get(
