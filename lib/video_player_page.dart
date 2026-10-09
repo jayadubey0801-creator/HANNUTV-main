@@ -15,7 +15,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
-import 'tmdb_service.dart'; // 🔥 YEH IMPORT MISSING THA 🔥
+import 'tmdb_service.dart';
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -259,12 +259,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               var style = document.createElement('style');
               style.innerHTML = `
                 header, nav, .navbar, footer, .footer, .server-select, .logo, a[href*="t.me"], a[href="/"],
-                iframe[src*="ads"], .ad-container, .ads, .popup-overlay, .dmca-notice, h1, h2, h3,
+                iframe[src*="ads"], iframe[src*="bet"], iframe[src*="casino"], .ad-container, .ads, .popup-overlay, .dmca-notice, h1, h2, h3,
                 .human-verify, #captcha, [class*="verify"], #ad-overlay, .video-ad, .jw-ad, .ad-box, a[target="_blank"] { 
                     display: none !important; 
                     opacity: 0 !important; 
                     pointer-events: none !important; 
                     visibility: hidden !important; 
+                    height: 0 !important;
+                    width: 0 !important;
                 }
                 body, html { 
                     background-color: #000000 !important; 
@@ -289,12 +291,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               document.head.appendChild(style);
 
               setInterval(function() {
-                var adSelectors = ['iframe[src*="ads"]', 'iframe[src*="bet"]', '.ad-container', '.ads', '.popup-overlay', '[class*="ad-"]', '[id*="ad-"]', '.jw-ad', '.video-ad', 'a[target="_blank"]'];
+                var adSelectors = ['iframe[src*="ads"]', 'iframe[src*="bet"]', 'iframe[src*="casino"]', '.ad-container', '.ads', '.popup-overlay', '[class*="ad-"]', '[id*="ad-"]', '.jw-ad', '.video-ad', 'a[target="_blank"]'];
                 adSelectors.forEach(function(s) {
                     var els = document.querySelectorAll(s);
                     els.forEach(function(e) { e.remove(); });
                 });
-              }, 400);
+              }, 300);
 
               function hannuReady() {
                 if (window.__hannuReady) return;
@@ -684,7 +686,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         }
       } catch (_) {}
     }
-    return path;
+    return path.isNotEmpty ? 'https://image.tmdb.org/t/p/w500$path' : '';
   }
 
   Future<void> _toggleWatchlist() async {
@@ -1093,9 +1095,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       child: Row(
                         children: [
                           if (widget.customUrl == null) ...[
-                            ValueListenableBuilder<List<Map<String, dynamic>>>(
-                              valueListenable: WatchlistStore.I.items as ValueNotifier<List<Map<String, dynamic>>>,
-                              builder: (context, list, _) {
+                            AnimatedBuilder(
+                              animation: WatchlistStore.I,
+                              builder: (context, _) {
                                 final bool saved = WatchlistStore.I.items.any((e) => e.id == widget.tmdbId && (e.isTv ? 'tv' : 'movie') == _tmdbType);
                                 return _buildFocusableItem(
                                   onTap: _toggleWatchlist,

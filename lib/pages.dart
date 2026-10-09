@@ -342,6 +342,7 @@ class _MatureGateState extends State<_MatureGate> {
                   builder: (BuildContext c) => AlertDialog(
                     backgroundColor: HC.surface,
                     title: const Text('Age check'),
+                    // 🔥 POPUP ENGLISH TEXT 🔥
                     content: const Text('Are you 18 years of age or older?'),
                     actions: <Widget>[
                       TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
@@ -552,7 +553,7 @@ void showNotifications(BuildContext context) {
                   title: n.title,
                   sub: n.body.isEmpty ? _ago(n.ts) : '${n.body}\n${_ago(n.ts)}',
                   onTap: n.url == null ? null : () => openUrl(n.url!),
-                  imageUrl: n.imageUrl, // 🔥 FIX: Yahan 'imageUrl' kar diya hai
+                  imageUrl: n.imageUrl, 
                 ),
             ];
             return SafeArea(
@@ -564,6 +565,7 @@ void showNotifications(BuildContext context) {
                     padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
                     child: Text('Notifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                   ),
+                  // 🔥 NOTIFICATION ENGLISH TEXT 🔥
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
                     child: Text('Notifications are kept for 24 hours',

@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'config.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
-import 'banner_ad_widget.dart'; // 🔥 Yahan Adsterra ke liye import lagaya gaya hai 🔥
+import 'banner_ad_widget.dart'; // 🔥 IMPORTED CUSTOM BANNER AD
 
 class DashboardHooks {
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;

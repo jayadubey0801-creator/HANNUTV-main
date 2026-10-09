@@ -181,7 +181,6 @@ class ContinueWatchingStore extends ChangeNotifier {
   }
 }
 
-// 🔥 APPNOTIFICATION MEIN IMAGEURL ADD KI GAYI HAI 🔥
 class AppNotification {
   final String id;
   final String title;
@@ -322,7 +321,6 @@ class NotificationStore extends ChangeNotifier {
     _inited = true;
     await _reload();
     try {
-      // 🔥 YAHAN AUTO FOREGROUND NOTIFICATION KI FIX LAGAYI HAI 🔥
       await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
