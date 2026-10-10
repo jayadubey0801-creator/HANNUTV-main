@@ -236,7 +236,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  // 🔥 DEEP FIXED STREAM INITIALIZATION 🔥
   void _initStream() {
     setState(() { isPageLoading = true; isVideoPlaying = false; showIntroAnimation = false; });
 
@@ -256,13 +255,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             if (mounted) setState(() => isPageLoading = true); 
           },
           onPageFinished: (String url) {
-            
-            // 🔥 FIX 1: 0.1s Flash Hatane Ke Liye Loading Spinner Ko 800ms Delay Ke Sath Hataya 🔥
-            Future.delayed(const Duration(milliseconds: 800), () {
+            Future.delayed(const Duration(milliseconds: 600), () {
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 FIX 2: Deep JS Ad-Blocker (Google/Ads pe touch nahi hone dega) 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
@@ -271,7 +267,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               style.innerHTML = `
                 header, nav, footer, .navbar, .logo, .search, form, 
                 h1, h2, h3, p, span, .menu,
-                .ad-container, .ads, [class*="ad-"] { 
+                .ad-container, .ads, [class*="ad-"], a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"] { 
                     display: none !important; 
                     opacity: 0 !important; 
                     visibility: hidden !important; 
@@ -285,7 +281,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     padding: 0 !important; 
                 }
                 
-                iframe {
+                iframe:not([src*="ads"]) {
                     position: fixed !important;
                     top: 0 !important;
                     left: 0 !important;
@@ -298,11 +294,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
-              // 🚫 Faltu New Tab / Google Popups Band
+              // 🔥 JS TOUCH AD BLOCKER 🔥
               window.open = function() { return null; };
-              window.alert = function() { return true; };
-
-              // 🚫 Screen pe fake play button touch hone par us ad ko completely block karega
+              window.alert = function() { return null; };
+              
               document.addEventListener('click', function(e) {
                   var target = e.target;
                   if(target.tagName === 'A' || target.closest('a')) {
@@ -329,7 +324,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
                 }
                 
-                // 🚀 Auto-click the real play button so user doesn't have to touch the screen!
                 var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
                 if (playBtns.length > 0) {
                     playBtns[0].click();
@@ -341,20 +335,29 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
             
-            // 🔥 FIX 3: Deep URL Blocker (Kisi bhi haal me Google ya third party ad nahi khulega) 🔥
+            // 🔥 DEEP AD-BLOCKER: Koi bhi Ad ya Google ka link khulne nahi dega 🔥
             if (url.contains('google.com') || 
                 url.contains('doubleclick') || 
                 url.contains('popads') || 
                 url.contains('1xbet') || 
+                url.contains('bet365') || 
                 url.contains('adsterra') ||
                 url.contains('redirect') ||
                 url.contains('onclick') ||
-                url.contains('bet365') ||
                 url.startsWith('intent://') ||
                 url.startsWith('market://') ||
+                url.startsWith('whatsapp://') ||
                 url.contains('about:blank')) {
                 return NavigationDecision.prevent;
             }
+
+            // 🔥 SCREEN TOUCH SHIELD: Agar ad click se main page Google pe redirect hone ki koshish kare toh block karo 🔥
+            if (request.isMainFrame) {
+              if (!url.contains('pantyflix') && !url.contains('vercel.app')) {
+                return NavigationDecision.prevent;
+              }
+            }
+
             return NavigationDecision.navigate;
           },
         ),
