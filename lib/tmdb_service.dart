@@ -4,6 +4,27 @@ import 'package:http/http.dart' as http;
 
 import 'config.dart';
 
+// ═════════════ HANNUTV PROXY (Jio/Airtel TMDB block bypass) ═════════════
+const String kProxyBase = 'https://hannutv-proxy-1.vercel.app/api/proxy?stream=';
+
+/// TMDB image URL ko proxy se guzarta hai.
+String proxyImg(String url) => kProxyBase + Uri.encodeComponent(url);
+
+/// TMDB API GET: pehle proxy, fail ho to direct (WiFi/VPN par bhi kabhi nahi tootega).
+Future<http.Response> tmdbHttpGet(String url, {Map<String, String>? headers}) async {
+  try {
+    String target = url;
+    if (!target.contains('api_key=')) {
+      target += (target.contains('?') ? '&' : '?') + 'api_key=$kTmdbApiKey';
+    }
+    final http.Response r = await http
+        .get(Uri.parse(proxyImg(target)), headers: headers)
+        .timeout(const Duration(seconds: 8));
+    if (r.statusCode == 200) return r;
+  } catch (_) {}
+  return http.get(Uri.parse(url), headers: headers);
+}
+
 class TmdbItem {
   final int id;
   final bool isTv;
@@ -33,8 +54,8 @@ class TmdbItem {
 
   String get key => '${isTv ? 'tv' : 'movie'}_$id';
   String get kind => isTv ? 'Series' : 'Movie';
-  String posterUrl([String size = 'w342']) => '$kImg/$size$poster';
-  String backdropUrl([String size = 'w780']) => '$kImg/$size$backdrop';
+  String posterUrl([String size = 'w342']) => proxyImg('$kImg/$size$poster');
+  String backdropUrl([String size = 'w780']) => proxyImg('$kImg/$size$backdrop');
 
   factory TmdbItem.fromJson(Map<String, dynamic> j, {required bool isTv}) {
     final String date = (j['release_date'] ?? j['first_air_date'] ?? '').toString();
@@ -87,22 +108,18 @@ class Tmdb {
     _kw.clear();
   }
 
-  // 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
-  Uri _uri(String path, Map<String, String> q) {
-    final String originalUrl = Uri.https(
-      'api.themoviedb.org',
-      '/3$path',
-      <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
-    ).toString();
-    return Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(originalUrl));
-  }
+  Uri _uri(String path, Map<String, String> q) => Uri.https(
+        'api.themoviedb.org',
+        '/3$path',
+        <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
+      );
 
   /// Retry + 429 backoff ke saath safe GET. Fail hone par null (kabhi throw nahi).
   Future<Map<String, dynamic>?> _get(String path, Map<String, String> q) async {
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
         final http.Response r =
-            await _client.get(_uri(path, q)).timeout(const Duration(seconds: 15));
+            await tmdbHttpGet(_uri(path, q).toString()).timeout(const Duration(seconds: 20));
         if (r.statusCode == 200) {
           final dynamic d = json.decode(r.body);
           if (d is Map<String, dynamic>) return d;
