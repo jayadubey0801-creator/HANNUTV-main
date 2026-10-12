@@ -87,18 +87,13 @@ class Tmdb {
     _kw.clear();
   }
 
-  // 🔥 DEEP FIX: JIO TMDB NETWORK BLOCK BYPASS 🔥
-  Uri _uri(String path, Map<String, String> q) {
-    final String originalUrl = Uri.https(
-      'api.themoviedb.org',
-      '/3$path',
-      <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
-    ).toString();
-    
-    // TMDB API calls ko tere Vercel proxy se route kar rahe hain taaki Jio ko pata na chale
-    return Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(originalUrl));
-  }
+  Uri _uri(String path, Map<String, String> q) => Uri.https(
+        'api.themoviedb.org',
+        '/3$path',
+        <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
+      );
 
+  /// Retry + 429 backoff ke saath safe GET. Fail hone par null (kabhi throw nahi).
   Future<Map<String, dynamic>?> _get(String path, Map<String, String> q) async {
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
@@ -109,7 +104,7 @@ class Tmdb {
           if (d is Map<String, dynamic>) return d;
           return null;
         }
-        if (r.statusCode == 401) return null; 
+        if (r.statusCode == 401) return null; // galat API key — retry bekaar
         if (r.statusCode == 429 || r.statusCode >= 500) {
           await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
           continue;
@@ -122,13 +117,14 @@ class Tmdb {
     return null;
   }
 
+  /// Generic paged list (20 per page). `tv` null ho to media_type se detect hota hai.
   Future<List<TmdbItem>> list(String path, Map<String, String> q,
       {int count = 20, bool? tv}) {
     final String key = '$path|${(q.entries.map((e) => '${e.key}=${e.value}').toList()..sort()).join('&')}|$count|$tv';
     final Future<List<TmdbItem>>? hit = _cache[key];
     if (hit != null) return hit;
     final Future<List<TmdbItem>> f = _fetchPages(path, q, count, tv).then((List<TmdbItem> r) {
-      if (r.isEmpty) _cache.remove(key); 
+      if (r.isEmpty) _cache.remove(key); // fail/empty cache nahi karte → retry chalega
       return r;
     });
     _cache[key] = f;
@@ -161,6 +157,7 @@ class Tmdb {
     return out.take(count).toList();
   }
 
+  // ───────────────────────── discover ─────────────────────────
   Future<List<TmdbItem>> discover({
     required bool tv,
     String? genres,
@@ -189,6 +186,7 @@ class Tmdb {
     return list(tv ? '/discover/tv' : '/discover/movie', q, count: count, tv: tv);
   }
 
+  /// '/search/keyword' se keyword id(s) nikalta hai (cache ke saath).
   Future<String?> keywordIds(String name) async {
     final String k = name.toLowerCase();
     final Future<List<int>> f = _kw[k] ?? (_kw[k] = _loadKeyword(name, k));
@@ -222,6 +220,9 @@ class Tmdb {
     return all.take(count).toList();
   }
 
+  // ───────────────────────── dashboard lists ─────────────────────────
+
+  /// Hero: TMDB trending (aaj + is hafte) ke top 20, backdrop wale.
   Future<List<TmdbItem>> heroItems() async {
     final List<List<TmdbItem>> r = await Future.wait(<Future<List<TmdbItem>>>[
       list('/trending/all/day', <String, String>{}, count: 20),
@@ -237,6 +238,7 @@ class Tmdb {
     return out;
   }
 
+  /// India me OTTs par sabse popular (movie + series mix).
   Future<List<TmdbItem>> topIndia({int count = 10}) async {
     final List<List<TmdbItem>> r = await Future.wait(<Future<List<TmdbItem>>>[
       discover(tv: false, providers: kIndiaProviders, region: 'IN', count: count),
@@ -245,9 +247,11 @@ class Tmdb {
     return _merge(r[0], r[1], count);
   }
 
+  /// Worldwide trending top 10 (movie + series).
   Future<List<TmdbItem>> topWorld({int count = 10}) =>
       list('/trending/all/week', <String, String>{}, count: count);
 
+  // ───────────────────────── genre rows ─────────────────────────
   Future<List<TmdbItem>> genreRow(GenreDef g, RowKind kind,
       {int count = 50, String? providers, String? region}) async {
     switch (kind) {
@@ -294,6 +298,8 @@ class Tmdb {
     );
   }
 
+  // ───────────────────────── OTT rows ─────────────────────────
+  /// Ek OTT ke andar kisi bhi category ka row. Region IN me kam mile to US try karta hai.
   Future<List<TmdbItem>> ottRow(
     Ott o, {
     GenreDef? genre,
@@ -382,6 +388,7 @@ class Tmdb {
     return res.length == 1 ? res.first : _merge(res[0], res[1], count);
   }
 
+  // ───────────────────────── search ─────────────────────────
   Future<List<TmdbItem>> search(String query) async {
     final Map<String, dynamic>? m = await _get(
       '/search/multi',
