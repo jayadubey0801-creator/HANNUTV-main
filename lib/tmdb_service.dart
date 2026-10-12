@@ -87,12 +87,17 @@ class Tmdb {
     _kw.clear();
   }
 
-  // 🔥 NATIVE JIO BYPASS: api.themoviedb.org ki jagah api.tmdb.org use kiya hai 🔥
-  Uri _uri(String path, Map<String, String> q) => Uri.https(
-        'api.tmdb.org', 
-        '/3$path',
-        <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
-      );
+  // 🔥 DEEP FIX: JIO TMDB NETWORK BLOCK BYPASS 🔥
+  Uri _uri(String path, Map<String, String> q) {
+    final String originalUrl = Uri.https(
+      'api.themoviedb.org',
+      '/3$path',
+      <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
+    ).toString();
+    
+    // TMDB API calls ko tere Vercel proxy se route kar rahe hain taaki Jio ko pata na chale
+    return Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(originalUrl));
+  }
 
   Future<Map<String, dynamic>?> _get(String path, Map<String, String> q) async {
     for (int attempt = 0; attempt < 3; attempt++) {
