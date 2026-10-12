@@ -87,11 +87,15 @@ class Tmdb {
     _kw.clear();
   }
 
-  Uri _uri(String path, Map<String, String> q) => Uri.https(
-        'api.themoviedb.org',
-        '/3$path',
-        <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
-      );
+  // 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
+  Uri _uri(String path, Map<String, String> q) {
+    final String originalUrl = Uri.https(
+      'api.themoviedb.org',
+      '/3$path',
+      <String, String>{'api_key': kTmdbApiKey, 'language': 'en-US', ...q},
+    ).toString();
+    return Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(originalUrl));
+  }
 
   /// Retry + 429 backoff ke saath safe GET. Fail hone par null (kabhi throw nahi).
   Future<Map<String, dynamic>?> _get(String path, Map<String, String> q) async {
