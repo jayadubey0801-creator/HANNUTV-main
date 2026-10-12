@@ -165,7 +165,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchTvDetails() async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await http.get(Uri.parse('https://api.themoviedb.org/3/tv/${widget.tmdbId}?language=en-US'), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.tmdb.org/3/tv/${widget.tmdbId}?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { totalSeasons = data['number_of_seasons'] ?? 1; });
@@ -177,7 +177,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchEpisodes(int seasonNum) async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await http.get(Uri.parse('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US'), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.tmdb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
@@ -216,7 +216,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     setState(() => isLoadingSimilar = true);
     try {
       final type = widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
-      final res = await http.get(Uri.parse('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US'), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.tmdb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List results = data['results'] ?? [];
@@ -351,7 +351,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 return NavigationDecision.prevent;
             }
 
-            // 🔥 SCREEN TOUCH SHIELD: Agar ad click se main page Google pe redirect hone ki koshish kare toh block karo 🔥
             if (request.isMainFrame) {
               if (!url.contains('pantyflix') && !url.contains('vercel.app')) {
                 return NavigationDecision.prevent;
@@ -546,7 +545,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (mounted) setState(() => isLoadingDetails = true);
     try {
       final res = await http.get(
-        Uri.parse('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null'),
+        Uri.parse('https://api.tmdb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null'),
         headers: kApiHeaders,
       );
       if (res.statusCode == 200) {
@@ -698,7 +697,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (path.isEmpty) {
       try {
         final res = await http
-            .get(Uri.parse('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US'), headers: kApiHeaders)
+            .get(Uri.parse('https://api.tmdb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US'), headers: kApiHeaders)
             .timeout(const Duration(seconds: 6));
         if (res.statusCode == 200) {
           final data = json.decode(res.body);
@@ -996,7 +995,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       CircleAvatar(
                         radius: 34,
                         backgroundColor: Colors.grey[900],
-                        backgroundImage: hasPhoto ? CachedNetworkImageProvider('https://image.tmdb.org/t/p/w185$profile') : null,
+                        backgroundImage: hasPhoto ? CachedNetworkImageProvider('https://api.tmdb.org/t/p/w185$profile') : null,
                         child: hasPhoto ? null : const Icon(Icons.person, color: Colors.white38, size: 30),
                       ),
                       const SizedBox(height: 6),
@@ -1382,8 +1381,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                       const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                       const SizedBox(height: 20),
                     ],
 
@@ -1455,7 +1452,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                             String imgUrl = '';
                             if (episodesList.isNotEmpty && index < episodesList.length) {
                               epName = episodesList[index]['name'] ?? "Episode $epNum";
-                              if (episodesList[index]['still_path'] != null) imgUrl = 'https://image.tmdb.org/t/p/w500${episodesList[index]['still_path']}';
+                              if (episodesList[index]['still_path'] != null) imgUrl = 'https://api.tmdb.org/t/p/w500${episodesList[index]['still_path']}';
                             }
                             return _buildFocusableItem(
                               onTap: () => _switchEpisode(epNum), borderRadius: BorderRadius.circular(10),
@@ -1822,7 +1819,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     setState(() { _loading = true; _lastQuery = q; });
     try {
       final res = await http.get(
-        Uri.parse('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1'),
+        Uri.parse('https://api.tmdb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1'),
         headers: kApiHeaders,
       );
       if (!mounted || q != _lastQuery) return;
@@ -1881,13 +1878,13 @@ class _SearchSheetState extends State<_SearchSheet> {
         ? CircleAvatar(
             radius: 26,
             backgroundColor: Colors.grey[900],
-            backgroundImage: img.isNotEmpty ? CachedNetworkImageProvider('https://image.tmdb.org/t/p/w185$img') : null,
+            backgroundImage: img.isNotEmpty ? CachedNetworkImageProvider('https://api.tmdb.org/t/p/w185$img') : null,
             child: img.isEmpty ? const Icon(Icons.person, color: Colors.white38) : null,
           )
         : ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: img.isNotEmpty
-                ? CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w185$img', width: 46, height: 68, fit: BoxFit.cover,
+                ? CachedNetworkImage(imageUrl: 'https://api.tmdb.org/t/p/w185$img', width: 46, height: 68, fit: BoxFit.cover,
                     errorWidget: (_, __, ___) => Container(width: 46, height: 68, color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.white24)))
                 : Container(width: 46, height: 68, color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.white24)),
           );
@@ -2001,7 +1998,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   Future<void> _load() async {
     try {
       final res = await http.get(
-        Uri.parse('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids'),
+        Uri.parse('https://api.tmdb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids'),
         headers: kApiHeaders,
       );
       if (!mounted) return;
@@ -2112,7 +2109,7 @@ class _ActorSheetState extends State<_ActorSheet> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: poster.isNotEmpty
-                        ? CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w342$poster', fit: BoxFit.cover, errorWidget: (_, __, ___) => _posterFallback())
+                        ? CachedNetworkImage(imageUrl: 'https://api.tmdb.org/t/p/w342$poster', fit: BoxFit.cover, errorWidget: (_, __, ___) => _posterFallback())
                         : _posterFallback(),
                   ),
                 ),
@@ -2187,7 +2184,7 @@ class _ActorSheetState extends State<_ActorSheet> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: profile.isNotEmpty
-                          ? CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w342$profile', width: 90, height: 130, fit: BoxFit.cover, errorWidget: (_, __, ___) => _avatarFallback())
+                          ? CachedNetworkImage(imageUrl: 'https://api.tmdb.org/t/p/w342$profile', width: 90, height: 130, fit: BoxFit.cover, errorWidget: (_, __, ___) => _avatarFallback())
                           : _avatarFallback(),
                     ),
                     const SizedBox(width: 14),
