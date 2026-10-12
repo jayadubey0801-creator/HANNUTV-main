@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; 
 import 'dart:io';
+import 'dart:async'; // 🔥 Timer ke liye add kiya
 
 class CustomBannerAd extends StatefulWidget {
   final String htmlBannerCode;
@@ -17,12 +18,13 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
   
   // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG 🔥
   bool _isAdblockDetected = false;
+  Timer? _watchdog; // 🔥 Har second scan karne wala kuta 🐕
 
-  // 🛡️ AUTO-OPEN FIX: browser / Play Store sirf tab khulega jab user ne banner pe REAL tap kiya ho
+  // 🛡️ AUTO-OPEN FIX
   Offset? _tapDownPos;
   DateTime? _lastTapTime;
   
-  // STRICT 1 SECOND TAP VALIDATION: Blocks delayed malicious JS redirects
+  // STRICT 1 SECOND TAP VALIDATION
   bool get _userTappedRecently =>
       _lastTapTime != null &&
       DateTime.now().difference(_lastTapTime!) < const Duration(seconds: 1);
@@ -31,7 +33,9 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
   void initState() {
     super.initState();
     
-    _checkDeepBannerAdblock(); // 🔥 Naya Smart DNS Check
+    _checkDeepBannerAdblock(); 
+    // 🔥 BRUTAL SCAN: Har 2 second me check karega ki usne beech me toh DNS on nahi kar liya
+    _watchdog = Timer.periodic(const Duration(seconds: 2), (_) => _checkDeepBannerAdblock());
     
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -41,7 +45,6 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
 
-            // 1. Initial banner load aur Adsterra scripts
             if (url.startsWith('data:') || 
                 url.startsWith('about:blank') || 
                 url.contains('hannutv.blogspot.com') || 
@@ -49,20 +52,17 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
               return NavigationDecision.navigate;
             }
 
-            // 2. 🔥 REAL TAP DETECTION 🔥
             if (_userTappedRecently) {
               _launchExternalBrowser(request.url);
-              return NavigationDecision.prevent; // Prevent loading inside the small banner iframe
+              return NavigationDecision.prevent; 
             }
 
-            // 3. 🛡️ BLOCK ALL UNPROMPTED AUTO-REDIRECTS
             return NavigationDecision.prevent; 
           },
-          // 🚀 PERFECTED ANTI-ADBLOCK SENSOR (No False Positives) 🚀
+          // 🚀 PERFECTED ANTI-ADBLOCK SENSOR 🚀
           onWebResourceError: (WebResourceError error) {
             final desc = error.description.toLowerCase();
-            // Ab slow internet pe nahi rukega, sirf clear client block par flag karega
-            if (desc.contains('err_blocked_by_client')) {
+            if (desc.contains('err_blocked_by_client') || desc.contains('err_name_not_resolved')) {
               if (mounted) {
                 setState(() {
                   _isAdblockDetected = true; 
@@ -84,7 +84,6 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
           <body>
             ${widget.htmlBannerCode}
             <script>
-              // 🔥 DEEP HACK: Block JS Auto-Redirects & Auto-Bypass Captcha 🔥
               window.open = function(url, windowName, windowFeatures) {
                 return null;
               };
@@ -100,27 +99,31 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
       ''', baseUrl: 'https://hannutv.blogspot.com');
   }
 
-  // 🔥 DUAL-CHECK SMART DNS LOGIC 🔥
+  // 🔥 1 SECOND HARD DNS CHECK 🔥
   Future<void> _checkDeepBannerAdblock() async {
+    bool isBlocked = false;
     try {
-      final addresses = await InternetAddress.lookup('highrevenueformat.com').timeout(const Duration(seconds: 3));
+      final addresses = await InternetAddress.lookup('highrevenueformat.com').timeout(const Duration(seconds: 1));
       for (var addr in addresses) {
-        if (addr.address == '0.0.0.0' || addr.address == '127.0.0.1' || addr.address == '::1') {
-          if (mounted) setState(() => _isAdblockDetected = true);
+        if (addr.address == '0.0.0.0' || addr.address == '127.0.0.1' || addr.address == '::1' || addr.address == '::') {
+          isBlocked = true;
           break;
         }
       }
     } catch (e) {
-      // Agar ad domain fail ho gaya, toh dekho kya internet actually chal raha hai?
+      // Internet chal raha hai ya ad blocker ne fail kiya?
       try {
-        final googleCheck = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 3));
+        final googleCheck = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 1));
         if (googleCheck.isNotEmpty) {
-          // Internet chal raha hai but Ad domain band hai = 100% AdBlocker
-          if (mounted) setState(() => _isAdblockDetected = true);
+          isBlocked = true; // Net chalu hai, Ad block hai
         }
-      } catch (e2) {
-        // Internet hi down hai, koi ad blocker nahi hai
-      }
+      } catch (e2) {}
+    }
+
+    if (mounted && isBlocked != _isAdblockDetected) {
+      setState(() {
+        _isAdblockDetected = isBlocked;
+      });
     }
   }
 
@@ -131,6 +134,12 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
     } catch (e) {
       debugPrint("Could not launch banner link");
     }
+  }
+
+  @override
+  void dispose() {
+    _watchdog?.cancel();
+    super.dispose();
   }
 
   @override
