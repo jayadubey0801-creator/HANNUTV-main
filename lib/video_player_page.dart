@@ -33,7 +33,7 @@ const String _adsterraBannerSnippet = '''
   <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
 ''';
 
-// 🔥 JIO API BYPASS HELPER (Sirf data fetch karne ke liye, Images ke liye nahi) 🔥
+// 🔥 JIO TMDB API PROXY BYPASS 🔥
 String proxyTmdbApi(String url) {
   return "https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(url);
 }
@@ -673,8 +673,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       return HSVColor.fromAHSV(
         1.0,
         h.hue,
-        h.saturation.clamp(0.5, 1.0).toDouble(),
-        h.value.clamp(0.55, 0.95).toDouble(),
+        h.saturation.clamp(0.45, 1.0).toDouble(),
+        h.value.clamp(0.5, 0.95).toDouble(),
       ).toColor();
     } catch (_) {
       return null;
@@ -1375,6 +1375,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         const SizedBox(height: 10),
                         const Text("Sponsored Ads", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 10),
+                        const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                        const SizedBox(height: 16),
                         const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                         const SizedBox(height: 16),
                         const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
