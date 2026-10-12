@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:io'; 
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; 
 
@@ -27,6 +29,10 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
 
   // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG 🔥
   bool _isAdblockDetected = false;
+  bool _clientBlocked = false; // WebView ke andar ka blocker (sticky)
+  bool _checking = false;
+  Timer? _watchdog;
+  late String _selectedAd;
 
   // 🛡️ STRICT 1 SECOND TAP VALIDATION
   Offset? _tapDownPos;
@@ -47,10 +53,13 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     _timeLeft = widget.adDuration; 
     
     final _random = Random();
-    String selectedAd = _fullScreenAdLinks[_random.nextInt(_fullScreenAdLinks.length)];
+    _selectedAd = _fullScreenAdLinks[_random.nextInt(_fullScreenAdLinks.length)];
+    final String selectedAd = _selectedAd;
 
-    // 🚀 TRAP 1: APP START HOTE HI SMART DUAL-DNS CHECK KAREGA 🚀
-    _checkAdGuardDNS(selectedAd);
+    // 🚀 TRAP: turant check + har 4 sec watchdog (AdGuard/PvtDNS beech me on ho to bhi pakdega,
+    // aur off karte hi screen apne aap wapas chalu) 🚀
+    _runBlockCheck();
+    _watchdog = Timer.periodic(const Duration(seconds: 4), (_) => _runBlockCheck());
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -88,13 +97,25 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
             final desc = error.description.toLowerCase();
             // 🔥 Sirf AdBlocker confirm hone par rokenge, slow internet par nahi 🔥
             if (desc.contains('err_blocked_by_client')) {
+              _clientBlocked = true;
               _triggerBlock();
+            } else if ((error.isForMainFrame ?? false) &&
+                (desc.contains('name_not_resolved') ||
+                    desc.contains('connection_refused') ||
+                    desc.contains('address_invalid') ||
+                    desc.contains('address_unreachable'))) {
+              _runBlockCheck(); // DNS-level block ho sakta hai → verify
             }
           },
         ),
       )
       ..loadRequest(Uri.parse(selectedAd));
 
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_timeLeft > 0) {
         if (mounted) setState(() => _timeLeft--);
@@ -105,33 +126,98 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     });
   }
 
-  // 🔥 DUAL-CHECK SMART DNS LOGIC 🔥
-  Future<void> _checkAdGuardDNS(String adUrl) async {
+  // 🔥 MULTI-DOMAIN + DoH CROSS-CHECK DNS LOGIC 🔥
+  static const List<String> _probeHosts = <String>[
+    'omg10.com',
+    'www.profitableratecpmnetwork.com',
+    'highrevenueformat.com',
+  ];
+
+  bool _isSinkhole(InternetAddress a) =>
+      a.isLoopback || a.address == '0.0.0.0' || a.address == '::';
+
+  /// 0 = resolve ho gaya, 1 = sinkhole (0.0.0.0 / 127.x), 2 = fail
+  Future<int> _probe(String host) async {
     try {
-      final uri = Uri.parse(adUrl);
-      final addresses = await InternetAddress.lookup(uri.host).timeout(const Duration(seconds: 3));
-      bool blocked = false;
-      for (var addr in addresses) {
-        if (addr.address == '0.0.0.0' || addr.address == '127.0.0.1' || addr.address == '::1') {
-          blocked = true;
-          break;
-        }
-      }
-      if (blocked) {
-        _triggerBlock(); 
-      }
-    } catch (e) {
-      // DNS resolve fail hua, Google ping karke dekho internet chal raha hai ya nahi
-      try {
-        final googleCheck = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 3));
-        if (googleCheck.isNotEmpty) {
-          // Internet ekdum theek hai, par ad block ho gaya = AdBlocker!
-          _triggerBlock();
-        }
-      } catch (e2) {
-        // Internet band/slow hai, isko adblock mat maano
-      }
+      final List<InternetAddress> r =
+          await InternetAddress.lookup(host).timeout(const Duration(seconds: 3));
+      if (r.isEmpty) return 2;
+      return r.any(_isSinkhole) ? 1 : 0;
+    } catch (_) {
+      return 2;
     }
+  }
+
+  /// Google DoH se asli answer: true = host asli me exist karta hai, false = nahi, null = DoH unreachable
+  Future<bool?> _dohResolves(String host) async {
+    try {
+      final http.Response r = await http
+          .get(Uri.parse('https://dns.google/resolve?name=$host&type=A'))
+          .timeout(const Duration(seconds: 4));
+      if (r.statusCode != 200) return null;
+      final dynamic d = json.decode(r.body);
+      if (d is! Map) return null;
+      final dynamic ans = d['Answer'];
+      if (ans is! List) return false;
+      for (final dynamic a in ans) {
+        if (a is Map && a['type'] == 1) {
+          final String ip = (a['data'] ?? '').toString();
+          if (ip.isNotEmpty && ip != '0.0.0.0' && !ip.startsWith('127.')) return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> _isDnsBlocked() async {
+    final List<int> res = await Future.wait(_probeHosts.map(_probe));
+    if (res.contains(1)) return true; // clear sinkhole = AdGuard / PvtDNS
+    if (!res.contains(2)) return false; // sab normal resolve
+    // Kuch fail hue → pehle dekho internet chal raha hai ya nahi
+    try {
+      final List<InternetAddress> g =
+          await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 3));
+      if (g.isEmpty) return false;
+    } catch (_) {
+      return false; // internet band/slow → adblock mat maano
+    }
+    // Internet theek hai, ad domain fail: DoH se confirm
+    for (int i = 0; i < _probeHosts.length; i++) {
+      if (res[i] != 2) continue;
+      final bool? real = await _dohResolves(_probeHosts[i]);
+      if (real == true || real == null) return true;
+    }
+    return false;
+  }
+
+  Future<void> _runBlockCheck() async {
+    if (_checking || !mounted) return;
+    _checking = true;
+    try {
+      final bool blocked = await _isDnsBlocked();
+      if (!mounted) return;
+      if (blocked && !_isAdblockDetected) {
+        _triggerBlock();
+      } else if (!blocked && _isAdblockDetected && !_clientBlocked) {
+        _recover(); // user ne AdGuard/PvtDNS off kar diya
+      }
+    } catch (_) {
+    } finally {
+      _checking = false;
+    }
+  }
+
+  void _recover() {
+    if (!mounted) return;
+    setState(() {
+      _isAdblockDetected = false;
+      _timeLeft = widget.adDuration;
+      _canSkip = false;
+    });
+    _controller.loadRequest(Uri.parse(_selectedAd));
+    _startCountdown();
   }
 
   void _triggerBlock() {
@@ -141,6 +227,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         _timer?.cancel(); 
         _canSkip = false; 
       });
+      _controller.loadRequest(Uri.parse('about:blank')); // ad freeze
     }
   }
 
@@ -156,6 +243,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _watchdog?.cancel();
     super.dispose();
   }
 
