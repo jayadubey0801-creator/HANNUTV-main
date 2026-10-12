@@ -16,7 +16,7 @@ import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
 import 'tmdb_service.dart';
-import 'config.dart' show kAllGenres, GenreDef;
+import 'config.dart' show kAllGenres, GenreDef, kTmdbApiKey; // 🔥 API KEY IMPORT KI HAI FOR PROXY AUTH 🔥
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -33,9 +33,12 @@ const String _adsterraBannerSnippet = '''
   <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
 ''';
 
-// 🔥 JIO TMDB API PROXY BYPASS HELPER 🔥
+// 🔥 JIO TMDB API PROXY BYPASS HELPER (WITH AUTH FIX) 🔥
+// Isne tera cast aur episodes ka JSON data block hone se bacha liya
 String proxyTmdbApi(String url) {
-  return "https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(url);
+  final connector = url.contains('?') ? '&' : '?';
+  final authUrl = url + connector + 'api_key=' + kTmdbApiKey;
+  return "https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(authUrl);
 }
 
 class VideoPlayerPage extends StatefulWidget {
@@ -1818,7 +1821,7 @@ class _SearchSheetState extends State<_SearchSheet> {
       setState(() { _results = []; _loading = false; _lastQuery = ''; });
       return;
     }
-    setState(() {});
+    setState({});
     _debounce = Timer(const Duration(milliseconds: 400), () { _search(q); });
   }
 
@@ -1828,7 +1831,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     try {
       final res = await http.get(
         // 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
-        Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1')),
+        Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1')),
         headers: kApiHeaders,
       );
       if (!mounted || q != _lastQuery) return;
@@ -2008,7 +2011,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     try {
       final res = await http.get(
         // 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
-        Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids')),
+        Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids')),
         headers: kApiHeaders,
       );
       if (!mounted) return;
@@ -2315,6 +2318,8 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
+
+// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
   final Widget child;
