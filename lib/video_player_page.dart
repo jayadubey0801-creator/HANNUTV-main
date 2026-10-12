@@ -33,7 +33,7 @@ const String _adsterraBannerSnippet = '''
   <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
 ''';
 
-// 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
+// JIO TMDB API PROXY BYPASS HELPER 
 String proxyTmdbApi(String url) {
   return "https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(url);
 }
@@ -819,7 +819,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         wS[bin] += wgt;
         rS[bin] += r * wgt;
         gSum[bin] += g * wgt;
-        bS[bin] += b * wgt;
+        bSum[bin] += b * wgt;
       }
     }
     int best = -1;
@@ -1386,6 +1386,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                         const SizedBox(height: 16),
                         const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                        const SizedBox(height: 16),
+                        const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                         const SizedBox(height: 20),
                       ],
 
@@ -1825,7 +1827,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     setState(() { _loading = true; _lastQuery = q; });
     try {
       final res = await http.get(
-        Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1')),
+        Uri.parse('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1'),
         headers: kApiHeaders,
       );
       if (!mounted || q != _lastQuery) return;
@@ -2004,7 +2006,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   Future<void> _load() async {
     try {
       final res = await http.get(
-        Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids')),
+        Uri.parse('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids'),
         headers: kApiHeaders,
       );
       if (!mounted) return;
@@ -2311,6 +2313,8 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
+
+// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
   final Widget child;

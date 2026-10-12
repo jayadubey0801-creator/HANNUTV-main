@@ -87,7 +87,7 @@ class Tmdb {
     _kw.clear();
   }
 
-  // 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
+  // JIO TMDB API BLOCK BYPASS: Routing requests via proxy.
   Uri _uri(String path, Map<String, String> q) {
     final String originalUrl = Uri.https(
       'api.themoviedb.org',
