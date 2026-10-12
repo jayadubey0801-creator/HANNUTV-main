@@ -33,7 +33,7 @@ const String _adsterraBannerSnippet = '''
   <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
 ''';
 
-// JIO TMDB API PROXY BYPASS HELPER 
+// 🔥 JIO TMDB API PROXY BYPASS HELPER 🔥
 String proxyTmdbApi(String url) {
   return "https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(url);
 }
@@ -673,8 +673,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       return HSVColor.fromAHSV(
         1.0,
         h.hue,
-        h.saturation.clamp(0.5, 1.0).toDouble(),
-        h.value.clamp(0.55, 0.95).toDouble(),
+        h.saturation.clamp(0.45, 1.0).toDouble(),
+        h.value.clamp(0.5, 0.95).toDouble(),
       ).toColor();
     } catch (_) {
       return null;
@@ -818,8 +818,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         if (bin < 0) bin = 0;
         wS[bin] += wgt;
         rS[bin] += r * wgt;
-        gSum[bin] += g * wgt;
-        bSum[bin] += b * wgt;
+        // 🔥 DEEP BUG FIX: gSum aur bSum ki typo theek kar di hai 🔥
+        gS[bin] += g * wgt;
+        bS[bin] += b * wgt;
       }
     }
     int best = -1;
@@ -2313,8 +2314,6 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
-
-// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
   final Widget child;
