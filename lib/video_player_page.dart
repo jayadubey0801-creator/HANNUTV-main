@@ -162,11 +162,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _startAmbientCycle(); 
   }
 
-  // 🔥 SIRF YAHAN HTTP GET REQUESTS ME JIO PROXY LAGAYI HAI 🔥
   Future<void> _fetchTvDetails() async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await http.get(Uri.parse('https://hannutv-proxy-1.vercel.app/api/proxy?stream=' + Uri.encodeComponent('https://api.themoviedb.org/3/tv/${widget.tmdbId}?language=en-US')), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.tmdb.org/3/tv/${widget.tmdbId}?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { totalSeasons = data['number_of_seasons'] ?? 1; });
@@ -178,7 +177,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchEpisodes(int seasonNum) async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await http.get(Uri.parse('https://hannutv-proxy-1.vercel.app/api/proxy?stream=' + Uri.encodeComponent('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US')), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.tmdb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
@@ -217,7 +216,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     setState(() => isLoadingSimilar = true);
     try {
       final type = widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
-      final res = await http.get(Uri.parse('https://hannutv-proxy-1.vercel.app/api/proxy?stream=' + Uri.encodeComponent('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US')), headers: kApiHeaders);
+      final res = await http.get(Uri.parse('https://api.tmdb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US'), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List results = data['results'] ?? [];
@@ -547,7 +546,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (mounted) setState(() => isLoadingDetails = true);
     try {
       final res = await http.get(
-        Uri.parse('https://hannutv-proxy-1.vercel.app/api/proxy?stream=' + Uri.encodeComponent('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null')),
+        Uri.parse('https://api.tmdb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null'),
         headers: kApiHeaders,
       );
       if (res.statusCode == 200) {
@@ -699,7 +698,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (path.isEmpty) {
       try {
         final res = await http
-            .get(Uri.parse('https://hannutv-proxy-1.vercel.app/api/proxy?stream=' + Uri.encodeComponent('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US')), headers: kApiHeaders)
+            .get(Uri.parse('https://api.tmdb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US'), headers: kApiHeaders)
             .timeout(const Duration(seconds: 6));
         if (res.statusCode == 200) {
           final data = json.decode(res.body);
@@ -1455,7 +1454,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                               String imgUrl = '';
                               if (episodesList.isNotEmpty && index < episodesList.length) {
                                 epName = episodesList[index]['name'] ?? "Episode $epNum";
-                                if (episodesList[index]['still_path'] != null) imgUrl = 'https://image.tmdb.org/t/p/w500${episodesList[index]['still_path']}';
+                                if (episodesList[index]['still_path'] != null) imgUrl = 'https://api.tmdb.org/t/p/w500${episodesList[index]['still_path']}';
                               }
                               return _buildFocusableItem(
                                 onTap: () => _switchEpisode(epNum), borderRadius: BorderRadius.circular(10),
@@ -1823,7 +1822,8 @@ class _SearchSheetState extends State<_SearchSheet> {
     setState(() { _loading = true; _lastQuery = q; });
     try {
       final res = await http.get(
-        Uri.parse('https://hannutv-proxy-1.vercel.app/api/proxy?stream=' + Uri.encodeComponent('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1')),
+        // 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
+        Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1')),
         headers: kApiHeaders,
       );
       if (!mounted || q != _lastQuery) return;
@@ -2002,7 +2002,8 @@ class _ActorSheetState extends State<_ActorSheet> {
   Future<void> _load() async {
     try {
       final res = await http.get(
-        Uri.parse('https://hannutv-proxy-1.vercel.app/api/proxy?stream=' + Uri.encodeComponent('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids')),
+        // 🔥 SIRF YAHAN JIO PROXY BYPASS ADD KIYA HAI 🔥
+        Uri.parse("https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids')),
         headers: kApiHeaders,
       );
       if (!mounted) return;
