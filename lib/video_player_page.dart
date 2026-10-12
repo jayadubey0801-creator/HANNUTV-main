@@ -33,7 +33,7 @@ const String _adsterraBannerSnippet = '''
   <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
 ''';
 
-// 🔥 JIO API BYPASS HELPER (Sirf data fetch karne ke liye) 🔥
+// 🔥 JIO API BYPASS HELPER (Sirf data fetch karne ke liye, Images ke liye nahi) 🔥
 String proxyTmdbApi(String url) {
   return "https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(url);
 }
@@ -816,10 +816,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         int bin = (hsv.hue / 30).floor();
         if (bin > 11) bin = 11;
         if (bin < 0) bin = 0;
-        wSum[bin] += wgt;
-        rSum[bin] += r * wgt;
-        gSum[bin] += g * wgt;
-        bSum[bin] += b * wgt;
+        wS[bin] += wgt;
+        rS[bin] += r * wgt;
+        gS[bin] += g * wgt;
+        bS[bin] += b * wgt;
       }
     }
     int best = -1;
@@ -2311,6 +2311,8 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
+
+// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
   final Widget child;
