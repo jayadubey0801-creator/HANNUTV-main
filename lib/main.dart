@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:app_links/app_links.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,7 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart'; // NAYA IMPORT FOR UPDATE LINK
+import 'package:url_launcher/url_launcher.dart'; // 🔥 Update URL Launch karne ke liye
 
 import 'config.dart';
 import 'dashboard_screen.dart';
@@ -21,6 +22,9 @@ import 'stores.dart';
 import 'pages.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// 🔥 APP KA CURRENT VERSION (Tera naya update 1.3.0) 🔥
+const String currentAppVersion = "1.3.0"; 
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -53,16 +57,16 @@ Future<void> main() async {
     await remoteConfig.setConfigSettings(
       RemoteConfigSettings(
         fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: const Duration(minutes: 1), // Taki update turant dikhe
+        minimumFetchInterval: const Duration(minutes: 1), // Turant update catch karne ke liye
       ),
     );
     
-    // 🔥 DEFAULT SETTINGS: Firebase me variables nahi mile toh default false rahega 🔥
+    // 🔥 DEFAULT SETTINGS JO FIREBASE SE MATCH KARENGI 🔥
     await remoteConfig.setDefaults(const {
       'show_ads': true, 
       'maintenance_mode': false,
-      'force_update': false, // isko Firebase me 'true' karna app band karne ke liye
-      'update_url': 'https://your-website.com' // Firebase me apna real apk link dalna
+      'latest_version': '1.3.0',
+      'update_link': 'https://hannutv.blogspot.com'
     });
     
     await remoteConfig.fetchAndActivate();
@@ -160,19 +164,33 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     Timer(const Duration(milliseconds: 2500), () {
       if (mounted) {
-        // 🔥 FORCE UPDATE FIREBASE CHECK 🔥
+        // 🔥 UPDATE AUR MAINTENANCE CHECK LOGIC 🔥
         final remoteConfig = FirebaseRemoteConfig.instance;
-        bool forceUpdate = remoteConfig.getBool('force_update');
-        String updateUrl = remoteConfig.getString('update_url');
+        bool maintenanceMode = remoteConfig.getBool('maintenance_mode');
+        String latestVer = remoteConfig.getString('latest_version');
+        String updateLink = remoteConfig.getString('update_link');
 
-        if (forceUpdate) {
-          // Agar Firebase me force_update = true hai, toh app yahan lock ho jayegi
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => ForceUpdateScreen(updateUrl: updateUrl)),
-          );
+        bool needsUpdate = false;
+        try {
+          List<int> currentV = currentAppVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+          List<int> latestV = latestVer.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+          int len = max(currentV.length, latestV.length);
+          for (int i = 0; i < len; i++) {
+            int cVal = i < currentV.length ? currentV[i] : 0;
+            int lVal = i < latestV.length ? latestV[i] : 0;
+            if (lVal > cVal) { needsUpdate = true; break; }
+            if (lVal < cVal) break;
+          }
+        } catch (_) {}
+
+        if (maintenanceMode) {
+          // Maintenance mode ON
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MaintenanceScreen()));
+        } else if (needsUpdate) {
+          // Naya Update aa gaya (Firebase wala version bada hai)
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ForceUpdateScreen(updateUrl: updateLink)));
         } else {
-          // Normal dashboard open hoga
+          // Sab perfectly theek hai toh dashboard par jao
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => HannuDashboard(
@@ -211,7 +229,10 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// 🔥 NAYI SCREEN JO APP KO LOCK KAREGI AUR UPDATE KARWAYEGI 🔥
+// ─────────────────────────────────────────────────────────
+// 🔥 FORCE UPDATE & MAINTENANCE SCREENS 🔥
+// ─────────────────────────────────────────────────────────
+
 class ForceUpdateScreen extends StatelessWidget {
   final String updateUrl;
   const ForceUpdateScreen({Key? key, required this.updateUrl}) : super(key: key);
@@ -226,7 +247,7 @@ class ForceUpdateScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // 🚫 Back button kaam nahi karega
+      canPop: false, // Back button daba ke bahar nahi aa payega
       child: Scaffold(
         backgroundColor: const Color(0xFF0F0F0F),
         body: Center(
@@ -237,31 +258,16 @@ class ForceUpdateScreen extends StatelessWidget {
               children: [
                 const Icon(Icons.system_update_rounded, color: Colors.redAccent, size: 100),
                 const SizedBox(height: 30),
-                const Text(
-                  "New Update Available!",
-                  style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
+                const Text("New Update Available!", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                 const SizedBox(height: 15),
-                const Text(
-                  "A mandatory update is available. Please update to the latest version of HANNUTV to continue watching seamlessly.",
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
+                const Text("Your current version is out of date. Please update to the latest version of HANNUTV to continue watching seamlessly.", style: TextStyle(color: Colors.grey, fontSize: 14), textAlign: TextAlign.center),
                 const SizedBox(height: 40),
                 SizedBox(
-                  width: double.infinity,
-                  height: 55,
+                  width: double.infinity, height: 55,
                   child: ElevatedButton(
                     onPressed: _launchUpdateUrl,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    ),
-                    child: const Text(
-                      "Update Now",
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                    child: const Text("Update Now", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -273,7 +279,38 @@ class ForceUpdateScreen extends StatelessWidget {
   }
 }
 
-// 櫨 DEEP LIVE TV PARSING WITH COUNTRY AND EXACT CATEGORIES 櫨
+class MaintenanceScreen extends StatelessWidget {
+  const MaintenanceScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F0F0F),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(30.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.engineering_rounded, color: Colors.amber, size: 100),
+                SizedBox(height: 30),
+                Text("Under Maintenance", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                SizedBox(height: 15),
+                Text("Our servers are currently undergoing maintenance to improve your experience. Please check back later.", style: TextStyle(color: Colors.grey, fontSize: 14), textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// 🔥 DEEP LIVE TV PARSING CODE (UNCHANGED) 🔥
+// ─────────────────────────────────────────────────────────
 class LiveTvScreen extends StatefulWidget {
   const LiveTvScreen({super.key});
   @override
@@ -323,7 +360,6 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
         for (String line in lines) {
           line = line.trim();
           if (line.startsWith('#EXTINF:')) {
-            // 櫨 FIXED REGEX TO AVOID DART SYNTAX ERRORS 櫨
             final logoMatch = RegExp(r'tvg-logo="([^"]*)"', caseSensitive: false).firstMatch(line);
             currentLogo = logoMatch != null ? (logoMatch.group(1) ?? '') : '';
 
@@ -365,7 +401,6 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 'country': currentCountry,
               });
             }
-            // Reset for next
             currentName = '';
             currentLogo = '';
             currentGroup = 'Uncategorized';
