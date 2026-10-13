@@ -8,6 +8,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart'; // NAYA IMPORT FOR UPDATE LINK
 
 import 'config.dart';
 import 'dashboard_screen.dart';
@@ -25,11 +26,11 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
-    debugPrint('Background Notification Hit: ${message.messageId}');
+    debugPrint('Background Notification Hit: \${message.messageId}');
     final AppNotification? n = AppNotification.fromMessage(message);
     if (n != null) await NotificationStore.appendRaw(n);
   } catch (e) {
-    debugPrint('Background Error: $e');
+    debugPrint('Background Error: \$e');
   }
 }
 
@@ -52,13 +53,21 @@ Future<void> main() async {
     await remoteConfig.setConfigSettings(
       RemoteConfigSettings(
         fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: const Duration(hours: 1),
+        minimumFetchInterval: const Duration(minutes: 1), // Taki update turant dikhe
       ),
     );
-    await remoteConfig.setDefaults(const {'show_ads': true, 'maintenance_mode': false});
+    
+    // 🔥 DEFAULT SETTINGS: Firebase me variables nahi mile toh default false rahega 🔥
+    await remoteConfig.setDefaults(const {
+      'show_ads': true, 
+      'maintenance_mode': false,
+      'force_update': false, // isko Firebase me 'true' karna app band karne ke liye
+      'update_url': 'https://your-website.com' // Firebase me apna real apk link dalna
+    });
+    
     await remoteConfig.fetchAndActivate();
   } catch (error) {
-    debugPrint('Firebase Startup error (Bypassed for Safe Boot): $error');
+    debugPrint('Firebase Startup error (Bypassed for Safe Boot): \$error');
   }
 
   runApp(const HannuTvApp());
@@ -87,13 +96,13 @@ class _HannuTvAppState extends State<HannuTvApp> {
       final Uri? initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) _handleDeepLink(initialUri);
     } catch (error) {
-      debugPrint('Initial deep-link error: $error');
+      debugPrint('Initial deep-link error: \$error');
     }
 
     _linkSubscription = _appLinks.uriLinkStream.listen((Uri? uri) {
       if (uri != null) _handleDeepLink(uri);
     }, onError: (Object error) {
-      debugPrint('Deep-link stream error: $error');
+      debugPrint('Deep-link stream error: \$error');
     });
   }
 
@@ -151,19 +160,33 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     Timer(const Duration(milliseconds: 2500), () {
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => HannuDashboard(
-            hooks: DashboardHooks(
-              onOpenLiveTv: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
-              },
-              onOpenSearch: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
-              }
-            ),
-          )),
-        );
+        // 🔥 FORCE UPDATE FIREBASE CHECK 🔥
+        final remoteConfig = FirebaseRemoteConfig.instance;
+        bool forceUpdate = remoteConfig.getBool('force_update');
+        String updateUrl = remoteConfig.getString('update_url');
+
+        if (forceUpdate) {
+          // Agar Firebase me force_update = true hai, toh app yahan lock ho jayegi
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => ForceUpdateScreen(updateUrl: updateUrl)),
+          );
+        } else {
+          // Normal dashboard open hoga
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => HannuDashboard(
+              hooks: DashboardHooks(
+                onOpenLiveTv: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
+                },
+                onOpenSearch: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
+                }
+              ),
+            )),
+          );
+        }
       }
     });
   }
@@ -188,7 +211,69 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// 🔥 DEEP LIVE TV PARSING WITH COUNTRY AND EXACT CATEGORIES 🔥
+// 🔥 NAYI SCREEN JO APP KO LOCK KAREGI AUR UPDATE KARWAYEGI 🔥
+class ForceUpdateScreen extends StatelessWidget {
+  final String updateUrl;
+  const ForceUpdateScreen({Key? key, required this.updateUrl}) : super(key: key);
+
+  Future<void> _launchUpdateUrl() async {
+    final Uri url = Uri.parse(updateUrl);
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      debugPrint('Could not launch \$updateUrl');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false, // 🚫 Back button kaam nahi karega
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F0F0F),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(30.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.system_update_rounded, color: Colors.redAccent, size: 100),
+                const SizedBox(height: 30),
+                const Text(
+                  "New Update Available!",
+                  style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  "A mandatory update is available. Please update to the latest version of HANNUTV to continue watching seamlessly.",
+                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: _launchUpdateUrl,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                    child: const Text(
+                      "Update Now",
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 櫨 DEEP LIVE TV PARSING WITH COUNTRY AND EXACT CATEGORIES 櫨
 class LiveTvScreen extends StatefulWidget {
   const LiveTvScreen({super.key});
   @override
@@ -238,7 +323,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
         for (String line in lines) {
           line = line.trim();
           if (line.startsWith('#EXTINF:')) {
-            // 🔥 FIXED REGEX TO AVOID DART SYNTAX ERRORS 🔥
+            // 櫨 FIXED REGEX TO AVOID DART SYNTAX ERRORS 櫨
             final logoMatch = RegExp(r'tvg-logo="([^"]*)"', caseSensitive: false).firstMatch(line);
             currentLogo = logoMatch != null ? (logoMatch.group(1) ?? '') : '';
 
@@ -307,7 +392,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
         }
       }
     } catch (error) {
-      debugPrint("Live TV Error: $error");
+      debugPrint("Live TV Error: \$error");
     }
     setState(() => isLoading = false);
   }
@@ -432,7 +517,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                   children: [
                     const Icon(Icons.public, color: Colors.redAccent),
                     const SizedBox(width: 10),
-                    Text("Choose Your Country : $selectedCountry", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text("Choose Your Country : \$selectedCountry", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                     const Icon(Icons.arrow_drop_down, color: Colors.white54),
                   ],
                 ),
