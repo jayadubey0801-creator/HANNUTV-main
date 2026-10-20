@@ -1,42 +1,41 @@
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
+import org.gradle.api.JavaVersion
+import org.gradle.api.file.Directory
+import org.gradle.api.tasks.compile.JavaCompile
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
 
-android {
-    namespace = "com.example.onyxtube"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
 
-    defaultConfig {
-        applicationId = "com.example.onyxtube"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
-        multiDexEnabled = true
-    }
+rootProject.layout.buildDirectory.value(newBuildDir)
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
+subprojects {
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
 
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+gradle.projectsEvaluated {
+    subprojects {
+        if (project.name == "unity_ads_plugin") {
+            tasks.withType<JavaCompile>().configureEach {
+                sourceCompatibility = JavaVersion.VERSION_17.toString()
+                targetCompatibility = JavaVersion.VERSION_17.toString()
+            }
         }
     }
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-    }
-}
-
-flutter {
-    source = "../.."
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
 }

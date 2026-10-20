@@ -1,28 +1,15 @@
-import org.gradle.api.file.Directory
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
-val newBuildDir: Directory =
-    rootProject.layout.buildDirectory
-        .dir("../../build")
-        .get()
-
-rootProject.layout.buildDirectory.value(newBuildDir)
-
-subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
-}
-
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-tasks.register<Delete>("clean") {
-    delete(rootProject.layout.buildDirectory)
-}
+org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G -Dfile.encoding=UTF-8
+org.gradle.java.installations.auto-download=false
+android.useAndroidX=true
+android.enableJetifier=false
+android.newDsl=false
+# This builtInKotlin flag was added automatically by Flutter migrator
+android.builtInKotlin=false
+kotlin.jvm.target.validation.mode=ignoreorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G -Dfile.encoding=UTF-8
+org.gradle.java.installations.auto-download=false
+android.useAndroidX=true
+android.enableJetifier=false
+android.newDsl=false
+# This builtInKotlin flag was added automatically by Flutter migrator
+android.builtInKotlin=false
+kotlin.jvm.target.validation.mode=ignore
