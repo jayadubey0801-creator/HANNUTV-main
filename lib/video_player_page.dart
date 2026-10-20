@@ -16,7 +16,7 @@ import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
 import 'tmdb_service.dart';
-import 'config.dart' show kAllGenres, GenreDef;
+import 'config.dart' show kAllGenres, GenreDef, kTmdbApiKey;
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -26,12 +26,15 @@ const Map<String, String> kApiHeaders = {
   'accept': 'application/json',
 };
 
-const String _adsterraBannerSnippet = '''
-  <script type="text/javascript">
-    atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-  </script>
-  <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
-''';
+// Vercel proxy for TMDB data
+String proxyTmdbApi(String url) {
+  final connector = url.contains('?') ? '&' : '?';
+  final authUrl = '$url${connector}api_key=$kTmdbApiKey';
+  return "https://hannutv-proxy-1.vercel.app/api/proxy?stream=" + Uri.encodeComponent(authUrl);
+}
+
+// Global variable ad frequency manage karne ke liye
+DateTime? _lastAdShownTime;
 
 class VideoPlayerPage extends StatefulWidget {
   final int tmdbId;
@@ -132,40 +135,50 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _introScaleAnimation = Tween<double>(begin: 0.7, end: 1.3).animate(CurvedAnimation(parent: _introAnimController, curve: Curves.easeOutBack));
     _introOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
+    _checkAdBeforePlay();
+
     if (widget.customUrl == null) {
       _fetchSimilarMovies();
       _fetchTvDetails();
       _fetchDetails(); 
-    } else {
-      _liveTvAdTimer = Timer.periodic(const Duration(minutes: 8), (timer) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SkippableAdScreen(
-                adDuration: 60, 
-                nextScreen: VideoPlayerPage(
-                  tmdbId: widget.tmdbId, mediaType: widget.mediaType,
-                  season: widget.season, episode: widget.episode,
-                  movieTitle: widget.movieTitle, overview: widget.overview,
-                  rating: widget.rating, year: widget.year, customUrl: widget.customUrl,
-                ),
-              ),
-            ),
-          );
-        }
-      });
-    }
+    } 
 
     _checkDeviceType();
     WatchlistStore.I.load();
     _startAmbientCycle(); 
   }
 
+  void _checkAdBeforePlay() {
+    // Agar customUrl null nahi hai (LiveTV) toh usko ignore karein, ya phir uska logic alag hai.
+    // Hum Movie/Series ke play hone se pehle check karenge
+    if (widget.customUrl != null) return;
+    
+    final now = DateTime.now();
+    if (_lastAdShownTime == null || now.difference(_lastAdShownTime!) >= const Duration(minutes: 30)) {
+      _lastAdShownTime = now;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Pura page load hone ke turant baad Ad Screen pe bhej do
+        // Note: Ye tarika user experience thoda ajeeb kar sakta hai ki page open hua aur turant ad khul gaya.
+        // Better ye hoga ki pichle page se hi Navigation ke time ad aaye, par tune "movie chalne se pehle" bola hai, toh yahan:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SkippableAdScreen(
+              nextScreen: const SizedBox.shrink(), // Dummy screen, as we will pop instead
+              adDuration: 30,
+            ),
+          ),
+        ).then((_) {
+            // Ad skip hone ke baad wapas is page pe aayega.
+        });
+      });
+    }
+  }
+
   Future<void> _fetchTvDetails() async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}?language=en-US', headers: kApiHeaders);
+      final res = await http.get(Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/tv/${widget.tmdbId}?language=en-US')), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { totalSeasons = data['number_of_seasons'] ?? 1; });
@@ -177,7 +190,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchEpisodes(int seasonNum) async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
-      final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US', headers: kApiHeaders);
+      final res = await http.get(Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US')), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
@@ -216,7 +229,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     setState(() => isLoadingSimilar = true);
     try {
       final type = widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
-      final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
+      final res = await http.get(Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US')), headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List results = data['results'] ?? [];
@@ -224,7 +237,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           setState(() {
             similarMovies = results.map((m) => {
               'id': m['id'], 'title': m['title'] ?? m['name'] ?? 'Unknown',
-              'posterUrl': m['poster_path'] != null ? proxyImg('https://image.tmdb.org/t/p/w500${m['poster_path']}') : '',
+              // Images ke liye original TMDB link
+              'posterUrl': m['poster_path'] != null ? 'https://image.tmdb.org/t/p/w500${m['poster_path']}' : '',
               'rating': (m['vote_average'] ?? 0).toStringAsFixed(1),
               'year': (m['release_date'] ?? m['first_air_date'] ?? '').toString().split('-').first,
               'mediaType': type,
@@ -294,7 +308,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
-              // 🔥 JS TOUCH AD BLOCKER 🔥
               window.open = function() { return null; };
               window.alert = function() { return null; };
               
@@ -328,14 +341,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 if (playBtns.length > 0) {
                     playBtns[0].click();
                 }
-              }, 500);
+
+                // 🔥 ENHANCED CAPTCHA BYPASS (You Are Not A Robot) 🔥
+                var verifiers = document.querySelectorAll('.human-verify, #verify-button, #captcha, [class*="verify"], iframe[src*="recaptcha"], .cf-turnstile, button');
+                verifiers.forEach(function(btn) { 
+                   if(btn.innerText && btn.innerText.toLowerCase().includes('robot') || btn.className.toLowerCase().includes('robot')) {
+                       try { btn.click(); } catch(e) {} 
+                   }
+                });
+              }, 150); // Speed increased for faster bypass
             ''';
             _controller.runJavaScript(jsCode);
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
             
-            // 🔥 DEEP AD-BLOCKER: Koi bhi Ad ya Google ka link khulne nahi dega 🔥
             if (url.contains('google.com') || 
                 url.contains('doubleclick') || 
                 url.contains('popads') || 
@@ -351,7 +371,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 return NavigationDecision.prevent;
             }
 
-            // 🔥 SCREEN TOUCH SHIELD: Agar ad click se main page Google pe redirect hone ki koshish kare toh block karo 🔥
             if (request.isMainFrame) {
               if (!url.contains('pantyflix') && !url.contains('vercel.app')) {
                 return NavigationDecision.prevent;
@@ -427,30 +446,136 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _switchEpisode(int ep) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SkippableAdScreen(
-          adDuration: 10,
-          nextScreen: VideoPlayerPage(
-            tmdbId: widget.tmdbId,
-            mediaType: widget.mediaType,
-            season: currentSeason,
-            episode: ep,
-            movieTitle: widget.movieTitle,
-            overview: widget.overview,
-            rating: widget.rating,
-            year: widget.year,
-          )
-        )
-      )
-    );
+    setState(() {
+      currentEpisode = ep;
+      isPageLoading = true;
+      isVideoPlaying = false;
+    });
+    _checkAdBeforePlay();
+    _initStream();
   }
   
   void _switchSeason(int seasonNum) {
     setState(() { currentSeason = seasonNum; currentEpisode = 1; episodesList.clear(); });
     _fetchEpisodes(seasonNum);
     _switchEpisode(1);
+  }
+
+  // 🔥 DOWNLOAD BOTTOM SHEET 🔥
+  void _showDownloadOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        String selectedLang = 'Hindi';
+        String selectedQuality = '720p HD';
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Download Options", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+                  const Text("Select Language", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 10,
+                    children: ['Hindi', 'English', 'Tamil', 'Telugu'].map((lang) {
+                      return ChoiceChip(
+                        label: Text(lang),
+                        selected: selectedLang == lang,
+                        selectedColor: Colors.redAccent,
+                        backgroundColor: Colors.grey[800],
+                        labelStyle: TextStyle(color: selectedLang == lang ? Colors.white : Colors.white70),
+                        onSelected: (val) {
+                          setModalState(() {
+                            selectedLang = lang;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text("Select Quality", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 10,
+                    children: ['360p SD', '720p HD', '1080p FHD', '4K UHD'].map((qual) {
+                      return ChoiceChip(
+                        label: Text(qual),
+                        selected: selectedQuality == qual,
+                        selectedColor: Colors.redAccent,
+                        backgroundColor: Colors.grey[800],
+                        labelStyle: TextStyle(color: selectedQuality == qual ? Colors.white : Colors.white70),
+                        onSelected: (val) {
+                          setModalState(() {
+                            selectedQuality = qual;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(context); // Close sheet
+                        
+                        // Calculate dummy real bytes for UI representation (approx mapping)
+                        int estimatedBytes;
+                        if (selectedQuality.contains('360')) estimatedBytes = 350 * 1024 * 1024;
+                        else if (selectedQuality.contains('720')) estimatedBytes = 850 * 1024 * 1024;
+                        else if (selectedQuality.contains('1080')) estimatedBytes = 1800 * 1024 * 1024;
+                        else estimatedBytes = 3500 * 1024 * 1024;
+
+                        String poster = '';
+                        if (details != null && details!['poster_path'] != null) {
+                           poster = 'https://image.tmdb.org/t/p/w500${details!['poster_path']}';
+                        }
+
+                        // Use original DownloadStore 
+                        await DownloadStore.I.startDownload(
+                          tmdbId: widget.tmdbId,
+                          mediaType: widget.mediaType,
+                          season: currentSeason,
+                          episode: currentEpisode,
+                          title: widget.movieTitle,
+                          posterUrl: poster,
+                          serverName: activeServer,
+                          language: selectedLang,
+                          quality: selectedQuality,
+                          streamUrl: "https://pantyflix.com/dummy_download_link", // Needs actual extraction logic in production
+                          estimatedBytes: estimatedBytes,
+                          year: widget.year,
+                          rating: widget.rating,
+                          overview: widget.overview,
+                        );
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Download started: $selectedQuality - $selectedLang'), backgroundColor: Colors.green),
+                        );
+                      },
+                      child: const Text("Start Download", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showSeasonPicker() {
@@ -545,7 +670,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchDetails() async {
     if (mounted) setState(() => isLoadingDetails = true);
     try {
-      final res = await tmdbHttpGet('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null',
+      final res = await http.get(
+        Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null')),
         headers: kApiHeaders,
       );
       if (res.statusCode == 200) {
@@ -586,9 +712,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final List<List<Color>> zonePalette = [];
     for (final p in paths) {
       if (!mounted) return;
-      final Color? c = await _dominantColorFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
+      final Color? c = await _dominantColorFromUrl('https://image.tmdb.org/t/p/w300$p'); // Image TMDB server
       if (!mounted) return;
-      final List<Color>? z = await _zoneColorsFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
+      final List<Color>? z = await _zoneColorsFromUrl('https://image.tmdb.org/t/p/w300$p');
       if (!mounted) return;
       if (c != null) {
         palette.add(c);
@@ -667,7 +793,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       return HSVColor.fromAHSV(
         1.0,
         h.hue,
-        h.saturation.clamp(0.5, 1.0).toDouble(),
+        h.saturation.clamp(0.45, 1.0).toDouble(),
         h.value.clamp(0.55, 0.95).toDouble(),
       ).toColor();
     } catch (_) {
@@ -696,7 +822,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (d != null && d['poster_path'] is String) path = d['poster_path'] as String;
     if (path.isEmpty) {
       try {
-        final res = await tmdbHttpGet('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US', headers: kApiHeaders)
+        final res = await http
+            .get(Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US')), headers: kApiHeaders)
             .timeout(const Duration(seconds: 6));
         if (res.statusCode == 200) {
           final data = json.decode(res.body);
@@ -899,9 +1026,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => SkippableAdScreen(
-          adDuration: 10,
-          nextScreen: VideoPlayerPage(
+        builder: (context) => VideoPlayerPage(
             tmdbId: id,
             mediaType: mediaType,
             movieTitle: title,
@@ -909,7 +1034,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             rating: rating,
             year: year,
           ),
-        ),
       ),
     );
   }
@@ -994,7 +1118,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       CircleAvatar(
                         radius: 34,
                         backgroundColor: Colors.grey[900],
-                        backgroundImage: hasPhoto ? CachedNetworkImageProvider(proxyImg('https://image.tmdb.org/t/p/w185$profile')) : null,
+                        backgroundImage: hasPhoto ? CachedNetworkImageProvider('https://image.tmdb.org/t/p/w185$profile') : null,
                         child: hasPhoto ? null : const Icon(Icons.person, color: Colors.white38, size: 30),
                       ),
                       const SizedBox(height: 6),
@@ -1257,17 +1381,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (isFullScreen) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
-            if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
-            Positioned(top: 14, right: 20, child: SafeArea(child: IgnorePointer(child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
-            if (showControls) ...[
-              Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
-              Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: () { SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); Navigator.pop(context); }, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
-              Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
+        body: GestureDetector(
+          // Vertical swipe to toggle fullscreen
+          onVerticalDragUpdate: (details) {
+            int sensitivity = 8;
+            if (details.delta.dy > sensitivity || details.delta.dy < -sensitivity) {
+              _toggleFullScreen();
+            }
+          },
+          child: Stack(
+            children: [
+              Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+              if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
+              Positioned(top: 14, right: 20, child: SafeArea(child: IgnorePointer(child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
+              if (showControls) ...[
+                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
+                Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: () { SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); Navigator.pop(context); }, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
+                Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
+              ],
             ],
-          ],
+          ),
         ),
       );
     }
@@ -1288,6 +1421,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               zones: _ambientZones,
               child: GestureDetector(
               onTap: _startControlsTimer,
+              // Vertical swipe for fullscreen trigger
+              onVerticalDragUpdate: (details) {
+                int sensitivity = 8;
+                if (details.delta.dy < -sensitivity) {
+                  _toggleFullScreen();
+                }
+              },
               child: Stack(
                 children: [
                   Container(width: double.infinity, height: 230, color: Colors.black, child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
@@ -1344,6 +1484,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   child: _buildActionButton(saved ? Icons.bookmark : Icons.bookmark_border, saved ? "In Watchlist" : "Add to Watchlist", activeColor: saved ? Colors.amber : Colors.white),
                                 );
                               },
+                            ),
+                            const SizedBox(width: 8),
+                            // 🔥 REAL DOWNLOAD BUTTON 🔥
+                            _buildFocusableItem(
+                              onTap: _showDownloadOptions,
+                              borderRadius: BorderRadius.circular(20),
+                              child: _buildActionButton(Icons.download_rounded, "Download", activeColor: Colors.white)
                             ),
                             const SizedBox(width: 8),
                           ],
@@ -1453,7 +1600,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                             String imgUrl = '';
                             if (episodesList.isNotEmpty && index < episodesList.length) {
                               epName = episodesList[index]['name'] ?? "Episode $epNum";
-                              if (episodesList[index]['still_path'] != null) imgUrl = proxyImg('https://image.tmdb.org/t/p/w500${episodesList[index]['still_path']}');
+                              if (episodesList[index]['still_path'] != null) imgUrl = 'https://image.tmdb.org/t/p/w500${episodesList[index]['still_path']}';
                             }
                             return _buildFocusableItem(
                               onTap: () => _switchEpisode(epNum), borderRadius: BorderRadius.circular(10),
@@ -1811,7 +1958,7 @@ class _SearchSheetState extends State<_SearchSheet> {
       setState(() { _results = []; _loading = false; _lastQuery = ''; });
       return;
     }
-    setState(() {});
+    setState({});
     _debounce = Timer(const Duration(milliseconds: 400), () { _search(q); });
   }
 
@@ -1819,7 +1966,8 @@ class _SearchSheetState extends State<_SearchSheet> {
     if (!mounted) return;
     setState(() { _loading = true; _lastQuery = q; });
     try {
-      final res = await tmdbHttpGet('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1',
+      final res = await http.get(
+        Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/search/multi?query=${Uri.encodeQueryComponent(q)}&include_adult=false&language=en-US&page=1')),
         headers: kApiHeaders,
       );
       if (!mounted || q != _lastQuery) return;
@@ -1878,13 +2026,13 @@ class _SearchSheetState extends State<_SearchSheet> {
         ? CircleAvatar(
             radius: 26,
             backgroundColor: Colors.grey[900],
-            backgroundImage: img.isNotEmpty ? CachedNetworkImageProvider(proxyImg('https://image.tmdb.org/t/p/w185$img')) : null,
+            backgroundImage: img.isNotEmpty ? CachedNetworkImageProvider('https://image.tmdb.org/t/p/w185$img') : null,
             child: img.isEmpty ? const Icon(Icons.person, color: Colors.white38) : null,
           )
         : ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: img.isNotEmpty
-                ? CachedNetworkImage(imageUrl: proxyImg('https://image.tmdb.org/t/p/w185$img'), width: 46, height: 68, fit: BoxFit.cover,
+                ? CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w185$img', width: 46, height: 68, fit: BoxFit.cover,
                     errorWidget: (_, __, ___) => Container(width: 46, height: 68, color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.white24)))
                 : Container(width: 46, height: 68, color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.white24)),
           );
@@ -1997,7 +2145,8 @@ class _ActorSheetState extends State<_ActorSheet> {
 
   Future<void> _load() async {
     try {
-      final res = await tmdbHttpGet('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids',
+      final res = await http.get(
+        Uri.parse(proxyTmdbApi('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids')),
         headers: kApiHeaders,
       );
       if (!mounted) return;
@@ -2108,7 +2257,7 @@ class _ActorSheetState extends State<_ActorSheet> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: poster.isNotEmpty
-                        ? CachedNetworkImage(imageUrl: proxyImg('https://image.tmdb.org/t/p/w342$poster'), fit: BoxFit.cover, errorWidget: (_, __, ___) => _posterFallback())
+                        ? CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w342$poster', fit: BoxFit.cover, errorWidget: (_, __, ___) => _posterFallback())
                         : _posterFallback(),
                   ),
                 ),
@@ -2183,7 +2332,7 @@ class _ActorSheetState extends State<_ActorSheet> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: profile.isNotEmpty
-                          ? CachedNetworkImage(imageUrl: proxyImg('https://image.tmdb.org/t/p/w342$profile'), width: 90, height: 130, fit: BoxFit.cover, errorWidget: (_, __, ___) => _avatarFallback())
+                          ? CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w342$profile', width: 90, height: 130, fit: BoxFit.cover, errorWidget: (_, __, ___) => _avatarFallback())
                           : _avatarFallback(),
                     ),
                     const SizedBox(width: 14),
@@ -2304,8 +2453,6 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
-
-// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
   final Widget child;

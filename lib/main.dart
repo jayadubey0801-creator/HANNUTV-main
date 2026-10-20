@@ -9,7 +9,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart'; // 🔥 Update URL Launch karne ke liye
+import 'package:url_launcher/url_launcher.dart';
+import 'package:unity_ads_plugin/unity_ads_plugin.dart';
 
 import 'config.dart';
 import 'dashboard_screen.dart';
@@ -23,57 +24,64 @@ import 'pages.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// 🔥 APP KA CURRENT VERSION (Tera naya update 1.3.0) 🔥
-const String currentAppVersion = "1.3.0"; 
+const String currentAppVersion = "1.3.0";
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
-    debugPrint('Background Notification Hit: \${message.messageId}');
+    debugPrint('Background Notification Hit: ${message.messageId}');
     final AppNotification? n = AppNotification.fromMessage(message);
     if (n != null) await NotificationStore.appendRaw(n);
   } catch (e) {
-    debugPrint('Background Error: \$e');
+    debugPrint('Background Error: $e');
   }
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     await Firebase.initializeApp();
-    
+
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-    
+
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     final FirebaseRemoteConfig remoteConfig = FirebaseRemoteConfig.instance;
     await remoteConfig.setConfigSettings(
       RemoteConfigSettings(
         fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: const Duration(minutes: 1), // Turant update catch karne ke liye
+        minimumFetchInterval: const Duration(minutes: 1),
       ),
     );
-    
-    // 🔥 DEFAULT SETTINGS JO FIREBASE SE MATCH KARENGI 🔥
+
     await remoteConfig.setDefaults(const {
-      'show_ads': true, 
+      'show_ads': true,
       'maintenance_mode': false,
       'latest_version': '1.3.0',
       'update_link': 'https://hannutv.blogspot.com'
     });
-    
+
     await remoteConfig.fetchAndActivate();
+
+    // 🔥 UNITY ADS INITIALIZATION (Game ID: 800405137) 🔥
+    await UnityAds.init(
+      gameId: '800405137',
+      testMode: false,
+      onComplete: () => debugPrint('Unity Ads Initialization Complete'),
+      onFailed: (error, message) => debugPrint('Unity Ads Initialization Failed: $error $message'),
+    );
   } catch (error) {
-    debugPrint('Firebase Startup error (Bypassed for Safe Boot): \$error');
+    debugPrint('Firebase Startup error (Bypassed for Safe Boot): $error');
   }
 
+  await DownloadStore.I.load();
   runApp(const HannuTvApp());
 }
 
@@ -100,13 +108,13 @@ class _HannuTvAppState extends State<HannuTvApp> {
       final Uri? initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) _handleDeepLink(initialUri);
     } catch (error) {
-      debugPrint('Initial deep-link error: \$error');
+      debugPrint('Initial deep-link error: $error');
     }
 
     _linkSubscription = _appLinks.uriLinkStream.listen((Uri? uri) {
       if (uri != null) _handleDeepLink(uri);
     }, onError: (Object error) {
-      debugPrint('Deep-link stream error: \$error');
+      debugPrint('Deep-link stream error: $error');
     });
   }
 
@@ -122,10 +130,7 @@ class _HannuTvAppState extends State<HannuTvApp> {
 
     navigatorKey.currentState?.push(
       MaterialPageRoute<void>(
-        builder: (_) => SkippableAdScreen(
-          adDuration: 10,
-          nextScreen: VideoPlayerPage(tmdbId: id, mediaType: type, movieTitle: 'Loading...'),
-        ),
+        builder: (_) => VideoPlayerPage(tmdbId: id, mediaType: type, movieTitle: 'Loading...'),
       ),
     );
   }
@@ -147,6 +152,14 @@ class _HannuTvAppState extends State<HannuTvApp> {
         scaffoldBackgroundColor: const Color(0xFF0F0F0F),
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.red, brightness: Brightness.dark),
       ),
+      builder: (context, child) {
+        return Stack(
+          children: [
+            if (child != null) child,
+            const LiveDownloadNotificationBanner(),
+          ],
+        );
+      },
       home: const SplashScreen(),
     );
   }
@@ -164,7 +177,6 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     Timer(const Duration(milliseconds: 2500), () {
       if (mounted) {
-        // 🔥 UPDATE AUR MAINTENANCE CHECK LOGIC 🔥
         final remoteConfig = FirebaseRemoteConfig.instance;
         bool maintenanceMode = remoteConfig.getBool('maintenance_mode');
         String latestVer = remoteConfig.getString('latest_version');
@@ -178,31 +190,33 @@ class _SplashScreenState extends State<SplashScreen> {
           for (int i = 0; i < len; i++) {
             int cVal = i < currentV.length ? currentV[i] : 0;
             int lVal = i < latestV.length ? latestV[i] : 0;
-            if (lVal > cVal) { needsUpdate = true; break; }
+            if (lVal > cVal) {
+              needsUpdate = true;
+              break;
+            }
             if (lVal < cVal) break;
           }
         } catch (_) {}
 
         if (maintenanceMode) {
-          // Maintenance mode ON
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MaintenanceScreen()));
         } else if (needsUpdate) {
-          // Naya Update aa gaya (Firebase wala version bada hai)
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ForceUpdateScreen(updateUrl: updateLink)));
         } else {
-          // Sab perfectly theek hai toh dashboard par jao
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => HannuDashboard(
-              hooks: DashboardHooks(
-                onOpenLiveTv: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
-                },
-                onOpenSearch: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
-                }
+            MaterialPageRoute(
+              builder: (context) => HannuDashboard(
+                hooks: DashboardHooks(
+                  onOpenLiveTv: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
+                  },
+                  onOpenSearch: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
+                  },
+                ),
               ),
-            )),
+            ),
           );
         }
       }
@@ -217,7 +231,14 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset('assets/logo.png', height: 130, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 2))),
+            Image.asset(
+              'assets/logo.png',
+              height: 130,
+              errorBuilder: (_, __, ___) => const Text(
+                'HANNUTV',
+                style: TextStyle(color: Colors.red, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 2),
+              ),
+            ),
             const SizedBox(height: 50),
             const CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 3),
             const SizedBox(height: 25),
@@ -229,10 +250,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────
-// 🔥 FORCE UPDATE & MAINTENANCE SCREENS 🔥
-// ─────────────────────────────────────────────────────────
-
 class ForceUpdateScreen extends StatelessWidget {
   final String updateUrl;
   const ForceUpdateScreen({Key? key, required this.updateUrl}) : super(key: key);
@@ -240,14 +257,14 @@ class ForceUpdateScreen extends StatelessWidget {
   Future<void> _launchUpdateUrl() async {
     final Uri url = Uri.parse(updateUrl);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      debugPrint('Could not launch \$updateUrl');
+      debugPrint('Could not launch $updateUrl');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Back button daba ke bahar nahi aa payega
+      canPop: false,
       child: Scaffold(
         backgroundColor: const Color(0xFF0F0F0F),
         body: Center(
@@ -258,16 +275,31 @@ class ForceUpdateScreen extends StatelessWidget {
               children: [
                 const Icon(Icons.system_update_rounded, color: Colors.redAccent, size: 100),
                 const SizedBox(height: 30),
-                const Text("New Update Available!", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                const Text(
+                  "New Update Available!",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 15),
-                const Text("Your current version is out of date. Please update to the latest version of HANNUTV to continue watching seamlessly.", style: TextStyle(color: Colors.grey, fontSize: 14), textAlign: TextAlign.center),
+                const Text(
+                  "Your current version is out of date. Please update to the latest version of HANNUTV to continue watching seamlessly.",
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 40),
                 SizedBox(
-                  width: double.infinity, height: 55,
+                  width: double.infinity,
+                  height: 55,
                   child: ElevatedButton(
                     onPressed: _launchUpdateUrl,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                    child: const Text("Update Now", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                    child: const Text(
+                      "Update Now",
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
@@ -296,9 +328,17 @@ class MaintenanceScreen extends StatelessWidget {
               children: const [
                 Icon(Icons.engineering_rounded, color: Colors.amber, size: 100),
                 SizedBox(height: 30),
-                Text("Under Maintenance", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                Text(
+                  "Under Maintenance",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
                 SizedBox(height: 15),
-                Text("Our servers are currently undergoing maintenance to improve your experience. Please check back later.", style: TextStyle(color: Colors.grey, fontSize: 14), textAlign: TextAlign.center),
+                Text(
+                  "Our servers are currently undergoing maintenance to improve your experience. Please check back later.",
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ),
           ),
@@ -308,9 +348,6 @@ class MaintenanceScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────
-// 🔥 DEEP LIVE TV PARSING CODE (UNCHANGED) 🔥
-// ─────────────────────────────────────────────────────────
 class LiveTvScreen extends StatefulWidget {
   const LiveTvScreen({super.key});
   @override
@@ -320,13 +357,13 @@ class LiveTvScreen extends StatefulWidget {
 class _LiveTvScreenState extends State<LiveTvScreen> {
   List<Map<String, String>> allChannels = [];
   List<Map<String, String>> displayedChannels = [];
-  
+
   List<String> availableCountries = [];
-  String selectedCountry = 'IN'; 
+  String selectedCountry = 'IN';
 
   List<String> categories = ['All'];
   String selectedCategory = 'All';
-  
+
   bool isLoading = true;
   bool isSearching = false;
   TextEditingController searchController = TextEditingController();
@@ -351,7 +388,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
       if (response.statusCode == 200) {
         final List<String> lines = response.body.split('\n');
         List<Map<String, String>> tempChannels = [];
-        
+
         String currentName = '';
         String currentLogo = '';
         String currentGroup = 'Uncategorized';
@@ -427,14 +464,14 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
         }
       }
     } catch (error) {
-      debugPrint("Live TV Error: \$error");
+      debugPrint("Live TV Error: $error");
     }
     setState(() => isLoading = false);
   }
 
   void _applyFilters() {
     List<Map<String, String>> filtered = allChannels.where((c) => c['country'] == selectedCountry).toList();
-    
+
     Set<String> cats = {'All'};
     for (var c in filtered) {
       cats.add(c['group']!);
@@ -482,18 +519,18 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                     onTap: () {
                       setState(() {
                         selectedCountry = c;
-                        selectedCategory = 'All'; 
+                        selectedCategory = 'All';
                       });
                       _applyFilters();
                       Navigator.pop(context);
-                    }
+                    },
                   );
-                }
-              )
+                },
+              ),
             )
-          ]
+          ],
         );
-      }
+      },
     );
   }
 
@@ -545,14 +582,17 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white24)
+                  border: Border.all(color: Colors.white24),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.public, color: Colors.redAccent),
                     const SizedBox(width: 10),
-                    Text("Choose Your Country : \$selectedCountry", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(
+                      "Choose Your Country : $selectedCountry",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
                     const Icon(Icons.arrow_drop_down, color: Colors.white54),
                   ],
                 ),
@@ -580,8 +620,20 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.grey[900], borderRadius: BorderRadius.circular(20)),
-                        child: Center(child: Text(categories[index], style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.white : Colors.grey[900],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Center(
+                          child: Text(
+                            categories[index],
+                            style: TextStyle(
+                              color: isSelected ? Colors.black : Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   );
@@ -590,38 +642,88 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
             ),
           const SizedBox(height: 10),
           Expanded(
-            child: isLoading 
-              ? const Center(child: CircularProgressIndicator(color: Colors.redAccent)) 
-              : displayedChannels.isEmpty 
-                ? const Center(child: Text('No Live Channels Available', style: TextStyle(color: Colors.white))) 
-                : GridView.builder(
-                    padding: const EdgeInsets.all(12), 
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.85), 
-                    itemCount: displayedChannels.length,
-                    itemBuilder: (_, int index) {
-                      final Map<String, String> channel = displayedChannels[index];
-                      final String name = channel['name'] ?? 'Live TV';
-                      final String logo = channel['logo'] ?? '';
-                      final String url = channel['url'] ?? '';
-
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: url.isEmpty ? null : () {
-                          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SkippableAdScreen(adDuration: 30, nextScreen: VideoPlayerPage(tmdbId: 0, mediaType: 'tv', season: 1, episode: 1, movieTitle: name, overview: 'Live TV Broadcast', rating: 'Live', year: 'Now', customUrl: url))));
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: <Widget>[
-                              Expanded(child: Padding(padding: const EdgeInsets.all(8), child: logo.isNotEmpty ? CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_, __, ___) => const Icon(Icons.tv, color: Colors.white54, size: 40)) : const Icon(Icons.tv, color: Colors.white54, size: 40))),
-                              Container(width: double.infinity, padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.vertical(bottom: Radius.circular(12))), child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
-                            ],
-                          ),
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
+                : displayedChannels.isEmpty
+                    ? const Center(child: Text('No Live Channels Available', style: TextStyle(color: Colors.white)))
+                    : GridView.builder(
+                        padding: const EdgeInsets.all(12),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.85,
                         ),
-                      );
-                    },
-                  ),
+                        itemCount: displayedChannels.length,
+                        itemBuilder: (_, int index) {
+                          final Map<String, String> channel = displayedChannels[index];
+                          final String name = channel['name'] ?? 'Live TV';
+                          final String logo = channel['logo'] ?? '';
+                          final String url = channel['url'] ?? '';
+
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: url.isEmpty
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => VideoPlayerPage(
+                                          tmdbId: 0,
+                                          mediaType: 'tv',
+                                          season: 1,
+                                          episode: 1,
+                                          movieTitle: name,
+                                          overview: 'Live TV Broadcast',
+                                          rating: 'Live',
+                                          year: 'Now',
+                                          customUrl: url,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A1A),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.white12),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: logo.isNotEmpty
+                                          ? CachedNetworkImage(
+                                              imageUrl: logo,
+                                              fit: BoxFit.contain,
+                                              errorWidget: (_, __, ___) => const Icon(Icons.tv, color: Colors.white54, size: 40),
+                                            )
+                                          : const Icon(Icons.tv, color: Colors.white54, size: 40),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                                    ),
+                                    child: Text(
+                                      name,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
           ),
         ],
       ),

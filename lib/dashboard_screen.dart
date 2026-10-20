@@ -7,13 +7,6 @@ import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
 
-/// HANNUTV main dashboard.
-///
-/// Use:
-///   HannuDashboard(hooks: DashboardHooks(
-///     onOpenTitle: (ctx, item) => Navigator.push(ctx, MaterialPageRoute(builder: (_) => YourPlayer(item))),
-///     onOpenLiveTv: () => Navigator.push(context, ...LiveTvScreen),   // Live TV bilkul untouched
-///   ))
 class HannuDashboard extends StatefulWidget {
   const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
   final DashboardHooks hooks;
@@ -44,6 +37,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     WatchlistStore.I.load();
     ContinueWatchingStore.I.load();
     NotificationStore.I.init();
+    DownloadStore.I.load();
     _hero = Tmdb.I.heroItems();
   }
 
@@ -102,7 +96,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     }
   }
 
-  // ───────────────────────── build ─────────────────────────
   @override
   Widget build(BuildContext context) {
     return Theme(
@@ -138,6 +131,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
       const SizedBox(height: 8),
       _heroSection(),
       const ContinueWatchingRow(),
+      const MyDownloadsRow(), // 🔥 MY DOWNLOADS ON DASHBOARD 🔥
       _ottSection(),
       PosterRow(
         key: ValueKey<String>('india$_epoch'),
@@ -173,7 +167,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     return c;
   }
 
-  // ───────────────────────── ambient background (poster ke hisaab se smooth color) ─────────────────────────
   Widget _ambientBackground() {
     return Positioned(
       top: 0,
@@ -208,7 +201,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
-  // ───────────────────────── header ─────────────────────────
   Widget _iconBtn(IconData icon, VoidCallback onTap, {int badge = 0}) {
     return Stack(
       clipBehavior: Clip.none,
@@ -268,6 +260,14 @@ class _HannuDashboardState extends State<HannuDashboard> {
               }
             }),
             AnimatedBuilder(
+              animation: DownloadStore.I,
+              builder: (BuildContext _, Widget? __) => _iconBtn(
+                Icons.download_done_rounded,
+                () => openMyDownloads(context),
+                badge: DownloadStore.I.length,
+              ),
+            ),
+            AnimatedBuilder(
               animation: WatchlistStore.I,
               builder: (BuildContext _, Widget? __) => _iconBtn(
                 Icons.bookmark_border_rounded,
@@ -315,7 +315,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
         itemCount: _tabs.length,
         separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 10),
         itemBuilder: (BuildContext _, int i) {
-          final bool sel = i == 0; 
+          final bool sel = i == 0;
           return GestureDetector(
             onTap: () => _onTab(i),
             child: Container(
@@ -342,7 +342,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
-  // ───────────────────────── hero ─────────────────────────
   Widget _heroSection() {
     return FutureBuilder<List<TmdbItem>>(
       future: _hero,
@@ -380,7 +379,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
-  // ───────────────────────── OTT logos ─────────────────────────
   Widget _ottSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,7 +403,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
-  // ───────────────────────── genre chips ─────────────────────────
   Widget _genreChips() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
