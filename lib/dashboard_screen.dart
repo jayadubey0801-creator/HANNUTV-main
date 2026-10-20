@@ -84,9 +84,10 @@ class _HannuDashboardState extends State<HannuDashboard> {
         openCategory(context, CategoryKind.kids);
         break;
       case 5:
-        final VoidCallback? f = widget.hooks.onOpenLiveTv;
+        // FIX: BuildContext pass karna hoga kyunki ab Hook type void Function(BuildContext) hai
+        final void Function(BuildContext)? f = widget.hooks.onOpenLiveTv;
         if (f != null) {
-          f();
+          f(context); 
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Live TV: DashboardHooks.onOpenLiveTv me apni Live TV screen do.')),
@@ -131,7 +132,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
       const SizedBox(height: 8),
       _heroSection(),
       const ContinueWatchingRow(),
-      const MyDownloadsRow(), // 🔥 MY DOWNLOADS ON DASHBOARD 🔥
+      const MyDownloadsRow(),
       _ottSection(),
       PosterRow(
         key: ValueKey<String>('india$_epoch'),
@@ -156,11 +157,16 @@ class _HannuDashboardState extends State<HannuDashboard> {
     ];
     for (int i = 0; i < kDashGenres.length; i++) {
       final GenreDef g = kDashGenres[i];
-      c.add(GenreBlock(
-        key: ValueKey<String>('${g.key}$_epoch'),
-        g: g,
-        onSeeAll: () => openGenre(context, g),
-      ));
+      // FIX: GenreBlock method not found error fixed by using PosterRow.
+      c.add(
+        PosterRow(
+          key: ValueKey<String>('${g.key}$_epoch'),
+          title: g.label,
+          subtitle: 'Best of ${g.label}',
+          loader: () => Tmdb.I.genreRow(g, RowKind.movie), // Ya teri zaroorat ke hisaab se RowKind de de
+          width: 112,
+        ),
+      );
       if (i == 2) c.add(const AdSlot());
     }
     c.add(const SizedBox(height: 40));
@@ -252,9 +258,10 @@ class _HannuDashboardState extends State<HannuDashboard> {
               ),
             ),
             _iconBtn(Icons.search_rounded, () {
-              final VoidCallback? f = widget.hooks.onOpenSearch;
+              // FIX: BuildContext pass karna hoga
+              final void Function(BuildContext)? f = widget.hooks.onOpenSearch;
               if (f != null) {
-                f();
+                f(context);
               } else {
                 openSearch(context);
               }

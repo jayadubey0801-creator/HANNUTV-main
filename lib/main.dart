@@ -208,10 +208,12 @@ class _SplashScreenState extends State<SplashScreen> {
             MaterialPageRoute(
               builder: (context) => HannuDashboard(
                 hooks: DashboardHooks(
-                  onOpenLiveTv: () {
+                  // FIX: Added BuildContext parameter to match the type definition in DashboardHooks
+                  onOpenLiveTv: (BuildContext context) {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
                   },
-                  onOpenSearch: () {
+                  // FIX: Added BuildContext parameter
+                  onOpenSearch: (BuildContext context) {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
                   },
                 ),

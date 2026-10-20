@@ -138,6 +138,10 @@ class NotificationStore extends ChangeNotifier {
       (_update != null ? 1 : 0);
   int get unread => unreadCount;
   bool get hasUnread => unreadCount > 0;
+  
+  // FIX: dashboard_screen.dart ke NotificationStore.I.badge error ka fix!
+  int get badge => unreadCount; 
+  int get length => active.length;
 
   Future<void> init() => load();
 
@@ -234,14 +238,15 @@ class ContinueEntry {
 
   int get ts => updatedAt;
 
+  // FIX: .toStored() error ki jagah ab properly item.toJson() use kiya hai.
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'item': item.toStored(),
+        'item': item.toJson(),
         'progress': progress,
         'updatedAt': updatedAt,
       };
 
   factory ContinueEntry.fromJson(Map<String, dynamic> j) => ContinueEntry(
-        item: TmdbItem.fromStored(Map<String, dynamic>.from(j['item'] as Map)),
+        item: TmdbItem.fromJson(Map<String, dynamic>.from(j['item'] as Map), isTv: j['item']['isTv'] ?? false),
         progress: ((j['progress'] ?? 0.2) as num).toDouble(),
         updatedAt: (j['updatedAt'] ?? 0) as int,
       );
@@ -259,6 +264,8 @@ class ContinueStore extends ChangeNotifier {
       List<ContinueEntry>.unmodifiable(_entries);
   List<TmdbItem> get items =>
       _entries.map((ContinueEntry e) => e.item).toList(growable: false);
+      
+  int get length => _entries.length;
 
   Future<void> init() => load();
 
@@ -335,6 +342,8 @@ class HistoryStore extends ChangeNotifier {
 
   List<TmdbItem> get items => List<TmdbItem>.unmodifiable(_items);
   List<TmdbItem> get entries => List<TmdbItem>.unmodifiable(_items);
+  
+  int get length => _items.length;
 
   Future<void> init() => load();
 
@@ -349,7 +358,7 @@ class HistoryStore extends ChangeNotifier {
         _items
           ..clear()
           ..addAll(list.map((dynamic e) =>
-              TmdbItem.fromStored(Map<String, dynamic>.from(e as Map))));
+              TmdbItem.fromJson(Map<String, dynamic>.from(e as Map), isTv: e['isTv'] ?? false)));
         notifyListeners();
       }
     } catch (_) {}
@@ -359,7 +368,7 @@ class HistoryStore extends ChangeNotifier {
     try {
       final SharedPreferences sp = await SharedPreferences.getInstance();
       await sp.setString(
-          _kKey, json.encode(_items.map((TmdbItem e) => e.toStored()).toList()));
+          _kKey, json.encode(_items.map((TmdbItem e) => e.toJson()).toList()));
     } catch (_) {}
   }
 
@@ -396,6 +405,10 @@ class WatchlistStore extends ChangeNotifier {
   bool _loaded = false;
 
   List<TmdbItem> get items => List<TmdbItem>.unmodifiable(_items);
+  
+  // FIX: dashboard_screen.dart ke WatchlistStore.I.length ka error yahan theek kiya
+  int get length => _items.length;
+  int get count => _items.length;
 
   Future<void> init() => load();
 
@@ -410,7 +423,7 @@ class WatchlistStore extends ChangeNotifier {
         _items
           ..clear()
           ..addAll(list.map((dynamic e) =>
-              TmdbItem.fromStored(Map<String, dynamic>.from(e as Map))));
+              TmdbItem.fromJson(Map<String, dynamic>.from(e as Map), isTv: e['isTv'] ?? false)));
         notifyListeners();
       }
     } catch (_) {}
@@ -420,7 +433,7 @@ class WatchlistStore extends ChangeNotifier {
     try {
       final SharedPreferences sp = await SharedPreferences.getInstance();
       await sp.setString(
-          _kKey, json.encode(_items.map((TmdbItem e) => e.toStored()).toList()));
+          _kKey, json.encode(_items.map((TmdbItem e) => e.toJson()).toList()));
     } catch (_) {}
   }
 
@@ -561,6 +574,10 @@ class DownloadStore extends ChangeNotifier {
   List<DownloadTaskItem> get tasks =>
       List<DownloadTaskItem>.unmodifiable(_tasks);
   DownloadTaskItem? get activeBannerTask => _activeBannerTask;
+  
+  // FIX: dashboard_screen.dart ke DownloadStore.I.length error ka fix yahan
+  int get length => _tasks.length;
+  int get count => _tasks.length;
 
   static int calculateRealBytes(
       {required int runtimeMinutes, required int bitrateKbps}) {

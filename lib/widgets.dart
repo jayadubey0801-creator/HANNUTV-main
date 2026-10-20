@@ -145,7 +145,8 @@ class PosterImage extends StatelessWidget {
       width: width,
       fit: BoxFit.cover,
       placeholder: (_, __) => ShimmerBox(w: width, r: 12),
-      errorWidget: (_, __) => Container(
+      // FIX: 3 parameters expected by cached_network_image package's errorWidget
+      errorWidget: (_, __, ___) => Container(
         color: const Color(0xFF181822),
         alignment: Alignment.center,
         child: const Icon(Icons.movie_outlined, color: Colors.white30, size: 28),
@@ -978,11 +979,11 @@ class MyDownloadsPage extends StatelessWidget {
               );
             },
           ),
-          const Positioned(
+          Positioned(
             left: 0,
             right: 0,
             bottom: 8,
-            child: Center(
+            child: const Center(
               child: CustomBannerAd(htmlBannerCode: _kWidgetBannerSnippet),
             ),
           ),
