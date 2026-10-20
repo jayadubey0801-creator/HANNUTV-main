@@ -30,10 +30,19 @@ class DashboardHooks {
 
   static DashboardHooks config = const DashboardHooks();
 
+  static void open(BuildContext context, TmdbItem item) =>
+      Hooks.open(context, item);
+}
+
+class Hooks {
+  static DashboardHooks cfg = const DashboardHooks();
+
   static void open(BuildContext context, TmdbItem item) {
     ContinueStore.I.push(item, progress: 0.18);
-    if (config.onOpenTitle != null) {
-      config.onOpenTitle!(context, item);
+    HistoryStore.I.push(item);
+    final fn = cfg.onOpenTitle ?? DashboardHooks.config.onOpenTitle;
+    if (fn != null) {
+      fn(context, item);
       return;
     }
     Navigator.of(context).push(
@@ -48,6 +57,16 @@ class DashboardHooks {
         ),
       ),
     );
+  }
+
+  static void openLiveTv(BuildContext context) {
+    final fn = cfg.onOpenLiveTv ?? DashboardHooks.config.onOpenLiveTv;
+    if (fn != null) fn(context);
+  }
+
+  static void openSearch(BuildContext context) {
+    final fn = cfg.onOpenSearch ?? DashboardHooks.config.onOpenSearch;
+    if (fn != null) fn(context);
   }
 }
 
@@ -126,7 +145,7 @@ class PosterImage extends StatelessWidget {
       width: width,
       fit: BoxFit.cover,
       placeholder: (_, __) => ShimmerBox(w: width, r: 12),
-      errorWidget: (_, __, ___) => Container(
+      errorWidget: (_, __) => Container(
         color: const Color(0xFF181822),
         alignment: Alignment.center,
         child: const Icon(Icons.movie_outlined, color: Colors.white30, size: 28),
@@ -195,7 +214,7 @@ class PosterCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final double cardHeight = width * 1.48;
     return GestureDetector(
-      onTap: onTap ?? () => DashboardHooks.open(context, item),
+      onTap: onTap ?? () => Hooks.open(context, item),
       onLongPress: onLongPress ?? () => showTitleSheet(context, item),
       child: SizedBox(
         width: rank != null ? width + 24 : width,
@@ -228,7 +247,8 @@ class PosterCard extends StatelessWidget {
                           top: 6,
                           left: 6,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: const Color(0xFFE50914),
                               borderRadius: BorderRadius.circular(4),
@@ -248,7 +268,8 @@ class PosterCard extends StatelessWidget {
                           top: 6,
                           right: 6,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
                               color: Colors.black.withOpacity(0.75),
                               borderRadius: BorderRadius.circular(4),
@@ -256,7 +277,8 @@ class PosterCard extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.star_rounded, color: Colors.amber, size: 11),
+                                const Icon(Icons.star_rounded,
+                                    color: Colors.amber, size: 11),
                                 const SizedBox(width: 2),
                                 Text(
                                   item.rating.toStringAsFixed(1),
@@ -279,7 +301,8 @@ class PosterCard extends StatelessWidget {
                             value: progress!.clamp(0.05, 1.0),
                             minHeight: 3.5,
                             backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE50914)),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                Color(0xFFE50914)),
                           ),
                         ),
                     ],
@@ -404,7 +427,8 @@ class PosterRow extends StatefulWidget {
   State<PosterRow> createState() => _PosterRowState();
 }
 
-class _PosterRowState extends State<PosterRow> with AutomaticKeepAliveClientMixin {
+class _PosterRowState extends State<PosterRow>
+    with AutomaticKeepAliveClientMixin {
   List<TmdbItem>? _items;
 
   @override
@@ -418,7 +442,7 @@ class _PosterRowState extends State<PosterRow> with AutomaticKeepAliveClientMixi
 
   Future<void> _load() async {
     try {
-      final res = await widget.loader();
+      final List<TmdbItem> res = await widget.loader();
       if (mounted) setState(() => _items = res);
     } catch (_) {
       if (mounted) setState(() => _items = const <TmdbItem>[]);
@@ -450,15 +474,16 @@ class _PosterRowState extends State<PosterRow> with AutomaticKeepAliveClientMixi
                   scrollDirection: Axis.horizontal,
                   itemCount: 6,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, __) => ShimmerBox(w: widget.width, h: rowH, r: 12),
+                  itemBuilder: (_, __) =>
+                      ShimmerBox(w: widget.width, h: rowH, r: 12),
                 )
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   scrollDirection: Axis.horizontal,
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final item = items[index];
+                  itemBuilder: (BuildContext context, int index) {
+                    final TmdbItem item = items[index];
                     return PosterCard(
                       item: item,
                       width: widget.width,
@@ -479,8 +504,8 @@ class ContinueWatchingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: ContinueStore.I,
-      builder: (context, _) {
-        final entries = ContinueStore.I.entries;
+      builder: (BuildContext context, _) {
+        final List<ContinueEntry> entries = ContinueStore.I.entries;
         if (entries.isEmpty) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,8 +522,8 @@ class ContinueWatchingRow extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 itemCount: entries.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, i) {
-                  final e = entries[i];
+                itemBuilder: (BuildContext context, int i) {
+                  final ContinueEntry e = entries[i];
                   return Stack(
                     children: [
                       PosterCard(
@@ -517,7 +542,8 @@ class ContinueWatchingRow extends StatelessWidget {
                               color: Colors.black87,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close, color: Colors.white70, size: 13),
+                            child: const Icon(Icons.close,
+                                color: Colors.white70, size: 13),
                           ),
                         ),
                       ),
@@ -534,7 +560,7 @@ class ContinueWatchingRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔥 OFFLINE DOWNLOADS ROW, FULL PAGE & WHATSAPP-STYLE TOP BANNER 🔥
+// OFFLINE DOWNLOADS ROW, FULL PAGE & WHATSAPP-STYLE TOP BANNER
 // ─────────────────────────────────────────────────────────────────────────────
 
 void _openOfflinePlayer(BuildContext context, DownloadTaskItem t) {
@@ -572,8 +598,8 @@ class MyDownloadsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: DownloadStore.I,
-      builder: (context, _) {
-        final tasks = DownloadStore.I.tasks;
+      builder: (BuildContext context, _) {
+        final List<DownloadTaskItem> tasks = DownloadStore.I.tasks;
         if (tasks.isEmpty) return const SizedBox.shrink();
 
         return Column(
@@ -591,8 +617,8 @@ class MyDownloadsRow extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 itemCount: tasks.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final t = tasks[index];
+                itemBuilder: (BuildContext context, int index) {
+                  final DownloadTaskItem t = tasks[index];
                   final bool isDone = t.status == 'completed';
                   final bool isPaused = t.status == 'paused';
 
@@ -613,7 +639,9 @@ class MyDownloadsRow extends StatelessWidget {
                         border: Border.all(
                           color: isDone
                               ? Colors.greenAccent.withOpacity(0.45)
-                              : (isPaused ? Colors.amber.withOpacity(0.45) : Colors.redAccent.withOpacity(0.45)),
+                              : (isPaused
+                                  ? Colors.amber.withOpacity(0.45)
+                                  : Colors.redAccent.withOpacity(0.45)),
                         ),
                       ),
                       child: Row(
@@ -630,14 +658,16 @@ class MyDownloadsRow extends StatelessWidget {
                                       width: 62,
                                       height: 94,
                                       color: Colors.grey[900],
-                                      child: const Icon(Icons.movie, color: Colors.white30),
+                                      child: const Icon(Icons.movie,
+                                          color: Colors.white30),
                                     ),
                                   )
                                 : Container(
                                     width: 62,
                                     height: 94,
                                     color: Colors.grey[900],
-                                    child: const Icon(Icons.movie, color: Colors.white30),
+                                    child: const Icon(Icons.movie,
+                                        color: Colors.white30),
                                   ),
                           ),
                           const SizedBox(width: 10),
@@ -670,7 +700,8 @@ class MyDownloadsRow extends StatelessWidget {
                                 const SizedBox(height: 3),
                                 Text(
                                   '${DownloadStore.formatBytes(t.downloadedBytes)} / ${DownloadStore.formatBytes(t.totalBytes)}',
-                                  style: const TextStyle(color: Colors.white60, fontSize: 10.5),
+                                  style: const TextStyle(
+                                      color: Colors.white60, fontSize: 10.5),
                                 ),
                                 const SizedBox(height: 6),
                                 ClipRRect(
@@ -682,22 +713,29 @@ class MyDownloadsRow extends StatelessWidget {
                                     valueColor: AlwaysStoppedAnimation<Color>(
                                       isDone
                                           ? const Color(0xFF00E676)
-                                          : (isPaused ? Colors.amber : Colors.redAccent),
+                                          : (isPaused
+                                              ? Colors.amber
+                                              : Colors.redAccent),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       isDone
                                           ? '100% Ready (Offline)'
-                                          : (isPaused ? 'Paused (${t.percent}%)' : 'Downloading ${t.percent}%'),
+                                          : (isPaused
+                                              ? 'Paused (${t.percent}%)'
+                                              : 'Downloading ${t.percent}%'),
                                       style: TextStyle(
                                         color: isDone
                                             ? const Color(0xFF00E676)
-                                            : (isPaused ? Colors.amber : Colors.white70),
+                                            : (isPaused
+                                                ? Colors.amber
+                                                : Colors.white70),
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -706,14 +744,19 @@ class MyDownloadsRow extends StatelessWidget {
                                       GestureDetector(
                                         onTap: () {
                                           if (isPaused) {
-                                            DownloadStore.I.resumeDownload(t.id);
+                                            DownloadStore.I
+                                                .resumeDownload(t.id);
                                           } else {
                                             DownloadStore.I.pauseDownload(t.id);
                                           }
                                         },
                                         child: Icon(
-                                          isPaused ? Icons.play_circle_fill : Icons.pause_circle_filled,
-                                          color: isPaused ? Colors.amber : Colors.white,
+                                          isPaused
+                                              ? Icons.play_circle_fill
+                                              : Icons.pause_circle_filled,
+                                          color: isPaused
+                                              ? Colors.amber
+                                              : Colors.white,
                                           size: 20,
                                         ),
                                       ),
@@ -755,18 +798,22 @@ class MyDownloadsPage extends StatelessWidget {
         children: [
           AnimatedBuilder(
             animation: DownloadStore.I,
-            builder: (context, _) {
-              final tasks = DownloadStore.I.tasks;
+            builder: (BuildContext context, _) {
+              final List<DownloadTaskItem> tasks = DownloadStore.I.tasks;
               if (tasks.isEmpty) {
                 return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: const [
-                      Icon(Icons.cloud_download_outlined, color: Colors.white24, size: 64),
+                      Icon(Icons.cloud_download_outlined,
+                          color: Colors.white24, size: 64),
                       SizedBox(height: 12),
                       Text(
                         'No downloads yet',
-                        style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold),
                       ),
                       SizedBox(height: 4),
                       Text(
@@ -782,8 +829,8 @@ class MyDownloadsPage extends StatelessWidget {
               return ListView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 90),
                 itemCount: tasks.length,
-                itemBuilder: (context, index) {
-                  final t = tasks[index];
+                itemBuilder: (BuildContext context, int index) {
+                  final DownloadTaskItem t = tasks[index];
                   final bool isDone = t.status == 'completed';
                   final bool isPaused = t.status == 'paused';
 
@@ -796,7 +843,9 @@ class MyDownloadsPage extends StatelessWidget {
                       border: Border.all(
                         color: isDone
                             ? Colors.greenAccent.withOpacity(0.4)
-                            : (isPaused ? Colors.amber.withOpacity(0.4) : Colors.white12),
+                            : (isPaused
+                                ? Colors.amber.withOpacity(0.4)
+                                : Colors.white12),
                       ),
                     ),
                     child: Row(
@@ -813,14 +862,16 @@ class MyDownloadsPage extends StatelessWidget {
                                     width: 64,
                                     height: 92,
                                     color: Colors.grey[900],
-                                    child: const Icon(Icons.movie, color: Colors.white30),
+                                    child: const Icon(Icons.movie,
+                                        color: Colors.white30),
                                   ),
                                 )
                               : Container(
                                   width: 64,
                                   height: 92,
                                   color: Colors.grey[900],
-                                  child: const Icon(Icons.movie, color: Colors.white30),
+                                  child: const Icon(Icons.movie,
+                                      color: Colors.white30),
                                 ),
                         ),
                         const SizedBox(width: 12),
@@ -851,9 +902,12 @@ class MyDownloadsPage extends StatelessWidget {
                               Text(
                                 '${DownloadStore.formatBytes(t.downloadedBytes)} of ${DownloadStore.formatBytes(t.totalBytes)} (${t.percent}%)${isPaused ? " • PAUSED" : ""}',
                                 style: TextStyle(
-                                  color: isPaused ? Colors.amber : Colors.white70,
+                                  color:
+                                      isPaused ? Colors.amber : Colors.white70,
                                   fontSize: 11.5,
-                                  fontWeight: isPaused ? FontWeight.bold : FontWeight.normal,
+                                  fontWeight: isPaused
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -866,7 +920,9 @@ class MyDownloadsPage extends StatelessWidget {
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                     isDone
                                         ? const Color(0xFF00E676)
-                                        : (isPaused ? Colors.amber : Colors.redAccent),
+                                        : (isPaused
+                                            ? Colors.amber
+                                            : Colors.redAccent),
                                   ),
                                 ),
                               ),
@@ -876,7 +932,8 @@ class MyDownloadsPage extends StatelessWidget {
                         const SizedBox(width: 8),
                         if (!isDone)
                           IconButton(
-                            tooltip: isPaused ? 'Resume Download' : 'Pause Download',
+                            tooltip:
+                                isPaused ? 'Resume Download' : 'Pause Download',
                             onPressed: () {
                               if (isPaused) {
                                 DownloadStore.I.resumeDownload(t.id);
@@ -886,9 +943,12 @@ class MyDownloadsPage extends StatelessWidget {
                             },
                             icon: CircleAvatar(
                               radius: 18,
-                              backgroundColor: isPaused ? Colors.amber : Colors.redAccent,
+                              backgroundColor:
+                                  isPaused ? Colors.amber : Colors.redAccent,
                               child: Icon(
-                                isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                                isPaused
+                                    ? Icons.play_arrow_rounded
+                                    : Icons.pause_rounded,
                                 color: Colors.black,
                                 size: 22,
                               ),
@@ -901,13 +961,15 @@ class MyDownloadsPage extends StatelessWidget {
                             icon: const CircleAvatar(
                               radius: 18,
                               backgroundColor: Color(0xFF00E676),
-                              child: Icon(Icons.play_arrow_rounded, color: Colors.black, size: 22),
+                              child: Icon(Icons.play_arrow_rounded,
+                                  color: Colors.black, size: 22),
                             ),
                           ),
                         IconButton(
                           tooltip: 'Delete Download',
                           onPressed: () => DownloadStore.I.removeDownload(t.id),
-                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              color: Colors.redAccent, size: 22),
                         ),
                       ],
                     ),
@@ -916,12 +978,11 @@ class MyDownloadsPage extends StatelessWidget {
               );
             },
           ),
-          // Banner Ad at Bottom (Only loads if internet is on, zero video ads!)
-          Positioned(
+          const Positioned(
             left: 0,
             right: 0,
             bottom: 8,
-            child: const Center(
+            child: Center(
               child: CustomBannerAd(htmlBannerCode: _kWidgetBannerSnippet),
             ),
           ),
@@ -931,7 +992,6 @@ class MyDownloadsPage extends StatelessWidget {
   }
 }
 
-/// WhatsApp-Style Top Slide-Down Live Download Notification Banner (with Pause / Resume / View / Close)
 class LiveDownloadNotificationBanner extends StatelessWidget {
   const LiveDownloadNotificationBanner({super.key});
 
@@ -939,7 +999,7 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: DownloadStore.I,
-      builder: (context, _) {
+      builder: (BuildContext context, _) {
         final DownloadTaskItem? t = DownloadStore.I.activeBannerTask;
         if (t == null) return const SizedBox.shrink();
 
@@ -956,7 +1016,8 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                 color: Colors.transparent,
                 elevation: 14,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF191929), Color(0xFF232338)],
@@ -986,17 +1047,23 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: (isDone
                                       ? const Color(0xFF00E676)
-                                      : (isPaused ? Colors.amber : Colors.redAccent))
+                                      : (isPaused
+                                          ? Colors.amber
+                                          : Colors.redAccent))
                                   .withOpacity(0.18),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
                               isDone
                                   ? Icons.download_done_rounded
-                                  : (isPaused ? Icons.pause_circle_filled_rounded : Icons.downloading_rounded),
+                                  : (isPaused
+                                      ? Icons.pause_circle_filled_rounded
+                                      : Icons.downloading_rounded),
                               color: isDone
                                   ? const Color(0xFF00E676)
-                                  : (isPaused ? Colors.amber : Colors.redAccent),
+                                  : (isPaused
+                                      ? Colors.amber
+                                      : Colors.redAccent),
                               size: 20,
                             ),
                           ),
@@ -1043,7 +1110,8 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                                   '${t.language} • ${t.quality} • ${DownloadStore.formatBytes(t.downloadedBytes)} / ${DownloadStore.formatBytes(t.totalBytes)}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white70, fontSize: 10.5),
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 10.5),
                                 ),
                               ],
                             ),
@@ -1054,10 +1122,12 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                                 backgroundColor: isPaused
                                     ? Colors.amber.withOpacity(0.2)
                                     : Colors.white.withOpacity(0.1),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                               onPressed: () {
                                 if (isPaused) {
@@ -1067,7 +1137,9 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                                 }
                               },
                               icon: Icon(
-                                isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                                isPaused
+                                    ? Icons.play_arrow_rounded
+                                    : Icons.pause_rounded,
                                 color: isPaused ? Colors.amber : Colors.white,
                                 size: 15,
                               ),
@@ -1084,10 +1156,12 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                             TextButton(
                               style: TextButton.styleFrom(
                                 backgroundColor: const Color(0xFF00E676),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                               onPressed: () {
                                 DownloadStore.I.dismissBanner();
@@ -1107,7 +1181,8 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                             onTap: () => DownloadStore.I.dismissBanner(),
                             child: const Padding(
                               padding: EdgeInsets.all(4.0),
-                              child: Icon(Icons.close, color: Colors.white54, size: 18),
+                              child: Icon(Icons.close,
+                                  color: Colors.white54, size: 18),
                             ),
                           ),
                         ],
@@ -1139,7 +1214,7 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
 }
 
 class OttLogo extends StatelessWidget {
-  final OttDef ott;
+  final Ott ott;
   final double w;
   final double h;
   final double radius;
@@ -1152,45 +1227,98 @@ class OttLogo extends StatelessWidget {
     this.radius = 14,
   });
 
+  String _resolveLogoUrl() {
+    try {
+      final dynamic d = ott;
+      final dynamic l = d.logo;
+      if (l is String && l.isNotEmpty) return l;
+    } catch (_) {}
+    try {
+      final dynamic d = ott;
+      final dynamic ls = d.logos;
+      if (ls is List && ls.isNotEmpty) return ls.first.toString();
+    } catch (_) {}
+    return '';
+  }
+
+  Color _resolveAccent() {
+    try {
+      final dynamic d = ott;
+      if (d.accent is Color) return d.accent as Color;
+    } catch (_) {}
+    try {
+      final dynamic d = ott;
+      if (d.fg is Color) return d.fg as Color;
+    } catch (_) {}
+    try {
+      final dynamic d = ott;
+      if (d.color is Color) return d.color as Color;
+    } catch (_) {}
+    return HC.accent;
+  }
+
+  Color _resolveBg() {
+    try {
+      final dynamic d = ott;
+      if (d.bg is Color) return d.bg as Color;
+    } catch (_) {}
+    return Colors.white;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final String logoUrl = _resolveLogoUrl();
+    final Color accent = _resolveAccent();
+    final Color bg = _resolveBg();
+
     return Container(
       width: w,
       height: h,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: bg,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: ott.accent.withOpacity(0.45), width: 1.4),
+        border: Border.all(color: accent.withOpacity(0.45), width: 1.4),
         boxShadow: [
           BoxShadow(
-            color: ott.accent.withOpacity(0.22),
+            color: accent.withOpacity(0.22),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Center(
-        child: CachedNetworkImage(
-          imageUrl: ott.logo,
-          fit: BoxFit.contain,
-          errorWidget: (_, __, ___) => Text(
-            ott.name,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: ott.accent,
-              fontWeight: FontWeight.w900,
-              fontSize: 11,
-            ),
-          ),
-        ),
+        child: logoUrl.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: logoUrl,
+                fit: BoxFit.contain,
+                errorWidget: (_, __, ___) => Text(
+                  ott.name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
+              )
+            : Text(
+                ott.name,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                ),
+              ),
       ),
     );
   }
 }
 
 class AdSlot extends StatelessWidget {
-  const AdSlot({super.key});
+  final double height;
+  const AdSlot({super.key, this.height = 55});
 
   @override
   Widget build(BuildContext context) {
@@ -1208,7 +1336,7 @@ void showTitleSheet(BuildContext context, TmdbItem item) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
     ),
-    builder: (sheetCtx) {
+    builder: (BuildContext sheetCtx) {
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
@@ -1259,11 +1387,13 @@ void showTitleSheet(BuildContext context, TmdbItem item) {
                             if (item.year.isNotEmpty) ...[
                               Text(
                                 item.year,
-                                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                                style: const TextStyle(
+                                    color: Colors.white60, fontSize: 12),
                               ),
                               const SizedBox(width: 10),
                             ],
-                            const Icon(Icons.star_rounded, color: Colors.amber, size: 15),
+                            const Icon(Icons.star_rounded,
+                                color: Colors.amber, size: 15),
                             const SizedBox(width: 3),
                             Text(
                               item.rating.toStringAsFixed(1),
@@ -1275,7 +1405,8 @@ void showTitleSheet(BuildContext context, TmdbItem item) {
                             ),
                             const SizedBox(width: 10),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.white12,
                                 borderRadius: BorderRadius.circular(4),
@@ -1293,10 +1424,13 @@ void showTitleSheet(BuildContext context, TmdbItem item) {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          item.overview.isEmpty ? 'Watch in Full HD on HANNUTV.' : item.overview,
+                          item.overview.isEmpty
+                              ? 'Watch in Full HD on HANNUTV.'
+                              : item.overview,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.35),
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12, height: 1.35),
                         ),
                       ],
                     ),
@@ -1312,30 +1446,34 @@ void showTitleSheet(BuildContext context, TmdbItem item) {
                         backgroundColor: const Color(0xFFE50914),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () {
                         Navigator.pop(sheetCtx);
-                        DashboardHooks.open(context, item);
+                        Hooks.open(context, item);
                       },
                       icon: const Icon(Icons.play_arrow_rounded),
                       label: const Text(
                         'Watch Now',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   AnimatedBuilder(
                     animation: WatchlistStore.I,
-                    builder: (context, _) {
+                    builder: (BuildContext context, _) {
                       final bool saved = WatchlistStore.I.contains(item);
                       return OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
                           side: const BorderSide(color: Colors.white24),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: () => WatchlistStore.I.toggle(item),
                         icon: Icon(
