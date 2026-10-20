@@ -127,6 +127,8 @@ class DownloadStore extends ChangeNotifier {
   final Map<String, http.Client> _activeClients = {};
   DownloadTaskItem? activeBannerTask;
   Timer? _hideBannerTimer;
+  HttpServer? _offlineServer;
+  int _offlineServerPort = 0;
 
   List<DownloadTaskItem> get tasks => List.unmodifiable(_tasks);
   int get length => _tasks.length;
@@ -147,6 +149,67 @@ class DownloadStore extends ChangeNotifier {
     return ((bitrateKbps * 1000 / 8) * seconds).round();
   }
 
+  /// Starts a 100% offline localhost loopback HTTP server (127.0.0.1) so WebView plays local MP4 files even in Airplane mode!
+  Future<String?> getLocalhostOfflineUrl(String? filePath) async {
+    if (filePath == null || filePath.isEmpty) return null;
+    try {
+      final File f = File(filePath);
+      if (!await f.exists() || await f.length() < 1024) return null;
+
+      if (_offlineServer == null) {
+        _offlineServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        _offlineServerPort = _offlineServer!.port;
+        _offlineServer!.listen((HttpRequest req) async {
+          try {
+            final String? pathParam = req.uri.queryParameters['path'];
+            if (pathParam == null) {
+              req.response.statusCode = HttpStatus.notFound;
+              await req.response.close();
+              return;
+            }
+            final File videoFile = File(pathParam);
+            if (!await videoFile.exists()) {
+              req.response.statusCode = HttpStatus.notFound;
+              await req.response.close();
+              return;
+            }
+            final int totalLen = await videoFile.length();
+            req.response.headers.set('Content-Type', 'video/mp4');
+            req.response.headers.set('Accept-Ranges', 'bytes');
+            req.response.headers.set('Access-Control-Allow-Origin', '*');
+
+            final String? rangeHeader = req.headers.value(HttpHeaders.rangeHeader);
+            if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+              final parts = rangeHeader.substring(6).split('-');
+              final int start = int.tryParse(parts[0]) ?? 0;
+              final int end = (parts.length > 1 && parts[1].isNotEmpty)
+                  ? (int.tryParse(parts[1]) ?? (totalLen - 1))
+                  : (totalLen - 1);
+              final int clampedEnd = end.clamp(start, totalLen - 1);
+              req.response.statusCode = HttpStatus.partialContent;
+              req.response.headers.set('Content-Range', 'bytes $start-$clampedEnd/$totalLen');
+              req.response.contentLength = (clampedEnd - start) + 1;
+              await req.response.addStream(videoFile.openRead(start, clampedEnd + 1));
+              await req.response.close();
+            } else {
+              req.response.statusCode = HttpStatus.ok;
+              req.response.contentLength = totalLen;
+              await req.response.addStream(videoFile.openRead());
+              await req.response.close();
+            }
+          } catch (_) {
+            try {
+              await req.response.close();
+            } catch (_) {}
+          }
+        });
+      }
+      return 'http://127.0.0.1:$_offlineServerPort/stream.mp4?path=${Uri.encodeQueryComponent(filePath)}';
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -158,7 +221,7 @@ class DownloadStore extends ChangeNotifier {
           if (item is Map<String, dynamic>) {
             final t = DownloadTaskItem.fromJson(item);
             if (t.status == 'downloading') t.status = 'paused';
-            await _ensureOfflineVideoFileExists(t);
+            _ensureOfflineVideoFileExists(t);
             _tasks.add(t);
           }
         }
@@ -183,15 +246,15 @@ class DownloadStore extends ChangeNotifier {
       task.localFilePath = videoFile.path;
 
       if (!await videoFile.exists() || await videoFile.length() < 1024) {
-        // Attempt to fetch real playable MP4 stream bytes for local offline playback
         try {
           String targetUrl = task.streamUrl;
-          if (!targetUrl.endsWith('.mp4')) {
+          if (!targetUrl.toLowerCase().contains('.mp4')) {
             targetUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
           }
-          final response = await http.get(Uri.parse(targetUrl)).timeout(const Duration(seconds: 12));
+          final response = await http.get(Uri.parse(targetUrl)).timeout(const Duration(seconds: 15));
           if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
             await videoFile.writeAsBytes(response.bodyBytes, flush: true);
+            await _save();
           }
         } catch (_) {}
       }
@@ -262,8 +325,7 @@ class DownloadStore extends ChangeNotifier {
     final client = http.Client();
     _activeClients[task.id] = client;
 
-    // Cache local offline video file in background
-    unawaited(_ensureOfflineVideoFileExists(task));
+    _ensureOfflineVideoFileExists(task);
 
     try {
       if (task.streamUrl.startsWith('http') && !task.streamUrl.contains('pantyflix.com/watch')) {
@@ -384,8 +446,9 @@ class DownloadStore extends ChangeNotifier {
 }
 
 void openDownloadedMovieOffline(BuildContext context, DownloadTaskItem t) {
-  Navigator.push(
-    context,
+  final nav = Navigator.maybeOf(context);
+  if (nav == null) return;
+  nav.push(
     MaterialPageRoute(
       builder: (_) => VideoPlayerPage(
         tmdbId: t.tmdbId,
@@ -552,9 +615,8 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
                                   if (task.status == 'completed')
                                     GestureDetector(
                                       onTap: () {
-                                        final ctx = navigatorKey.currentContext ?? context;
                                         DownloadStore.I.dismissBanner();
-                                        openDownloadedMovieOffline(ctx, task);
+                                        openDownloadedMovieOffline(context, task);
                                       },
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -840,151 +902,156 @@ class MyDownloadsPage extends StatelessWidget {
         foregroundColor: Colors.white,
         title: const Text('My Downloads (Offline)', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-      body: AnimatedBuilder(
-        animation: DownloadStore.I,
-        builder: (context, _) {
-          final tasks = DownloadStore.I.tasks;
-          if (tasks.isEmpty) {
-            return const Center(
-              child: Text(
-                'Abhi koi movie download nahi ki hai.\nPlayer ke niche Download button se download karein!',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: HC.dim, fontSize: 14),
-              ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: tasks.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final t = tasks[index];
-              final bool isDone = t.status == 'completed';
-              final bool isPaused = t.status == 'paused';
-              return GestureDetector(
-                onTap: () => openDownloadedMovieOffline(context, t),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: HC.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: isDone ? Colors.green.withOpacity(0.4) : Colors.white12),
+      body: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: DownloadStore.I,
+            builder: (context, _) {
+              final tasks = DownloadStore.I.tasks;
+              if (tasks.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'Abhi koi movie download nahi ki hai.\nPlayer ke niche Download button se download karein!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: HC.dim, fontSize: 14),
                   ),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: t.posterUrl.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: t.posterUrl,
-                                width: 64,
-                                height: 96,
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => Container(
-                                  width: 64,
-                                  height: 96,
-                                  color: HC.card,
-                                  child: const Icon(Icons.movie, color: Colors.white38),
-                                ),
-                              )
-                            : Container(
-                                width: 64,
-                                height: 96,
-                                color: HC.card,
-                                child: const Icon(Icons.movie, color: Colors.white38),
-                              ),
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: tasks.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final t = tasks[index];
+                  final bool isDone = t.status == 'completed';
+                  final bool isPaused = t.status == 'paused';
+                  return GestureDetector(
+                    onTap: () => openDownloadedMovieOffline(context, t),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: HC.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: isDone ? Colors.green.withOpacity(0.4) : Colors.white12),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              t.title,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${t.language} • ${t.quality} • Server: ${t.serverName}',
-                              style: const TextStyle(color: Colors.amber, fontSize: 12),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${t.formattedDownloadedSize} of ${t.formattedTotalSize} (${t.percent}%)',
-                              style: const TextStyle(color: HC.dim, fontSize: 12),
-                            ),
-                            const SizedBox(height: 8),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: t.progress,
-                                minHeight: 6,
-                                backgroundColor: Colors.white12,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  isDone ? Colors.greenAccent : (isPaused ? Colors.amber : Colors.redAccent),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: t.posterUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: t.posterUrl,
+                                    width: 64,
+                                    height: 96,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => Container(
+                                      width: 64,
+                                      height: 96,
+                                      color: HC.card,
+                                      child: const Icon(Icons.movie, color: Colors.white38),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 64,
+                                    height: 96,
+                                    color: HC.card,
+                                    child: const Icon(Icons.movie, color: Colors.white38),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (!isDone)
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: t.status == 'downloading' ? Colors.amber[800] : Colors.green,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                Text(
+                                  t.title,
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${t.language} • ${t.quality} • Server: ${t.serverName}',
+                                  style: const TextStyle(color: Colors.amber, fontSize: 12),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${t.formattedDownloadedSize} of ${t.formattedTotalSize} (${t.percent}%)',
+                                  style: const TextStyle(color: HC.dim, fontSize: 12),
+                                ),
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: t.progress,
+                                    minHeight: 6,
+                                    backgroundColor: Colors.white12,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      isDone ? Colors.greenAccent : (isPaused ? Colors.amber : Colors.redAccent),
                                     ),
-                                    icon: Icon(
-                                      t.status == 'downloading' ? Icons.pause : Icons.download_rounded,
-                                      size: 16,
-                                      color: Colors.white,
-                                    ),
-                                    label: Text(
-                                      t.status == 'downloading' ? 'Pause' : 'Resume Download',
-                                      style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                                    ),
-                                    onPressed: () {
-                                      if (t.status == 'downloading') {
-                                        DownloadStore.I.pauseDownload(t.id);
-                                      } else {
-                                        DownloadStore.I.resumeDownload(t.id);
-                                      }
-                                    },
                                   ),
-                                if (isDone)
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.green,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    if (!isDone)
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: t.status == 'downloading' ? Colors.amber[800] : Colors.green,
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        icon: Icon(
+                                          t.status == 'downloading' ? Icons.pause : Icons.download_rounded,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                        label: Text(
+                                          t.status == 'downloading' ? 'Pause' : 'Resume Download',
+                                          style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                                        ),
+                                        onPressed: () {
+                                          if (t.status == 'downloading') {
+                                            DownloadStore.I.pauseDownload(t.id);
+                                          } else {
+                                            DownloadStore.I.resumeDownload(t.id);
+                                          }
+                                        },
+                                      ),
+                                    if (isDone)
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        icon: const Icon(Icons.play_arrow_rounded, size: 16, color: Colors.white),
+                                        label: const Text(
+                                          'Play Offline (No Ads)',
+                                          style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                                        ),
+                                        onPressed: () => openDownloadedMovieOffline(context, t),
+                                      ),
+                                    const Spacer(),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      onPressed: () => DownloadStore.I.removeDownload(t.id),
                                     ),
-                                    icon: const Icon(Icons.play_arrow_rounded, size: 16, color: Colors.white),
-                                    label: const Text(
-                                      'Play Offline (No Ads)',
-                                      style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                                    ),
-                                    onPressed: () => openDownloadedMovieOffline(context, t),
-                                  ),
-                                const Spacer(),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                  onPressed: () => DownloadStore.I.removeDownload(t.id),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
+          ),
+          const LiveDownloadNotificationBanner(),
+        ],
       ),
     );
   }
