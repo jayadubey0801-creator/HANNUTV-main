@@ -16,6 +16,7 @@ import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
 import 'tmdb_service.dart';
+import 'widgets.dart'; // 🔥 YEH IMPORT CHHUT GAYA THA 🔥
 import 'config.dart' show kAllGenres, GenreDef, kTmdbApiKey;
 
 const String kTmdbToken =
@@ -149,27 +150,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _checkAdBeforePlay() {
-    // Agar customUrl null nahi hai (LiveTV) toh usko ignore karein, ya phir uska logic alag hai.
-    // Hum Movie/Series ke play hone se pehle check karenge
     if (widget.customUrl != null) return;
     
     final now = DateTime.now();
     if (_lastAdShownTime == null || now.difference(_lastAdShownTime!) >= const Duration(minutes: 30)) {
       _lastAdShownTime = now;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Pura page load hone ke turant baad Ad Screen pe bhej do
-        // Note: Ye tarika user experience thoda ajeeb kar sakta hai ki page open hua aur turant ad khul gaya.
-        // Better ye hoga ki pichle page se hi Navigation ke time ad aaye, par tune "movie chalne se pehle" bola hai, toh yahan:
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => SkippableAdScreen(
-              nextScreen: const SizedBox.shrink(), // Dummy screen, as we will pop instead
+              nextScreen: const SizedBox.shrink(),
               adDuration: 30,
             ),
           ),
         ).then((_) {
-            // Ad skip hone ke baad wapas is page pe aayega.
         });
       });
     }
@@ -237,7 +232,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           setState(() {
             similarMovies = results.map((m) => {
               'id': m['id'], 'title': m['title'] ?? m['name'] ?? 'Unknown',
-              // Images ke liye original TMDB link
               'posterUrl': m['poster_path'] != null ? 'https://image.tmdb.org/t/p/w500${m['poster_path']}' : '',
               'rating': (m['vote_average'] ?? 0).toStringAsFixed(1),
               'year': (m['release_date'] ?? m['first_air_date'] ?? '').toString().split('-').first,
@@ -349,7 +343,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                        try { btn.click(); } catch(e) {} 
                    }
                 });
-              }, 150); // Speed increased for faster bypass
+              }, 150);
             ''';
             _controller.runJavaScript(jsCode);
           },
@@ -530,9 +524,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () async {
-                        Navigator.pop(context); // Close sheet
+                        Navigator.pop(context); 
                         
-                        // Calculate dummy real bytes for UI representation (approx mapping)
                         int estimatedBytes;
                         if (selectedQuality.contains('360')) estimatedBytes = 350 * 1024 * 1024;
                         else if (selectedQuality.contains('720')) estimatedBytes = 850 * 1024 * 1024;
@@ -544,7 +537,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                            poster = 'https://image.tmdb.org/t/p/w500${details!['poster_path']}';
                         }
 
-                        // Use original DownloadStore 
                         await DownloadStore.I.startDownload(
                           tmdbId: widget.tmdbId,
                           mediaType: widget.mediaType,
@@ -555,7 +547,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           serverName: activeServer,
                           language: selectedLang,
                           quality: selectedQuality,
-                          streamUrl: "https://pantyflix.com/dummy_download_link", // Needs actual extraction logic in production
+                          streamUrl: "https://pantyflix.com/dummy_download_link", 
                           estimatedBytes: estimatedBytes,
                           year: widget.year,
                           rating: widget.rating,
@@ -712,7 +704,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final List<List<Color>> zonePalette = [];
     for (final p in paths) {
       if (!mounted) return;
-      final Color? c = await _dominantColorFromUrl('https://image.tmdb.org/t/p/w300$p'); // Image TMDB server
+      final Color? c = await _dominantColorFromUrl('https://image.tmdb.org/t/p/w300$p');
       if (!mounted) return;
       final List<Color>? z = await _zoneColorsFromUrl('https://image.tmdb.org/t/p/w300$p');
       if (!mounted) return;
@@ -1382,7 +1374,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       return Scaffold(
         backgroundColor: Colors.black,
         body: GestureDetector(
-          // Vertical swipe to toggle fullscreen
           onVerticalDragUpdate: (details) {
             int sensitivity = 8;
             if (details.delta.dy > sensitivity || details.delta.dy < -sensitivity) {
@@ -1421,7 +1412,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               zones: _ambientZones,
               child: GestureDetector(
               onTap: _startControlsTimer,
-              // Vertical swipe for fullscreen trigger
               onVerticalDragUpdate: (details) {
                 int sensitivity = 8;
                 if (details.delta.dy < -sensitivity) {
@@ -1486,7 +1476,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                               },
                             ),
                             const SizedBox(width: 8),
-                            // 🔥 REAL DOWNLOAD BUTTON 🔥
                             _buildFocusableItem(
                               onTap: _showDownloadOptions,
                               borderRadius: BorderRadius.circular(20),
@@ -1516,18 +1505,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       const SizedBox(height: 10),
                       const Text("Sponsored Ads", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                       const SizedBox(height: 20),
                     ],
@@ -1723,7 +1700,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                 Navigator.pushReplacement(
                                   context, 
                                   MaterialPageRoute(builder: (context) => SkippableAdScreen(
-                                    adDuration: 10,
+                                    adDuration: 30,
                                     nextScreen: VideoPlayerPage(tmdbId: m['id'], mediaType: m['mediaType'], movieTitle: m['title'], rating: m['rating'], year: m['year'])
                                   ))
                                 ); 
