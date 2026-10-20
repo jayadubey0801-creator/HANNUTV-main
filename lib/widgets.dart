@@ -6,7 +6,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
-import 'package: shared_preferences/shared_preferences.dart' hide SharedPreferences;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -35,7 +34,7 @@ class DownloadTaskItem {
   final String language;
   final String quality;
   final String streamUrl;
-  final int totalBytes;
+  int totalBytes;
   int downloadedBytes;
   double progress; // 0.0 to 1.0
   String status; // 'downloading', 'paused', 'completed', 'failed'
@@ -146,7 +145,6 @@ class DownloadStore extends ChangeNotifier {
   static int calculateRealBytes({required int runtimeMinutes, required int bitrateKbps}) {
     final int safeRuntime = runtimeMinutes > 0 ? runtimeMinutes : 110;
     final int seconds = safeRuntime * 60;
-    // bytes = (kbps * 1000 / 8) * seconds
     return ((bitrateKbps * 1000 / 8) * seconds).round();
   }
 
@@ -240,7 +238,6 @@ class DownloadStore extends ChangeNotifier {
     final client = http.Client();
     _activeClients[task.id] = client;
 
-    // 1. Try real HTTP stream / segment byte capture to local storage
     File? outFile;
     try {
       final Directory tempDir = Directory.systemTemp;
@@ -249,7 +246,6 @@ class DownloadStore extends ChangeNotifier {
       task.localFilePath = outFile.path;
     } catch (_) {}
 
-    // 2. Probe actual Content-Length if direct MP4/MKV or HLS manifest is available
     try {
       if (task.streamUrl.startsWith('http') && !task.streamUrl.contains('pantyflix.com/watch')) {
         final headRes = await client.head(Uri.parse(task.streamUrl)).timeout(const Duration(seconds: 4));
@@ -260,7 +256,6 @@ class DownloadStore extends ChangeNotifier {
       }
     } catch (_) {}
 
-    // 3. Stream & chunk downloader with real-time bandwidth & notification % updates
     int lastTickBytes = task.downloadedBytes;
     _activeTimers[task.id] = Timer.periodic(const Duration(milliseconds: 650), (timer) async {
       if (task.status != 'downloading') {
@@ -268,8 +263,7 @@ class DownloadStore extends ChangeNotifier {
         return;
       }
 
-      // Fetch real stream chunks in background while updating byte counter
-      final int chunkSpeed = 2400000 + (DateTime.now().millisecond * 1850); // ~2.4 MB/s - 4.1 MB/s real stream rate
+      final int chunkSpeed = 2400000 + (DateTime.now().millisecond * 1850);
       task.downloadedBytes = (task.downloadedBytes + chunkSpeed).clamp(0, task.totalBytes);
       task.progress = (task.downloadedBytes / task.totalBytes).clamp(0.0, 1.0);
 

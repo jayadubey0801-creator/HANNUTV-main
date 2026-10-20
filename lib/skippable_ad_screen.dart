@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
 
 class SkippableAdScreen extends StatefulWidget {
@@ -10,7 +10,7 @@ class SkippableAdScreen extends StatefulWidget {
   const SkippableAdScreen({
     Key? key,
     required this.nextScreen,
-    this.adDuration = 30, // 30 second ka ad
+    this.adDuration = 30,
   }) : super(key: key);
 
   @override
@@ -19,7 +19,7 @@ class SkippableAdScreen extends StatefulWidget {
 
 class _SkippableAdScreenState extends State<SkippableAdScreen> {
   late int _timeLeft;
-  int _skipTimeLeft = 15; // 15 second tak skip hide rahega
+  int _skipTimeLeft = 15;
   bool _canSkip = false;
   bool _isAdblockDetected = false;
   bool _checking = false;
@@ -52,12 +52,12 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   void _startCountdown() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isAdblockDetected) return; 
+      if (_isAdblockDetected) return;
 
       if (_skipTimeLeft > 0) {
         if (mounted) setState(() => _skipTimeLeft--);
       } else if (!_canSkip) {
-         if (mounted) setState(() => _canSkip = true);
+        if (mounted) setState(() => _canSkip = true);
       }
 
       if (_timeLeft > 0) {
@@ -90,8 +90,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         final bool blocked = await _isDnsBlocked();
         if (blocked && mounted) {
           _triggerBlock();
-        } else {
-            _skipToNext(); // Agar Unity fail ho aur DNS theek ho, toh direct movie play
         }
       },
     );
@@ -108,16 +106,14 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
             a.address == '127.0.0.1' ||
             a.address == '::1' ||
             a.address == '::')) {
-          return true; 
+          return true;
         }
       } catch (_) {
         try {
           final google = await InternetAddress.lookup('google.com').timeout(const Duration(milliseconds: 900));
-          if (google.isNotEmpty) {
-            return true; 
-          }
+          if (google.isNotEmpty) return true;
         } catch (_) {
-          return false; 
+          return false;
         }
       }
     }
@@ -130,11 +126,10 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     try {
       final bool blocked = await _isDnsBlocked();
       if (!mounted) return;
-
       if (blocked && !_isAdblockDetected) {
         _triggerBlock();
       } else if (!blocked && _isAdblockDetected) {
-        _recover(); 
+        _recover();
       }
     } catch (_) {
     } finally {
@@ -146,7 +141,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     if (!mounted) return;
     setState(() {
       _isAdblockDetected = true;
-      _canSkip = false; 
+      _canSkip = false;
     });
   }
 
@@ -201,7 +196,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                     ],
                   ),
                 ),
-
               if (_isAdblockDetected)
                 Positioned.fill(
                   child: Container(
@@ -226,7 +220,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                     ),
                   ),
                 ),
-
               Positioned(
                 top: 15,
                 right: 15,
@@ -271,7 +264,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                   ),
                 ),
               ),
-
               Positioned(
                 bottom: 20,
                 left: 20,
@@ -279,7 +271,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(4)),
                   child: Text(
-                    "Ad closes in $_timeLeft",
+                    "Ad • 0:${_timeLeft.toString().padLeft(2, '0')}",
                     style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
