@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SkippableAdScreen extends StatefulWidget {
   final Widget nextScreen;
@@ -10,7 +11,7 @@ class SkippableAdScreen extends StatefulWidget {
   const SkippableAdScreen({
     Key? key,
     required this.nextScreen,
-    this.adDuration = 30,
+    this.adDuration = 15,
   }) : super(key: key);
 
   @override
@@ -18,18 +19,21 @@ class SkippableAdScreen extends StatefulWidget {
 }
 
 class _SkippableAdScreenState extends State<SkippableAdScreen> {
-  late int _timeLeft;
-  int _skipTimeLeft = 15;
+  bool _isLoadingAd = true;
+  int _loadWaitLeft = 10; // 10 second wait to load ad
+  int _skipTimeLeft = 15; // 15 second skip timer once ad starts
   bool _canSkip = false;
   bool _isAdblockDetected = false;
   bool _checking = false;
   bool _unityAdShowing = false;
   bool _navigated = false;
 
-  Timer? _timer;
+  Timer? _loadWaitTimer;
+  Timer? _skipTimer;
   Timer? _watchdog;
 
-  final String adUnitId = 'Interstitial_Android';
+  static const String kInterstitialId = 'BP_Interstitial_Android';
+  static const String kRewardedId = 'BP_Rewarded_Android';
 
   static const List<String> _adDomains = [
     'unityads.unity3d.com',
@@ -40,49 +44,52 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   @override
   void initState() {
     super.initState();
-    _timeLeft = widget.adDuration;
-
     _runBlockCheck();
     _watchdog = Timer.periodic(const Duration(seconds: 1), (_) => _runBlockCheck());
-
-    _startCountdown();
-    _loadUnityAd();
+    _start10SecAdLoadPhase();
   }
 
-  void _startCountdown() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+  void _start10SecAdLoadPhase() {
+    _loadWaitTimer?.cancel();
+    _isLoadingAd = true;
+    _loadWaitLeft = 10;
+
+    _requestUnityAd();
+
+    _loadWaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_isAdblockDetected) return;
 
-      if (_skipTimeLeft > 0) {
-        if (mounted) setState(() => _skipTimeLeft--);
-      } else if (!_canSkip) {
-        if (mounted) setState(() => _canSkip = true);
-      }
-
-      if (_timeLeft > 0) {
-        if (mounted) setState(() => _timeLeft--);
+      if (_loadWaitLeft > 1) {
+        setState(() => _loadWaitLeft--);
       } else {
-        _skipToNext();
+        timer.cancel();
+        if (_isLoadingAd) {
+          _onAdStartedPlaying();
+        }
       }
     });
   }
 
-  void _loadUnityAd() {
+  void _requestUnityAd() {
     if (_isAdblockDetected) return;
 
     UnityAds.load(
-      placementId: adUnitId,
+      placementId: kInterstitialId,
       onComplete: (placementId) {
         if (!mounted || _isAdblockDetected || _unityAdShowing) return;
         _unityAdShowing = true;
+        _onAdStartedPlaying();
         UnityAds.showVideoAd(
-          placementId: adUnitId,
+          placementId: kInterstitialId,
           onComplete: (placementId) => _skipToNext(),
           onSkipped: (placementId) => _skipToNext(),
           onFailed: (placementId, error, message) {
             _unityAdShowing = false;
-            _runBlockCheck();
+            _tryFallbackRewardedAd();
           },
         );
       },
@@ -90,9 +97,61 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         final bool blocked = await _isDnsBlocked();
         if (blocked && mounted) {
           _triggerBlock();
+        } else {
+          _tryFallbackRewardedAd();
         }
       },
     );
+  }
+
+  void _tryFallbackRewardedAd() {
+    if (_isAdblockDetected || !mounted) return;
+    UnityAds.load(
+      placementId: kRewardedId,
+      onComplete: (placementId) {
+        if (!mounted || _isAdblockDetected || _unityAdShowing) return;
+        _unityAdShowing = true;
+        _onAdStartedPlaying();
+        UnityAds.showVideoAd(
+          placementId: kRewardedId,
+          onComplete: (placementId) => _skipToNext(),
+          onSkipped: (placementId) => _skipToNext(),
+          onFailed: (placementId, error, message) {
+            _unityAdShowing = false;
+          },
+        );
+      },
+      onFailed: (placementId, error, message) {},
+    );
+  }
+
+  void _onAdStartedPlaying() {
+    if (!mounted) return;
+    _loadWaitTimer?.cancel();
+    setState(() {
+      _isLoadingAd = false;
+      _skipTimeLeft = 15;
+      _canSkip = false;
+    });
+
+    _skipTimer?.cancel();
+    _skipTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_isAdblockDetected) return;
+
+      if (_skipTimeLeft > 1) {
+        setState(() => _skipTimeLeft--);
+      } else {
+        setState(() {
+          _skipTimeLeft = 0;
+          _canSkip = true;
+        });
+        timer.cancel(); // No 30s cutoff! Ad stays active until finished or user clicks Skip Ad
+      }
+    });
   }
 
   Future<bool> _isDnsBlocked() async {
@@ -149,12 +208,9 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     if (!mounted) return;
     setState(() {
       _isAdblockDetected = false;
-      _timeLeft = widget.adDuration;
-      _skipTimeLeft = 15;
       _canSkip = false;
     });
-    _startCountdown();
-    _loadUnityAd();
+    _start10SecAdLoadPhase();
   }
 
   void _skipToNext() {
@@ -166,9 +222,17 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     );
   }
 
+  Future<void> _openSponsorSite() async {
+    final Uri uri = Uri.parse('https://play.google.com/store/apps');
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
-    _timer?.cancel();
+    _loadWaitTimer?.cancel();
+    _skipTimer?.cancel();
     _watchdog?.cancel();
     super.dispose();
   }
@@ -184,16 +248,45 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
             children: [
               if (!_isAdblockDetected)
                 Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      CircularProgressIndicator(color: Colors.redAccent),
-                      SizedBox(height: 20),
-                      Text(
-                        "Loading Advertisement...",
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
+                        const SizedBox(height: 20),
+                        Text(
+                          _isLoadingAd
+                              ? "Loading Advertisement (${_loadWaitLeft}s)..."
+                              : "Sponsored Video Advertisement Playing",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 18),
+                        GestureDetector(
+                          onTap: _openSponsorSite,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1A1A26),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.amber.withOpacity(0.6)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.open_in_new_rounded, color: Colors.amber, size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  "Visit Advertiser Website / Play Store",
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               if (_isAdblockDetected)
@@ -224,20 +317,22 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                 top: 15,
                 right: 15,
                 child: GestureDetector(
-                  onTap: (_canSkip && !_isAdblockDetected) ? _skipToNext : null,
+                  onTap: (_canSkip && !_isAdblockDetected && !_isLoadingAd) ? _skipToNext : null,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                     decoration: BoxDecoration(
-                      color: (_canSkip && !_isAdblockDetected) ? Colors.white : Colors.black.withOpacity(0.8),
+                      color: (_canSkip && !_isAdblockDetected && !_isLoadingAd)
+                          ? Colors.white
+                          : Colors.black.withOpacity(0.85),
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(
-                        color: (_canSkip && !_isAdblockDetected) ? Colors.white : Colors.grey,
+                        color: (_canSkip && !_isAdblockDetected && !_isLoadingAd) ? Colors.white : Colors.grey,
                       ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_isAdblockDetected) ...[
+                        if (_isAdblockDetected || _isLoadingAd) ...[
                           const SizedBox(
                             width: 14,
                             height: 14,
@@ -248,14 +343,16 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                         Text(
                           _isAdblockDetected
                               ? "Loading..."
-                              : (_canSkip ? "Skip Ad" : "Skip in $_skipTimeLeft"),
+                              : (_isLoadingAd
+                                  ? "Loading Ad..."
+                                  : (_canSkip ? "Skip Ad" : "Skip in $_skipTimeLeft")),
                           style: TextStyle(
-                            color: (_canSkip && !_isAdblockDetected) ? Colors.black : Colors.white,
+                            color: (_canSkip && !_isAdblockDetected && !_isLoadingAd) ? Colors.black : Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
                         ),
-                        if (_canSkip && !_isAdblockDetected) ...[
+                        if (_canSkip && !_isAdblockDetected && !_isLoadingAd) ...[
                           const SizedBox(width: 8),
                           const Icon(Icons.skip_next, color: Colors.black, size: 20),
                         ]
@@ -270,9 +367,9 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(4)),
-                  child: Text(
-                    "Ad • 0:${_timeLeft.toString().padLeft(2, '0')}",
-                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
+                  child: const Text(
+                    "Sponsored Ad",
+                    style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ),

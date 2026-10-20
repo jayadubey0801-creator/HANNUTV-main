@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
 
 class CustomBannerAd extends StatefulWidget {
-  final String htmlBannerCode; // Purane references break na hon isliye rakha hai
+  final String htmlBannerCode;
 
   const CustomBannerAd({Key? key, required this.htmlBannerCode}) : super(key: key);
 
@@ -14,21 +14,46 @@ class CustomBannerAd extends StatefulWidget {
 
 class _CustomBannerAdState extends State<CustomBannerAd> {
   bool _isAdblockDetected = false;
+  bool _isOffline = false;
+  int _retryKey = 0;
   Timer? _watchdog;
+
+  // Exact Unity Placement ID from Dashboard
+  static const String kUnityBannerPlacementId = 'BP_Banner_Android';
 
   static const List<String> _adDomains = [
     'unityads.unity3d.com',
     'config.unityads.unity3d.com',
+    'webview.unityads.unity3d.com',
   ];
 
   @override
   void initState() {
     super.initState();
     _checkDeepBannerAdblock();
-    _watchdog = Timer.periodic(const Duration(seconds: 5), (_) => _checkDeepBannerAdblock());
+    _watchdog = Timer.periodic(const Duration(seconds: 4), (_) => _checkDeepBannerAdblock());
   }
 
   Future<void> _checkDeepBannerAdblock() async {
+    // First check if internet is available at all
+    bool netAvailable = false;
+    try {
+      final g = await InternetAddress.lookup('google.com').timeout(const Duration(milliseconds: 900));
+      if (g.isNotEmpty) netAvailable = true;
+    } catch (_) {
+      netAvailable = false;
+    }
+
+    if (!netAvailable) {
+      if (mounted && (!_isOffline || _isAdblockDetected)) {
+        setState(() {
+          _isOffline = true;
+          _isAdblockDetected = false;
+        });
+      }
+      return;
+    }
+
     bool isBlocked = false;
     for (final host in _adDomains) {
       try {
@@ -44,19 +69,15 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
           }
         }
         if (isBlocked) break;
-      } catch (e) {
-        try {
-          final googleCheck = await InternetAddress.lookup('google.com').timeout(const Duration(milliseconds: 900));
-          if (googleCheck.isNotEmpty) {
-            isBlocked = true;
-            break;
-          }
-        } catch (_) {}
+      } catch (_) {
+        isBlocked = true;
+        break;
       }
     }
 
-    if (mounted && isBlocked != _isAdblockDetected) {
+    if (mounted && (isBlocked != _isAdblockDetected || _isOffline)) {
       setState(() {
+        _isOffline = false;
         _isAdblockDetected = isBlocked;
       });
     }
@@ -70,14 +91,18 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isOffline) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       width: double.infinity,
       height: 55,
-      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: const Color(0xFF12121A),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(color: Colors.white12),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
@@ -93,14 +118,19 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
                 ),
               )
             : Center(
-                // 🔥 ONLY UNITY BANNER HERE 🔥
                 child: UnityBannerAd(
-                  placementId: 'Banner_Android',
-                  onLoad: (placementId) => debugPrint('Banner loaded: $placementId'),
-                  onClick: (placementId) => debugPrint('Banner clicked: $placementId'),
+                  key: ValueKey('unity_banner_$_retryKey'),
+                  placementId: kUnityBannerPlacementId,
+                  onLoad: (placementId) => debugPrint('Unity Banner loaded: $placementId'),
+                  onClick: (placementId) => debugPrint('Unity Banner clicked: $placementId'),
                   onFailed: (placementId, error, message) {
-                    debugPrint('Banner Ad failed: $error $message');
+                    debugPrint('Unity Banner failed: $error $message');
                     _checkDeepBannerAdblock();
+                    Future.delayed(const Duration(seconds: 6), () {
+                      if (mounted && !_isAdblockDetected && !_isOffline) {
+                        setState(() => _retryKey++);
+                      }
+                    });
                   },
                 ),
               ),
