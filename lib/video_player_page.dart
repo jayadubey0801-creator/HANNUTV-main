@@ -3451,7 +3451,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const Spacer,
+                const Spacer(),
                 Icon(
                   descExpanded
                       ? Icons.keyboard_arrow_up
