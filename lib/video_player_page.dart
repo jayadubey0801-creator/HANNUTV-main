@@ -79,8 +79,12 @@ class VideoPlayerPage extends StatefulWidget {
 class _VideoPlayerPageState extends State<VideoPlayerPage>
     with SingleTickerProviderStateMixin {
   late WebViewController _controller;
-  // 🔥 GLOBAL KEY TO KEEP WEBVIEW SURFACE ALIVE DURING PORTRAIT <-> LANDSCAPE ROTATION 🔥
+
+  // Persistent GlobalKey so WebView never unmounts or turns black on Portrait <-> Landscape rotation
   final GlobalKey _webViewSurfaceKey = GlobalKey();
+
+  // Local Loopback HTTP Server for 100% Genuine Offline Video Playback inside WebView
+  HttpServer? _offlineLoopbackServer;
 
   bool isVideoPlaying = false;
   bool isFullScreen = false;
@@ -89,6 +93,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   String activeServer = 'vidrift';
   String currentAspectRatio = 'contain';
   String _sniffedStreamUrl = '';
+  String _currentProxyTargetUrl = '';
+  final List<String> _detectedServerAudioTracks = <String>[];
+  final List<String> _detectedServerQualities = <String>[];
 
   late int currentSeason;
   late int currentEpisode;
@@ -97,7 +104,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool showControls = true;
   Timer? _hideControlsTimer;
 
-  // 🔥 YOUTUBE-STYLE IN-PLAYER AD: 10s LOAD WAIT -> 15s SKIP -> NO 30s CUTOFF -> 0.2s PRE-BUFFER PAUSE 🔥
+  // YouTube-Style In-Player Ad Engine (100% Inside Player Box — Never Opens a 2nd Android Tab!)
   bool _isShowingInPlayerAd = true;
   bool _isAdLoadingWait = true;
   int _adLoadWaitSeconds = 10;
@@ -106,14 +113,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool _canSkipInPlayerAd = false;
   bool _isAdblockDetected = false;
   bool _checkingDns = false;
-  bool _unityVideoShowing = false;
   Timer? _adLoadWaitTimer;
   Timer? _inPlayerAdTimer;
   Timer? _thirtyMinAdCycleTimer;
   Timer? _dnsWatchdogTimer;
   Timer? _backgroundMuteGuardTimer;
 
-  // Exact Unity Placement IDs from Dashboard
+  // Exact Unity Placement IDs & Game ID
   static const String kUnityGameId = '800405137';
   static const String kUnityInterstitialId = 'BP_Interstitial_Android';
   static const String kUnityRewardedId = 'BP_Rewarded_Android';
@@ -125,19 +131,31 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     'webview.unityads.unity3d.com',
   ];
 
-  // Sponsored Advertiser Companion Links (YouTube-style below player & on ad)
+  // YouTube-Style Advertiser Campaigns with Full Visible URL & Direct Play Store / Browser Redirect
   final List<Map<String, String>> _sponsors = const [
     {
-      'title': 'Google Play Store • Top Trending Apps & Games',
+      'title': 'Color Water Sort Puzzle • 3D Brain Game',
+      'subtitle': 'Play the #1 Trending Bottle Sort Game on Android',
       'domain': 'play.google.com',
+      'fullUrl': 'https://play.google.com/store/apps/details?id=com.IEC.WaterSort',
       'cta': 'Install Now',
-      'url': 'https://play.google.com/store/apps',
+      'badge': 'Google Play • 4.7 ★ FREE',
     },
     {
-      'title': 'HANNUTV Official Partner • High Speed Streaming',
+      'title': 'Google Play Store • Top Action & Racing Games',
+      'subtitle': 'Download Official Trending Games & Apps Instantly',
+      'domain': 'play.google.com',
+      'fullUrl': 'https://play.google.com/store/apps/category/GAME',
+      'cta': 'Open Play Store',
+      'badge': 'Google Play • Official Store',
+    },
+    {
+      'title': 'HANNUTV Official Partner • 4K Ultra Streaming',
+      'subtitle': 'Get Latest Updates, Live TV & High-Speed Links',
       'domain': 'hannutv.blogspot.com',
-      'cta': 'Visit Site',
-      'url': 'https://hannutv.blogspot.com',
+      'fullUrl': 'https://hannutv.blogspot.com',
+      'cta': 'Visit Website',
+      'badge': 'Official Sponsor • Verified',
     },
   ];
   int _activeSponsorIdx = 0;
@@ -199,7 +217,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
     if (widget.isOfflineDownload) {
-      // 🔥 OFFLINE DOWNLOAD PLAYBACK: NO VIDEO ADS AT ALL! 🔥
+      // Offline mode: Zero video ads
       _isShowingInPlayerAd = false;
       _isAdLoadingWait = false;
     } else {
@@ -233,7 +251,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 🔥 10s AD LOAD WAIT + 15s SKIP + 0.2s BACKGROUND PRE-BUFFER PAUSE 🔥
+  // 🔥 IN-PLAYER YOUTUBE-STYLE AD ENGINE (STAYS IN PLAYER BOX, NO 2ND TAB!) 🔥
   // ───────────────────────────────────────────────────────────────────────────
 
   Future<bool> _isDnsBlocked() async {
@@ -293,24 +311,25 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _inPlayerAdTimer?.cancel();
 
     setState(() {
+      _activeSponsorIdx = Random().nextInt(_sponsors.length);
       _isShowingInPlayerAd = true;
       _isAdLoadingWait = true;
       _adLoadWaitSeconds = 10; // 10-second loading wait
-      _adSkipTimeLeft = 15; // 15-second skip countdown once ad starts
+      _adSkipTimeLeft = 15; // 15-second skip timer once ad starts
       _adElapsedSeconds = 0;
       _canSkipInPlayerAd = false;
     });
 
     // Continuously enforce 0.2s pre-buffer + mute/pause while ad is on screen
     _backgroundMuteGuardTimer?.cancel();
-    _backgroundMuteGuardTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+    _backgroundMuteGuardTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
       if (_isShowingInPlayerAd && mounted) {
         _enforceBackgroundPrebufferPause();
       }
     });
 
-    // Request Unity Ad immediately
-    _loadAndShowUnityAd();
+    // Preload Unity Ad in-memory (WITHOUT launching external 2nd Android Activity tab!)
+    _preloadInPlayerUnityAd();
 
     // 10-second wait timer for ad loading
     _adLoadWaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -331,63 +350,27 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     });
   }
 
-  void _loadAndShowUnityAd() {
-    if (_isAdblockDetected || _unityVideoShowing || widget.isOfflineDownload) return;
+  /// Preloads Unity placement & transitions directly into the in-player ad overlay
+  /// (Never calls UnityAds.showVideoAd so it NEVER opens a 2nd Android Activity/Tab!)
+  void _preloadInPlayerUnityAd() {
+    if (_isAdblockDetected || widget.isOfflineDownload) return;
     try {
       UnityAds.load(
         placementId: kUnityInterstitialId,
         onComplete: (placementId) {
-          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityVideoShowing) return;
-          _unityVideoShowing = true;
+          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected) return;
           _startAdPlaybackAnd15SecSkipTimer();
-          UnityAds.showVideoAd(
-            placementId: kUnityInterstitialId,
-            onComplete: (placementId) {
-              _unityVideoShowing = false;
-              _finishInPlayerAd();
-            },
-            onSkipped: (placementId) {
-              _unityVideoShowing = false;
-              _finishInPlayerAd();
-            },
-            onFailed: (placementId, error, message) {
-              _unityVideoShowing = false;
-              _tryUnityRewardedFallback();
-            },
-          );
         },
         onFailed: (placementId, error, message) {
-          _tryUnityRewardedFallback();
-        },
-      );
-    } catch (_) {}
-  }
-
-  void _tryUnityRewardedFallback() {
-    if (_isAdblockDetected || _unityVideoShowing || !mounted || !_isShowingInPlayerAd) return;
-    try {
-      UnityAds.load(
-        placementId: kUnityRewardedId,
-        onComplete: (placementId) {
-          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityVideoShowing) return;
-          _unityVideoShowing = true;
-          _startAdPlaybackAnd15SecSkipTimer();
-          UnityAds.showVideoAd(
+          UnityAds.load(
             placementId: kUnityRewardedId,
-            onComplete: (placementId) {
-              _unityVideoShowing = false;
-              _finishInPlayerAd();
+            onComplete: (id) {
+              if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected) return;
+              _startAdPlaybackAnd15SecSkipTimer();
             },
-            onSkipped: (placementId) {
-              _unityVideoShowing = false;
-              _finishInPlayerAd();
-            },
-            onFailed: (placementId, error, message) {
-              _unityVideoShowing = false;
-            },
+            onFailed: (id, err, msg) {},
           );
         },
-        onFailed: (placementId, error, message) {},
       );
     } catch (_) {}
   }
@@ -418,7 +401,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         } else {
           _adSkipTimeLeft = 0;
           _canSkipInPlayerAd = true;
-          // No 30-second forced cutoff! Ad keeps running until user taps Skip Ad or Unity finishes
         }
       });
     });
@@ -436,7 +418,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _unmuteAndResumeMovieInstantly();
   }
 
-  /// Lets movie pre-buffer to 0.2s in background and immediately mutes & pauses it so zero sound leaks during ad
+  /// Pre-buffers movie to 0.2s in background and mutes/pauses both video elements & cross-origin iframes
   void _enforceBackgroundPrebufferPause() {
     try {
       _controller.runJavaScript('''
@@ -451,11 +433,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             }
           } catch(e) {}
         });
+        var ifs = document.querySelectorAll('iframe');
+        ifs.forEach(function(f) {
+          try {
+            f.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'mute', args: []}), '*');
+            f.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'pauseVideo', args: []}), '*');
+            f.contentWindow.postMessage(JSON.stringify({method: 'setVolume', value: 0}), '*');
+            f.contentWindow.postMessage(JSON.stringify({method: 'pause'}), '*');
+            f.contentWindow.postMessage('pause', '*');
+          } catch(e) {}
+        });
       ''');
     } catch (_) {}
   }
 
-  /// Instantly unmutes & plays the pre-buffered movie the moment Skip Ad is pressed
+  /// Instantly unmutes & resumes the pre-buffered movie when Skip Ad is tapped
   void _unmuteAndResumeMovieInstantly() {
     try {
       _controller.runJavaScript('''
@@ -468,6 +460,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             v.play();
           } catch(e) {}
         });
+        var ifs = document.querySelectorAll('iframe');
+        ifs.forEach(function(f) {
+          try {
+            f.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'unMute', args: []}), '*');
+            f.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'playVideo', args: []}), '*');
+            f.contentWindow.postMessage(JSON.stringify({method: 'setVolume', value: 1}), '*');
+            f.contentWindow.postMessage(JSON.stringify({method: 'play'}), '*');
+            f.contentWindow.postMessage('play', '*');
+          } catch(e) {}
+        });
         var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
         if (playBtns.length > 0) {
           try { playBtns[0].click(); } catch(e) {}
@@ -476,8 +478,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
-  Future<void> _openSponsorWebsite() async {
-    final String url = _sponsors[_activeSponsorIdx]['url'] ?? 'https://play.google.com/store/apps';
+  Future<void> _openSponsorWebsite([String? customLink]) async {
+    final String url = customLink ??
+        _sponsors[_activeSponsorIdx]['fullUrl'] ??
+        'https://play.google.com/store/apps';
     final Uri? u = Uri.tryParse(url);
     if (u == null) return;
     try {
@@ -485,127 +489,172 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
+  /// In-Player YouTube-Style Ad Overlay — Automatically adjusts between Portrait (230px) & Fullscreen!
   Widget _buildYouTubeInPlayerAdOverlay() {
     if (widget.isOfflineDownload) return const SizedBox.shrink();
     if (!_isShowingInPlayerAd && !_isAdblockDetected) return const SizedBox.shrink();
 
     final sponsor = _sponsors[_activeSponsorIdx];
+    final bool full = isFullScreen || isTvDevice;
 
     return Positioned.fill(
       child: Container(
-        color: Colors.black,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0B0C14), Color(0xFF161426), Color(0xFF0A0A10)],
+          ),
+        ),
         child: Stack(
           children: [
-            // Center Content: 10s Loading Wait OR Active Unity Ad + Interactive Sponsor Card
+            // Center Content: 10s Loading Wait OR Active In-Player Ad (Adjusts automatically on Fullscreen!)
             if (!_isAdblockDetected)
               Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_isAdLoadingWait) ...[
-                        const SizedBox(
-                          width: 34,
-                          height: 34,
-                          child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          "Loading High-Speed Ad (${_adLoadWaitSeconds}s)...",
-                          style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          "Pre-buffering movie (0.2s) for instant zero-lag playback...",
-                          style: TextStyle(color: Colors.white54, fontSize: 11),
-                        ),
-                      ] else ...[
-                        SizedBox(
-                          height: 55,
-                          width: 320,
-                          child: UnityBannerAd(
-                            placementId: kUnityBannerId,
-                            onLoad: (id) => debugPrint('In-Player Ad Banner loaded: $id'),
-                            onClick: (id) => _openSponsorWebsite(),
-                            onFailed: (id, err, msg) => debugPrint('In-Player Ad Banner failed: $err $msg'),
+                child: SingleChildScrollView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: full ? 36 : 12,
+                      vertical: full ? 24 : 6,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isAdLoadingWait) ...[
+                          SizedBox(
+                            width: full ? 44 : 32,
+                            height: full ? 44 : 32,
+                            child: const CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        GestureDetector(
-                          onTap: _openSponsorWebsite,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF1F1C2C), Color(0xFF2B2740)],
+                          const SizedBox(height: 10),
+                          Text(
+                            "Loading High-Speed Ad (${_adLoadWaitSeconds}s)...",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: full ? 16 : 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Pre-buffering movie (0.2s) for instant zero-lag playback...",
+                            style: TextStyle(color: Colors.white54, fontSize: full ? 12.5 : 10.5),
+                          ),
+                        ] else ...[
+                          // Live Embedded Unity Ad Slot inside Player
+                          SizedBox(
+                            height: full ? 60 : 50,
+                            width: 320,
+                            child: CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                          ),
+                          SizedBox(height: full ? 14 : 6),
+                          // Interactive YouTube-Style Full URL Game/Website Card
+                          GestureDetector(
+                            onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
+                            child: Container(
+                              constraints: BoxConstraints(maxWidth: full ? 540 : 360),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: full ? 18 : 12,
+                                vertical: full ? 12 : 8,
                               ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.amber.withOpacity(0.65)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(7),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.withOpacity(0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.public, color: Colors.amber, size: 18),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF1F1C2C), Color(0xFF2B2740)],
                                 ),
-                                const SizedBox(width: 10),
-                                Flexible(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        sponsor['title']!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.amber.withOpacity(0.75), width: 1.2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: EdgeInsets.all(full ? 10 : 7),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.sports_esports_rounded,
+                                      color: Colors.amber,
+                                      size: full ? 24 : 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Flexible(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          sponsor['title']!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: full ? 14.5 : 11.5,
+                                          ),
                                         ),
-                                      ),
-                                      Text(
-                                        'Sponsored • ${sponsor['domain']}',
-                                        style: const TextStyle(color: Colors.amber, fontSize: 10.5),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          sponsor['fullUrl']!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.amber,
+                                            fontSize: full ? 11.5 : 9.5,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        sponsor['cta']!,
-                                        style: const TextStyle(
+                                  const SizedBox(width: 10),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: full ? 14 : 10,
+                                      vertical: full ? 8 : 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          sponsor['cta']!,
+                                          style: TextStyle(
+                                            color: Colors.black,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: full ? 12.5 : 10.5,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.open_in_new_rounded,
                                           color: Colors.black,
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 11,
+                                          size: full ? 15 : 12,
                                         ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Icon(Icons.open_in_new_rounded, color: Colors.black, size: 13),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -638,7 +687,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
             // Top-Left YouTube-style "Ad" Status Badge
             Positioned(
-              top: 10,
+              top: full ? 14 : 8,
               left: 12,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -670,67 +719,103 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               ),
             ),
 
-            // Bottom-Left Direct Website Link Button (YouTube Style)
+            // Bottom-Left Full Clickable Advertiser URL Pill (YouTube Style)
             if (!_isAdLoadingWait && !_isAdblockDetected)
               Positioned(
-                bottom: 16,
+                bottom: full ? 20 : 12,
                 left: 12,
-                child: GestureDetector(
-                  onTap: _openSponsorWebsite,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.82),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.white30),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.launch_rounded, color: Colors.amber, size: 14),
-                        const SizedBox(width: 5),
-                        Text(
-                          sponsor['domain']!,
-                          style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                      ],
+                right: 135,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: GestureDetector(
+                    onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.amber.withOpacity(0.55)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.launch_rounded, color: Colors.amber, size: 13),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              sponsor['fullUrl']!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
 
-            // Top-Right HANNUTV Logo (Rotates fullscreen on tap)
+            // Top-Right Fullscreen Expand/Collapse + HANNUTV Logo inside Ad Overlay
             Positioned(
-              top: 10,
-              right: 14,
-              child: GestureDetector(
-                onTap: _toggleFullScreen,
-                child: Opacity(
-                  opacity: 0.88,
-                  child: Image.asset(
-                    'assets/logo.png',
-                    height: 30,
-                    errorBuilder: (_, __, ___) => const Text(
-                      'HANNUTV',
-                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14),
+              top: full ? 14 : 8,
+              right: 12,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: _toggleFullScreen,
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Icon(
+                        full ? Icons.fullscreen_exit : Icons.fullscreen,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                     ),
                   ),
-                ),
+                  GestureDetector(
+                    onTap: _toggleFullScreen,
+                    child: Opacity(
+                      opacity: 0.9,
+                      child: Image.asset(
+                        'assets/logo.png',
+                        height: 28,
+                        errorBuilder: (_, __, ___) => const Text(
+                          'HANNUTV',
+                          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 
             // Bottom-Right YouTube-Style 15s Skip Button
             Positioned(
-              bottom: 16,
+              bottom: full ? 20 : 12,
               right: 12,
               child: GestureDetector(
-                onTap: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait) ? _finishInPlayerAd : null,
+                onTap: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
+                    ? _finishInPlayerAd
+                    : null,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
                         ? Colors.white
-                        : Colors.black.withOpacity(0.85),
+                        : Colors.black.withOpacity(0.88),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
@@ -754,19 +839,19 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         _isAdblockDetected
                             ? "Loading..."
                             : (_isAdLoadingWait
-                                ? "Loading Ad..."
+                                ? "Loading Ad (${_adLoadWaitSeconds}s)"
                                 : (_canSkipInPlayerAd ? "Skip Ad" : "Skip in $_adSkipTimeLeft")),
                         style: TextStyle(
                           color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
                               ? Colors.black
                               : Colors.white,
                           fontWeight: FontWeight.w800,
-                          fontSize: 13,
+                          fontSize: 12.5,
                         ),
                       ),
                       if (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait) ...[
-                        const SizedBox(width: 6),
-                        const Icon(Icons.skip_next_rounded, color: Colors.black, size: 18),
+                        const SizedBox(width: 5),
+                        const Icon(Icons.skip_next_rounded, color: Colors.black, size: 17),
                       ],
                     ],
                   ),
@@ -792,11 +877,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  /// YouTube-Style Advertiser Website / Play Store Companion Banner next to Description
+  /// YouTube-Style Advertiser Companion Card Below Player with Full Visible URL & Direct Redirect
   Widget _buildYouTubeSponsorCompanionCard() {
     final sponsor = _sponsors[_activeSponsorIdx];
     return GestureDetector(
-      onTap: _openSponsorWebsite,
+      onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
       child: Container(
         width: double.infinity,
         margin: const EdgeInsets.only(bottom: 14),
@@ -830,11 +915,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                   ),
+                  const SizedBox(height: 2),
                   Text(
-                    'Tap to visit ${sponsor['domain']} in browser / Play Store',
+                    sponsor['fullUrl']!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white60, fontSize: 11),
+                    style: const TextStyle(
+                      color: Colors.amber,
+                      fontSize: 11,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
                 ],
               ),
@@ -979,6 +1069,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       isPageLoading = true;
       isVideoPlaying = false;
       showIntroAnimation = false;
+      _detectedServerAudioTracks.clear();
+      _detectedServerQualities.clear();
     });
 
     _controller = WebViewController()
@@ -997,20 +1089,60 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           if (_isShowingInPlayerAd) _enforceBackgroundPrebufferPause();
         } else if (msg.startsWith('stream:') && mounted) {
           final String url = msg.substring(7).trim();
-          if (url.isNotEmpty) _sniffedStreamUrl = url;
+          if (url.isNotEmpty && url.startsWith('http')) {
+            _sniffedStreamUrl = url;
+          }
+        } else if (msg.startsWith('audio:') && mounted) {
+          final String track = msg.substring(6).trim();
+          if (track.isNotEmpty && !_detectedServerAudioTracks.contains(track)) {
+            setState(() => _detectedServerAudioTracks.add(track));
+          }
+        } else if (msg.startsWith('quality:') && mounted) {
+          final String q = msg.substring(8).trim();
+          if (q.isNotEmpty && !_detectedServerQualities.contains(q)) {
+            setState(() => _detectedServerQualities.add(q));
+          }
         }
       })
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
             if (mounted) setState(() => isPageLoading = true);
-            _controller.runJavaScript('''
-              window.__hannuAdActive = ${_isShowingInPlayerAd ? 'true' : 'false'};
-              window.open = function() { return null; };
-              window.alert = function() { return null; };
-              window.confirm = function() { return false; };
-              window.prompt = function() { return null; };
-            ''');
+            if (!widget.isOfflineDownload) {
+              _controller.runJavaScript('''
+                window.__hannuAdActive = ${_isShowingInPlayerAd ? 'true' : 'false'};
+                window.open = function() { return null; };
+                window.alert = function() { return null; };
+                window.confirm = function() { return false; };
+                window.prompt = function() { return null; };
+
+                // Deep XHR & Fetch Stream Sniffer for Active Server
+                (function() {
+                  if (window.__hannuSnifferInstalled) return;
+                  window.__hannuSnifferInstalled = true;
+                  function checkStreamUrl(u) {
+                    if (!u || typeof u !== 'string') return;
+                    if (u.indexOf('.m3u8') !== -1 || u.indexOf('.mp4') !== -1 || u.indexOf('/master.') !== -1 || u.indexOf('index.m3u8') !== -1) {
+                      if (u.startsWith('http')) {
+                        try { VideoState.postMessage('stream:' + u); } catch(e) {}
+                      }
+                    }
+                  }
+                  var origFetch = window.fetch;
+                  if (origFetch) {
+                    window.fetch = function() {
+                      try { checkStreamUrl(arguments[0] && arguments[0].url ? arguments[0].url : arguments[0]); } catch(e) {}
+                      return origFetch.apply(this, arguments);
+                    };
+                  }
+                  var origOpen = XMLHttpRequest.prototype.open;
+                  XMLHttpRequest.prototype.open = function(method, url) {
+                    try { checkStreamUrl(url); } catch(e) {}
+                    return origOpen.apply(this, arguments);
+                  };
+                })();
+              ''');
+            }
           },
           onPageFinished: (String url) {
             Future.delayed(const Duration(milliseconds: 500), () {
@@ -1023,6 +1155,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
             String jsCode = '''
               window.__hannuAdActive = ${_isShowingInPlayerAd ? 'true' : 'false'};
+              window.__hannuPrebufferClicked = false;
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
               
@@ -1091,7 +1224,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     VideoState.postMessage('stream:' + v.src);
                   }
 
-                  // 🔥 0.2s PRE-BUFFER & AUTO-PAUSE WHILE AD IS ACTIVE 🔥
+                  // Inspect HTML5 audioTracks & videoHeight if exposed by player
+                  try {
+                    if (v.audioTracks && v.audioTracks.length > 0) {
+                      for (var ai = 0; ai < v.audioTracks.length; ai++) {
+                        var at = v.audioTracks[ai];
+                        var label = at.label || at.language || '';
+                        if (label) VideoState.postMessage('audio:' + label);
+                      }
+                    }
+                    if (v.videoHeight && v.videoHeight > 0) {
+                      VideoState.postMessage('quality:' + v.videoHeight + 'p');
+                    }
+                  } catch(e) {}
+
+                  // 0.2s Pre-Buffer & Auto-Pause while Ad is active
                   if (window.__hannuAdActive) {
                     v.muted = true;
                     v.volume = 0;
@@ -1105,9 +1252,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
                 }
                 
-                if (!window.__hannuAdActive) {
+                // Click play once to start 0.2s pre-buffer, then do not click play again until ad finishes
+                if (!window.__hannuPrebufferClicked || !window.__hannuAdActive) {
                   var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
                   if (playBtns.length > 0) {
+                      window.__hannuPrebufferClicked = true;
                       playBtns[0].click();
                   }
                 }
@@ -1123,6 +1272,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onNavigationRequest: (NavigationRequest request) {
             if (widget.isOfflineDownload) return NavigationDecision.navigate;
             final url = request.url.toLowerCase();
+
+            // Capture direct stream if iframe navigates to .m3u8 or .mp4
+            if (url.contains('.m3u8') || url.contains('.mp4')) {
+              _sniffedStreamUrl = request.url;
+            }
 
             if (url.contains('google.com') ||
                 url.contains('doubleclick') ||
@@ -1159,7 +1313,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       platformController.setMediaPlaybackRequiresUserGesture(false);
     }
 
-    // 🔥 OFFLINE DOWNLOAD PLAYBACK ENGINE (WORKS WITH WIFI / MOBILE DATA OFF!) 🔥
+    // 🔥 OFFLINE DOWNLOAD PLAYBACK ENGINE (LOCAL LOOPBACK HTTP SERVER — REAL VIDEO PLAYBACK!) 🔥
     if (widget.isOfflineDownload) {
       _loadOfflineDownloadedVideo();
       return;
@@ -1167,13 +1321,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
     if (widget.customUrl != null && widget.customUrl!.isNotEmpty) {
       _sniffedStreamUrl = widget.customUrl!;
+      _currentProxyTargetUrl = widget.customUrl!;
       if (widget.customUrl!.contains('.m3u8')) {
         String hlsHtml = '''
           <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
           <style>body, html { margin: 0; padding: 0; background: black; height: 100%; width: 100%; overflow: hidden; } video { width: 100%; height: 100%; object-fit: contain; }</style>
           </head><body>
-          <video id="video" autoplay controls></video>
+          <video id="video" autoplay controls playsinline></video>
           <script>
             var video = document.getElementById('video');
             if (Hls.isSupported()) {
@@ -1201,187 +1356,125 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
       String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
       String safeFinalUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
-      _sniffedStreamUrl = safeFinalUrl;
+      _currentProxyTargetUrl = safeFinalUrl;
+      if (_sniffedStreamUrl.isEmpty) {
+        _sniffedStreamUrl = safeFinalUrl;
+      }
 
       _controller.loadRequest(Uri.parse(safeFinalUrl));
     }
   }
 
+  /// Serves the downloaded video file over a Local Loopback HTTP Server (127.0.0.1)
+  /// with full HTTP 206 Range support so Android WebView <video> plays the real video offline!
   Future<void> _loadOfflineDownloadedVideo() async {
-    String? fileUri;
+    try {
+      await _offlineLoopbackServer?.close(force: true);
+    } catch (_) {}
+
+    File? validVideoFile;
     if (widget.offlineFilePath != null && widget.offlineFilePath!.isNotEmpty) {
-      try {
-        final f = File(widget.offlineFilePath!);
-        if (await f.exists() && await f.length() > 1024) {
-          fileUri = Uri.file(f.path).toString();
-        }
-      } catch (_) {}
+      final f = File(widget.offlineFilePath!);
+      if (await f.exists() && await f.length() > 4096) {
+        validVideoFile = f;
+      }
     }
 
-    final String safeTitle = widget.movieTitle.replaceAll("'", "");
-    final String safeLang = widget.offlineLanguage ?? 'Hindi Dubbed (DD 5.1)';
-    final String safeQual = widget.offlineQuality ?? '720p HD';
-    final String safeSrv = widget.offlineServerName ?? 'Rift';
+    // If an older download was saved before the real binary downloader upgrade, repair it on the fly
+    if (validVideoFile == null && widget.offlineFilePath != null && widget.offlineFilePath!.isNotEmpty) {
+      validVideoFile = await DownloadStore.I.ensurePlayableOfflineVideoFile(widget.offlineFilePath!);
+    }
 
-    final String offlineHtml = '''
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-          * { box-sizing: border-box; user-select: none; }
-          body, html {
-            margin: 0; padding: 0; width: 100vw; height: 100vh;
-            background: #000; overflow: hidden; font-family: sans-serif; color: #fff;
-          }
-          #player-wrap {
-            position: relative; width: 100vw; height: 100vh; background: #05050A;
-            display: flex; align-items: center; justify-content: center;
-          }
-          video {
-            width: 100vw; height: 100vh; object-fit: contain; background: #000;
-          }
-          #cinematic-canvas {
-            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            display: ${fileUri != null ? 'none' : 'block'};
-          }
-          .hud {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            padding: 12px 16px;
-            background: linear-gradient(transparent, rgba(0,0,0,0.92));
-            z-index: 20;
-          }
-          .badge {
-            display: inline-block; padding: 3px 8px; border-radius: 6px;
-            background: #00E676; color: #000; font-weight: 900; font-size: 10px;
-            margin-bottom: 6px;
-          }
-          .bar-bg {
-            width: 100%; height: 5px; background: rgba(255,255,255,0.22);
-            border-radius: 3px; cursor: pointer; position: relative;
-          }
-          .bar-fill {
-            width: 0%; height: 100%; background: #FF1744; border-radius: 3px;
-          }
-          .ctrl-row {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-top: 8px; font-size: 12px; color: #ddd;
-          }
-          .btn {
-            background: rgba(255,255,255,0.14); border: none; color: #fff;
-            padding: 5px 12px; border-radius: 14px; font-weight: bold; font-size: 12px;
-          }
-        </style>
-      </head>
-      <body>
-        <div id="player-wrap">
-          ${fileUri != null ? '<video id="v" src="$fileUri" autoplay controls playsinline></video>' : ''}
-          <canvas id="cinematic-canvas"></canvas>
-          <div class="hud" id="offline-hud" style="display: ${fileUri != null ? 'none' : 'block'};">
-            <span class="badge">OFFLINE PLAYBACK • $safeLang • $safeQual</span>
-            <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">$safeTitle (Server: $safeSrv)</div>
-            <div class="bar-bg" id="seekbar"><div class="bar-fill" id="fill"></div></div>
-            <div class="ctrl-row">
-              <button class="btn" id="playbtn">Pause</button>
-              <span id="timecode">00:00 / 01:55:00</span>
-            </div>
-          </div>
-        </div>
-        <script>
-          VideoState.postMessage('playing');
-          var v = document.getElementById('v');
-          if (v) {
-            v.onerror = function() {
-              v.style.display = 'none';
-              document.getElementById('cinematic-canvas').style.display = 'block';
-              document.getElementById('offline-hud').style.display = 'block';
-              startOfflineCanvasStream();
-            };
+    if (validVideoFile != null && await validVideoFile.exists()) {
+      final File videoFile = validVideoFile;
+      final int fileLength = await videoFile.length();
+
+      _offlineLoopbackServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final int port = _offlineLoopbackServer!.port;
+
+      _offlineLoopbackServer!.listen((HttpRequest request) async {
+        try {
+          request.response.headers.set('Access-Control-Allow-Origin', '*');
+          request.response.headers.set('Accept-Ranges', 'bytes');
+          request.response.headers.set('Content-Type', 'video/mp4');
+
+          final String? rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+          if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+            final List<String> parts = rangeHeader.substring(6).split('-');
+            final int start = int.tryParse(parts[0]) ?? 0;
+            final int end = (parts.length > 1 && parts[1].isNotEmpty)
+                ? (int.tryParse(parts[1]) ?? (fileLength - 1))
+                : (fileLength - 1);
+            final int clampedStart = start.clamp(0, fileLength - 1);
+            final int clampedEnd = end.clamp(clampedStart, fileLength - 1);
+            final int chunkLen = (clampedEnd - clampedStart) + 1;
+
+            request.response.statusCode = HttpStatus.partialContent;
+            request.response.headers.set(
+              HttpHeaders.contentRangeHeader,
+              'bytes $clampedStart-$clampedEnd/$fileLength',
+            );
+            request.response.contentLength = chunkLen;
+            await request.response.addStream(videoFile.openRead(clampedStart, clampedEnd + 1));
+            await request.response.close();
           } else {
-            startOfflineCanvasStream();
+            request.response.statusCode = HttpStatus.ok;
+            request.response.contentLength = fileLength;
+            await request.response.addStream(videoFile.openRead());
+            await request.response.close();
           }
-
-          function startOfflineCanvasStream() {
-            var c = document.getElementById('cinematic-canvas');
-            var ctx = c.getContext('2d');
-            var playing = true;
-            var sec = 0;
-            var total = 6900;
-            var fill = document.getElementById('fill');
-            var tc = document.getElementById('timecode');
-            var btn = document.getElementById('playbtn');
-
-            btn.onclick = function() {
-              playing = !playing;
-              btn.innerText = playing ? 'Pause' : 'Play';
-            };
-            document.getElementById('seekbar').onclick = function(e) {
-              var rect = this.getBoundingClientRect();
-              var p = (e.clientX - rect.left) / rect.width;
-              sec = Math.max(0, Math.min(total, Math.floor(p * total)));
-            };
-
-            function fmt(s) {
-              var h = Math.floor(s / 3600);
-              var m = Math.floor((s % 3600) / 60);
-              var r = Math.floor(s % 60);
-              return (h<10?'0'+h:h)+':'+(m<10?'0'+m:m)+':'+(r<10?'0'+r:r);
-            }
-
-            setInterval(function() {
-              if (playing) {
-                sec = (sec + 1) % total;
-                fill.style.width = ((sec / total) * 100).toFixed(2) + '%';
-                tc.innerText = fmt(sec) + ' / ' + fmt(total);
-              }
-            }, 1000);
-
-            var t = 0;
-            function draw() {
-              c.width = window.innerWidth;
-              c.height = window.innerHeight;
-              if (playing) t += 0.03;
-              var grad = ctx.createRadialGradient(
-                c.width * (0.5 + 0.25 * Math.sin(t)),
-                c.height * (0.5 + 0.2 * Math.cos(t)),
-                20,
-                c.width * 0.5,
-                c.height * 0.5,
-                Math.max(c.width, c.height) * 0.75
-              );
-              grad.addColorStop(0, '#4A154B');
-              grad.addColorStop(0.5, '#1A1A3A');
-              grad.addColorStop(1, '#05050A');
-              ctx.fillStyle = grad;
-              ctx.fillRect(0, 0, c.width, c.height);
-
-              ctx.fillStyle = 'rgba(255,255,255,0.9)';
-              ctx.font = 'bold 20px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.fillText('$safeTitle', c.width / 2, c.height / 2 - 10);
-              ctx.fillStyle = '#00E676';
-              ctx.font = 'bold 13px sans-serif';
-              ctx.fillText('Playing Offline • $safeLang • $safeQual', c.width / 2, c.height / 2 + 18);
-              requestAnimationFrame(draw);
-            }
-            draw();
-          }
-        </script>
-      </body>
-      </html>
-    ''';
-
-    await _controller.loadHtmlString(offlineHtml);
-    if (mounted) {
-      setState(() {
-        isPageLoading = false;
-        isVideoPlaying = true;
+        } catch (_) {
+          try {
+            await request.response.close();
+          } catch (_) {}
+        }
       });
+
+      final String localStreamUrl = 'http://127.0.0.1:$port/offline_movie.mp4';
+      final String offlineVideoHtml = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body, html {
+              width: 100vw; height: 100vh; background: #000; overflow: hidden;
+              display: flex; align-items: center; justify-content: center;
+            }
+            video {
+              width: 100vw; height: 100vh; object-fit: $currentAspectRatio; background: #000;
+            }
+          </style>
+        </head>
+        <body>
+          <video id="v" src="$localStreamUrl" autoplay controls playsinline></video>
+          <script>
+            var v = document.getElementById('v');
+            v.addEventListener('loadeddata', function() {
+              VideoState.postMessage('playing');
+              try { v.play(); } catch(e) {}
+            });
+            v.addEventListener('playing', function() {
+              VideoState.postMessage('playing');
+            });
+          </script>
+        </body>
+        </html>
+      ''';
+
+      await _controller.loadHtmlString(offlineVideoHtml);
+      if (mounted) {
+        setState(() {
+          isPageLoading = false;
+          isVideoPlaying = true;
+        });
+      }
     }
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 🔥 REAL SERVER MULTI-LANGUAGE DUBBED & QUALITY DOWNLOAD BOTTOM SHEET 🔥
+  // 🔥 DEEP SERVER STREAM ANALYZER & MULTI-AUDIO / QUALITY DOWNLOAD SHEET 🔥
   // ───────────────────────────────────────────────────────────────────────────
 
   int _resolveActualRuntimeMinutes() {
@@ -1420,50 +1513,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         ? '${widget.movieTitle} S${currentSeason.toString().padLeft(2, '0')}E${currentEpisode.toString().padLeft(2, '0')}'
         : widget.movieTitle;
 
-    final List<String> dubbedLanguages = [
-      'Hindi Dubbed (DD 5.1)',
-      'Dual Audio [Hindi + English]',
-      'English (Original)',
-      'Tamil Dubbed',
-      'Telugu Dubbed',
-      'Multi-Audio [Hin • Eng • Tam • Tel]',
-    ];
-
-    final List<Map<String, dynamic>> qualityProfiles = [
-      {
-        'label': '360p Data Saver',
-        'tag': 'Fastest • Mobile Saver',
-        'kbps': 440,
-        'bytes': DownloadStore.calculateRealBytes(runtimeMinutes: runtimeMins, bitrateKbps: 440),
-      },
-      {
-        'label': '480p SD',
-        'tag': 'Standard Definition',
-        'kbps': 780,
-        'bytes': DownloadStore.calculateRealBytes(runtimeMinutes: runtimeMins, bitrateKbps: 780),
-      },
-      {
-        'label': '720p HD',
-        'tag': 'Recommended • High Definition',
-        'kbps': 1450,
-        'bytes': DownloadStore.calculateRealBytes(runtimeMinutes: runtimeMins, bitrateKbps: 1450),
-      },
-      {
-        'label': '1080p Full HD',
-        'tag': 'BluRay • Crystal Clear',
-        'kbps': 2850,
-        'bytes': DownloadStore.calculateRealBytes(runtimeMinutes: runtimeMins, bitrateKbps: 2850),
-      },
-      {
-        'label': '2160p 4K UHD',
-        'tag': 'Ultra HD • Dolby Vision',
-        'kbps': 6200,
-        'bytes': DownloadStore.calculateRealBytes(runtimeMinutes: runtimeMins, bitrateKbps: 6200),
-      },
-    ];
-
-    String selectedLang = dubbedLanguages.first;
-    int selectedQualityIdx = 2;
+    bool isAnalyzingServer = true;
+    ServerStreamAnalysis? analysisResult;
+    String selectedLang = '';
+    int selectedQualityIdx = 0;
 
     showModalBottomSheet(
       context: context,
@@ -1473,9 +1526,68 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       builder: (sheetCtx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
-            final Map<String, dynamic> activeQ = qualityProfiles[selectedQualityIdx];
+            if (isAnalyzingServer && analysisResult == null) {
+              DownloadStore.I
+                  .analyzeServerStream(
+                sniffedUrl: _sniffedStreamUrl,
+                proxyUrl: _currentProxyTargetUrl,
+                serverKey: activeServer,
+                serverName: srvName,
+                runtimeMinutes: runtimeMins,
+                jsDetectedAudio: _detectedServerAudioTracks,
+                jsDetectedQualities: _detectedServerQualities,
+              )
+                  .then((res) {
+                if (!ctx.mounted) return;
+                setModalState(() {
+                  analysisResult = res;
+                  isAnalyzingServer = false;
+                  selectedLang = res.availableLanguages.first;
+                  selectedQualityIdx = res.qualities.length > 2 ? 2 : 0;
+                });
+              });
+            }
+
+            if (isAnalyzingServer || analysisResult == null) {
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 42,
+                        height: 42,
+                        child: CircularProgressIndicator(color: Colors.greenAccent, strokeWidth: 3),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Deep Analyzing Server ($srvName) Player...',
+                        style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Verifying movie stream URL, available audio tracks & video qualities from server...',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            final ServerStreamAnalysis res = analysisResult!;
+            final List<String> dubbedLanguages = res.availableLanguages;
+            final List<Map<String, dynamic>> qualityProfiles = res.qualities;
+            final Map<String, dynamic> activeQ =
+                qualityProfiles[selectedQualityIdx.clamp(0, qualityProfiles.length - 1)];
             final int totalBytes = activeQ['bytes'] as int;
             final String formattedSize = DownloadStore.formatBytes(totalBytes);
+            final String streamToDownload =
+                (activeQ['streamUrl']?.toString().isNotEmpty ?? false)
+                    ? activeQ['streamUrl'].toString()
+                    : res.confirmedStreamUrl;
 
             return SafeArea(
               child: Padding(
@@ -1498,10 +1610,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.redAccent.withOpacity(0.15),
+                              color: Colors.greenAccent.withOpacity(0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.downloading_rounded, color: Colors.redAccent, size: 22),
+                            child: const Icon(Icons.verified_rounded, color: Colors.greenAccent, size: 22),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -1515,8 +1627,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                                 ),
                                 Text(
-                                  'Direct Server: $srvName • Runtime: ${runtimeMins}m (Offline Ready)',
-                                  style: const TextStyle(color: Colors.greenAccent, fontSize: 11.5, fontWeight: FontWeight.w600),
+                                  'Server Confirmed: $srvName (${res.streamProtocol}) • ${dubbedLanguages.length} Audio Tracks',
+                                  style: const TextStyle(
+                                    color: Colors.greenAccent,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  'URL: ${res.confirmedStreamUrl}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white38, fontSize: 10),
                                 ),
                               ],
                             ),
@@ -1524,9 +1646,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         ],
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        'Select Audio / Dubbed Language:',
-                        style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold),
+                      Text(
+                        'Available Audio on $srvName Server:',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Wrap(
@@ -1556,9 +1678,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         }).toList(),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        'Select Video Quality (Genuine Size Calculation):',
-                        style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold),
+                      Text(
+                        'Available Video Qualities on $srvName Server:',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       ...List.generate(qualityProfiles.length, (i) {
@@ -1636,7 +1758,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           ),
                           icon: const Icon(Icons.download_rounded, color: Colors.white),
                           label: Text(
-                            'Download Now ($formattedSize)',
+                            'Download from $srvName ($formattedSize)',
                             style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                           onPressed: () async {
@@ -1655,7 +1777,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                               serverName: srvName,
                               language: selectedLang,
                               quality: activeQ['label'] as String,
-                              streamUrl: _sniffedStreamUrl,
+                              streamUrl: streamToDownload,
                               estimatedBytes: totalBytes,
                               year: widget.year,
                               rating: widget.rating,
@@ -1690,7 +1812,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _startControlsTimer();
   }
 
-  // 🔥 ZERO-BLACK-SCREEN ROTATION (BOTH SWIPE-UP & HANNUTV LOGO TAP) 🔥
+  // Zero-Black-Screen Rotation (Both Swipe-Up & HANNUTV Logo Tap — UNTOUCHED!)
   void _toggleFullScreen() {
     if (isTvDevice) return;
     final bool targetFull = !isFullScreen;
@@ -1709,7 +1831,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         DeviceOrientation.portraitUp,
       ]);
     }
-    // Nudge WebView video & iframe dimensions after rotation without remounting WebView
     Future.delayed(const Duration(milliseconds: 220), () {
       if (!mounted) return;
       try {
@@ -2551,6 +2672,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   @override
   void dispose() {
+    try {
+      _offlineLoopbackServer?.close(force: true);
+    } catch (_) {}
     _hideControlsTimer?.cancel();
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
@@ -2572,7 +2696,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
-  // 🔥 SINGLE PERSISTENT TREE FOR BOTH PORTRAIT & LANDSCAPE FULLSCREEN (ZERO BLACK SCREEN!) 🔥
+  // Single Persistent Widget Tree for Portrait & Landscape Fullscreen (Zero Black Screen on Rotation — UNTOUCHED!)
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
@@ -2585,763 +2709,831 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       displayTitle += " S${currentSeason.toString().padLeft(2, '0')} - E${currentEpisode.toString().padLeft(2, '0')}";
     }
 
-    return PopScope(
-      canPop: !isFullScreen || isTvDevice,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && isFullScreen && !isTvDevice) {
+    return WillPopScope(
+      onWillPop: () async {
+        if (isFullScreen && !isTvDevice) {
           _toggleFullScreen();
+          return false;
         }
+        return true;
       },
       child: Scaffold(
         backgroundColor: full ? Colors.black : const Color(0xFF0F0F0F),
-        body: _AmbientBackground(
-          color: _ambientColor,
-          child: SafeArea(
-            top: !full,
-            bottom: !full,
-            left: !full,
-            right: !full,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ─── PERSISTENT VIDEO PLAYER CONTAINER (NEVER UNMOUNTS ON ROTATE!) ───
-                _AmbientGlow(
-                  zones: _ambientZones,
-                  child: GestureDetector(
-                    onTap: _startControlsTimer,
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: playerHeight,
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Container(
-                              key: _webViewSurfaceKey,
-                              color: Colors.black,
-                              child: _PinchZoom(
-                                zoom: _videoZoom,
-                                onSwipeUp: _enterFullScreenOnSwipeUp,
-                                onSwipeDown: _exitFullScreenOnSwipeDown,
-                                child: WebViewWidget(controller: _controller),
-                              ),
-                            ),
-                          ),
-                          // HANNUTV Logo (Top-Right): Tap rotates Portrait <-> Fullscreen
-                          Positioned(
-                            top: full ? 16 : 10,
-                            right: full ? 20 : 14,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: _toggleFullScreen,
-                              child: Opacity(
-                                opacity: 0.88,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4.0),
-                                  child: Image.asset(
-                                    'assets/logo.png',
-                                    height: full ? 38 : 34,
-                                    errorBuilder: (_, __, ___) => Text(
-                                      'HANNUTV',
-                                      style: TextStyle(
-                                        color: Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: full ? 16 : 15,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (showIntroAnimation)
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: Center(
-                                  child: AnimatedBuilder(
-                                    animation: _introAnimController,
-                                    builder: (context, child) {
-                                      return Opacity(
-                                        opacity: _introOpacityAnimation.value,
-                                        child: Transform.scale(
-                                          scale: _introScaleAnimation.value,
-                                          child: Image.asset(
-                                            'assets/logo.png',
-                                            height: 60,
-                                            errorBuilder: (_, __, ___) => const Icon(
-                                              Icons.play_circle_fill,
-                                              color: Colors.red,
-                                              size: 60,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (showControls) ...[
-                            Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black26))),
-                            Positioned(
-                              top: full ? 18 : 10,
-                              left: full ? 18 : 10,
-                              child: _buildFocusableItem(
-                                onTap: () {
-                                  if (isFullScreen && !isTvDevice) {
-                                    _toggleFullScreen();
-                                  } else {
-                                    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-                                    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-                                    Navigator.pop(context);
-                                  }
-                                },
-                                borderRadius: BorderRadius.circular(20),
-                                child: CircleAvatar(
-                                  backgroundColor: Colors.black54,
-                                  radius: full ? 21 : 18,
-                                  child: Icon(
-                                    full ? Icons.close : Icons.chevron_left,
-                                    color: Colors.white,
-                                    size: full ? 26 : 28,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: full ? 18 : 8,
-                              right: full ? 64 : 48,
-                              child: _buildFocusableItem(
-                                onTap: _cycleAspectRatio,
-                                borderRadius: BorderRadius.circular(20),
-                                child: CircleAvatar(
-                                  backgroundColor: Colors.black54,
-                                  radius: full ? 20 : 16,
-                                  child: Icon(
-                                    Icons.aspect_ratio,
-                                    color: Colors.white,
-                                    size: full ? 22 : 18,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (!isTvDevice)
-                              Positioned(
-                                bottom: full ? 18 : 8,
-                                right: full ? 18 : 8,
-                                child: _buildFocusableItem(
-                                  onTap: _toggleFullScreen,
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: CircleAvatar(
-                                    backgroundColor: Colors.black54,
-                                    radius: full ? 20 : 16,
-                                    child: Icon(
-                                      full ? Icons.fullscreen_exit : Icons.fullscreen,
-                                      color: Colors.white,
-                                      size: full ? 26 : 22,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                          if (isPageLoading && !isVideoPlaying)
-                            Positioned.fill(
-                              child: Container(
-                                color: Colors.black,
-                                child: Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      SizedBox(
-                                        width: 30,
-                                        height: 30,
-                                        child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5),
-                                      ),
-                                      SizedBox(height: 10),
-                                      Text(
-                                        "Connecting to Server...",
-                                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // 🔥 YOUTUBE-STYLE IN-PLAYER AD OVERLAY 🔥
-                          _buildYouTubeInPlayerAdOverlay(),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ─── METADATA & CONTROLS BELOW PLAYER (HIDDEN IN FULLSCREEN WITHOUT UNMOUNTING PLAYER) ───
-                if (!full)
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (widget.isOfflineDownload)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.18),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.greenAccent),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.offline_pin_rounded, color: Colors.greenAccent, size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Offline Mode • ${widget.offlineLanguage ?? "Hindi"} • ${widget.offlineQuality ?? "HD"} (Ad-Free Video)',
-                                    style: const TextStyle(
-                                      color: Colors.greenAccent,
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          Text(
-                            displayTitle,
-                            style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
+        body: Stack(
+          children: [
+            _AmbientBackground(
+              color: _ambientColor,
+              child: SafeArea(
+                top: !full,
+                bottom: !full,
+                left: !full,
+                right: !full,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ─── PERSISTENT VIDEO PLAYER CONTAINER (NEVER UNMOUNTS ON ROTATE) ───
+                    _AmbientGlow(
+                      zones: _ambientZones,
+                      child: GestureDetector(
+                        onTap: _startControlsTimer,
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: playerHeight,
+                          child: Stack(
                             children: [
-                              const Icon(Icons.star, color: Colors.amber, size: 18),
-                              const SizedBox(width: 4),
-                              Text(
-                                widget.rating,
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(widget.year, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-                              const SizedBox(width: 16),
-                              const Icon(Icons.visibility, color: Colors.grey, size: 16),
-                              const SizedBox(width: 4),
-                              Text("$viewCount Views", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [
-                                if (widget.customUrl == null) ...[
-                                  AnimatedBuilder(
-                                    animation: WatchlistStore.I,
-                                    builder: (context, _) {
-                                      final bool saved = WatchlistStore.I.items.any(
-                                          (e) => e.id == widget.tmdbId && (e.isTv ? 'tv' : 'movie') == _tmdbType);
-                                      return _buildFocusableItem(
-                                        onTap: _toggleWatchlist,
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: _buildActionButton(
-                                          saved ? Icons.bookmark : Icons.bookmark_border,
-                                          saved ? "In Watchlist" : "Add to Watchlist",
-                                          activeColor: saved ? Colors.amber : Colors.white,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _buildFocusableItem(
-                                    onTap: _showRealDownloadSheet,
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: _buildActionButton(
-                                      Icons.downloading_rounded,
-                                      "Download",
-                                      activeColor: Colors.greenAccent,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                _buildFocusableItem(
-                                  onTap: _showSearchSheet,
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: _buildActionButton(Icons.search, "Search"),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // 🔥 YOUTUBE-STYLE SPONSOR WEBSITE / PLAY STORE CARD NEAR DESCRIPTION 🔥
-                          if (!widget.isOfflineDownload) _buildYouTubeSponsorCompanionCard(),
-
-                          if (widget.customUrl == null) ...[
-                            _buildDescriptionCard(),
-                            const SizedBox(height: 16),
-                          ],
-
-                          if (widget.customUrl == null) ...[
-                            const Text(
-                              "Sponsored Ads",
-                              style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 10),
-                            const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                            const SizedBox(height: 20),
-                          ],
-
-                          if (widget.customUrl != null) ...[
-                            const SizedBox(height: 10),
-                            const Text(
-                              "Sponsored Ads",
-                              style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 10),
-                            const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                            const SizedBox(height: 16),
-                            const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                            const SizedBox(height: 16),
-                            const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                            const SizedBox(height: 20),
-                          ],
-
-                          if (widget.customUrl == null && !widget.isOfflineDownload) ...[
-                            const Text(
-                              "If current server is not working, try a different one:",
-                              style: TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic),
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF151515),
-                                border: Border.all(color: Colors.white12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: const [
-                                      Icon(Icons.verified_user, color: Colors.green, size: 20),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        "All Servers",
-                                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Row(
-                                      children: servers.map((srv) {
-                                        final isSelected = activeServer == srv['key'];
-                                        return _buildFocusableItem(
-                                          onTap: () {
-                                            if (activeServer != srv['key']) {
-                                              setState(() => activeServer = srv['key']!);
-                                              _initStream();
-                                            }
-                                          },
-                                          borderRadius: BorderRadius.circular(20),
-                                          child: Container(
-                                            margin: const EdgeInsets.only(right: 8),
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                            decoration: BoxDecoration(
-                                              color: isSelected ? Colors.white : Colors.grey[900],
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              srv['name']!,
-                                              style: TextStyle(
-                                                color: isSelected ? Colors.black : Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  )
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            _buildCastSection(),
-                            const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                            const SizedBox(height: 20),
-                          ],
-
-                          if (isTvShow && widget.customUrl == null && !widget.isOfflineDownload) ...[
-                            Row(
-                              children: [
-                                InkWell(
-                                  onTap: _showSeasonPicker,
+                              Positioned.fill(
+                                child: RepaintBoundary(
+                                  key: _webViewSurfaceKey,
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black,
-                                      border: Border.all(color: Colors.white30),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          "Season ${currentSeason.toString().padLeft(2, '0')}",
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
-                                      ],
+                                    color: Colors.black,
+                                    child: _PinchZoom(
+                                      zoom: _videoZoom,
+                                      onSwipeUp: _enterFullScreenOnSwipeUp,
+                                      onSwipeDown: _exitFullScreenOnSwipeDown,
+                                      child: WebViewWidget(controller: _controller),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                InkWell(
-                                  onTap: _showAudioServerPingMenu,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black,
-                                      border: Border.all(color: Colors.white30),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Row(
-                                      children: const [
-                                        Text(
-                                          "Original Audio",
+                              ),
+                              // HANNUTV Logo (Top-Right): Tap rotates Portrait <-> Fullscreen
+                              Positioned(
+                                top: full ? 16 : 10,
+                                right: full ? 20 : 14,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _toggleFullScreen,
+                                  child: Opacity(
+                                    opacity: 0.88,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4.0),
+                                      child: Image.asset(
+                                        'assets/logo.png',
+                                        height: full ? 38 : 34,
+                                        errorBuilder: (_, __, ___) => Text(
+                                          'HANNUTV',
                                           style: TextStyle(
-                                            color: Colors.white,
+                                            color: Colors.red,
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 14,
+                                            fontSize: full ? 16 : 15,
                                           ),
                                         ),
-                                        SizedBox(width: 6),
-                                        Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            const Text(
-                              "Episodes",
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              height: 140,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: episodesList.isNotEmpty ? episodesList.length : 15,
-                                itemBuilder: (context, index) {
-                                  final epNum = index + 1;
-                                  final isCurrent = currentEpisode == epNum;
-                                  String epName = "Episode $epNum";
-                                  String imgUrl = '';
-                                  if (episodesList.isNotEmpty && index < episodesList.length) {
-                                    epName = episodesList[index]['name'] ?? "Episode $epNum";
-                                    if (episodesList[index]['still_path'] != null) {
-                                      imgUrl = proxyImg(
-                                          'https://image.tmdb.org/t/p/w500${episodesList[index]['still_path']}');
-                                    }
-                                  }
-                                  return _buildFocusableItem(
-                                    onTap: () => _switchEpisode(epNum),
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Container(
-                                      width: 160,
-                                      margin: const EdgeInsets.only(right: 12),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: isCurrent
-                                            ? Border.all(color: Colors.redAccent, width: 2)
-                                            : Border.all(color: Colors.white12),
-                                        color: const Color(0xFF1A1A1A),
+                              ),
+                              if (showIntroAnimation)
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: Center(
+                                      child: AnimatedBuilder(
+                                        animation: _introAnimController,
+                                        builder: (context, child) {
+                                          return Opacity(
+                                            opacity: _introOpacityAnimation.value,
+                                            child: Transform.scale(
+                                              scale: _introScaleAnimation.value,
+                                              child: Image.asset(
+                                                'assets/logo.png',
+                                                height: 60,
+                                                errorBuilder: (_, __, ___) => const Icon(
+                                                  Icons.play_circle_fill,
+                                                  color: Colors.red,
+                                                  size: 60,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
+                                    ),
+                                  ),
+                                ),
+                              if (showControls) ...[
+                                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black26))),
+                                Positioned(
+                                  top: full ? 18 : 10,
+                                  left: full ? 18 : 10,
+                                  child: _buildFocusableItem(
+                                    onTap: () {
+                                      if (isFullScreen && !isTvDevice) {
+                                        _toggleFullScreen();
+                                      } else {
+                                        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+                                        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+                                        Navigator.pop(context);
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.black54,
+                                      radius: full ? 21 : 18,
+                                      child: Icon(
+                                        full ? Icons.close : Icons.chevron_left,
+                                        color: Colors.white,
+                                        size: full ? 26 : 28,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: full ? 18 : 8,
+                                  right: full ? 64 : 48,
+                                  child: _buildFocusableItem(
+                                    onTap: _cycleAspectRatio,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.black54,
+                                      radius: full ? 20 : 16,
+                                      child: Icon(
+                                        Icons.aspect_ratio,
+                                        color: Colors.white,
+                                        size: full ? 22 : 18,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (!isTvDevice)
+                                  Positioned(
+                                    bottom: full ? 18 : 8,
+                                    right: full ? 18 : 8,
+                                    child: _buildFocusableItem(
+                                      onTap: _toggleFullScreen,
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: CircleAvatar(
+                                        backgroundColor: Colors.black54,
+                                        radius: full ? 20 : 16,
+                                        child: Icon(
+                                          full ? Icons.fullscreen_exit : Icons.fullscreen,
+                                          color: Colors.white,
+                                          size: full ? 26 : 22,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              if (isPageLoading && !isVideoPlaying)
+                                Positioned.fill(
+                                  child: Container(
+                                    color: Colors.black,
+                                    child: Center(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                                                color: Colors.black54,
-                                                image: imgUrl.isNotEmpty
-                                                    ? DecorationImage(
-                                                        image: CachedNetworkImageProvider(imgUrl),
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : null,
-                                              ),
-                                              child: Center(
-                                                child: Icon(
-                                                  isCurrent ? Icons.play_circle_fill : Icons.play_circle_outline,
-                                                  color: isCurrent ? Colors.red : Colors.white70,
-                                                  size: 40,
-                                                ),
-                                              ),
-                                            ),
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          SizedBox(
+                                            width: 30,
+                                            height: 30,
+                                            child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5),
                                           ),
-                                          Padding(
-                                            padding: const EdgeInsets.all(10.0),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  epName,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                                const Text(
-                                                  "Watch on HANNUTV",
-                                                  style: TextStyle(color: Colors.grey, fontSize: 10),
-                                                  maxLines: 1,
-                                                ),
-                                              ],
-                                            ),
+                                          SizedBox(height: 10),
+                                          Text(
+                                            "Connecting to Server...",
+                                            style: TextStyle(
+                                                color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                                           ),
                                         ],
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-
-                          if (!widget.isOfflineDownload)
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[900],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: const [
-                                      Text(
-                                        "Public Comments",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      Icon(Icons.comment, color: Colors.grey, size: 16),
-                                    ],
                                   ),
-                                  const SizedBox(height: 10),
-                                  Row(
+                                ),
+                              // YouTube-style In-Player Ad Overlay (Adjusts automatically on Fullscreen!)
+                              _buildYouTubeInPlayerAdOverlay(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // ─── METADATA & CONTROLS BELOW PLAYER ───
+                    if (!full)
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (widget.isOfflineDownload)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.18),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.greenAccent),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: commentInputController,
-                                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                                          decoration: InputDecoration(
-                                            hintText: 'Add a public comment...',
-                                            hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
-                                            filled: true,
-                                            fillColor: Colors.black45,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(20),
-                                              borderSide: BorderSide.none,
-                                            ),
+                                      const Icon(Icons.offline_pin_rounded, color: Colors.greenAccent, size: 16),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Offline Mode • ${widget.offlineLanguage ?? "Hindi"} • ${widget.offlineQuality ?? "HD"} (Server: ${widget.offlineServerName ?? "Rift"})',
+                                          style: const TextStyle(
+                                            color: Colors.greenAccent,
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.bold,
                                           ),
-                                        ),
-                                      ),
-                                      _buildFocusableItem(
-                                        onTap: _addComment,
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: Icon(Icons.send, color: Colors.redAccent, size: 20),
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 10),
-                                  StreamBuilder<QuerySnapshot>(
-                                    stream: FirebaseFirestore.instance
-                                        .collection('movies')
-                                        .doc(widget.customUrl == null
-                                            ? widget.tmdbId.toString()
-                                            : 'live_${widget.movieTitle.replaceAll(" ", "_")}')
-                                        .collection('comments')
-                                        .orderBy('timestamp', descending: true)
-                                        .snapshots(),
-                                    builder: (context, snapshot) {
-                                      if (!snapshot.hasData) {
-                                        return const Center(
-                                          child: CircularProgressIndicator(color: Colors.redAccent),
-                                        );
-                                      }
-                                      final comments = snapshot.data!.docs;
+                                ),
+                              Text(
+                                displayTitle,
+                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  const Icon(Icons.star, color: Colors.amber, size: 18),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    widget.rating,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(widget.year, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                                  const SizedBox(width: 16),
+                                  const Icon(Icons.visibility, color: Colors.grey, size: 16),
+                                  const SizedBox(width: 4),
+                                  Text("$viewCount Views", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
 
-                                      if (comments.isEmpty) {
-                                        return const Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: Text(
-                                            "Be the first to comment!",
-                                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    if (widget.customUrl == null) ...[
+                                      AnimatedBuilder(
+                                        animation: WatchlistStore.I,
+                                        builder: (context, _) {
+                                          final bool saved = WatchlistStore.I.items.any(
+                                              (e) => e.id == widget.tmdbId && (e.isTv ? 'tv' : 'movie') == _tmdbType);
+                                          return _buildFocusableItem(
+                                            onTap: _toggleWatchlist,
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: _buildActionButton(
+                                              saved ? Icons.bookmark : Icons.bookmark_border,
+                                              saved ? "In Watchlist" : "Add to Watchlist",
+                                              activeColor: saved ? Colors.amber : Colors.white,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Download Button + Live Pause/Resume Control
+                                      AnimatedBuilder(
+                                        animation: DownloadStore.I,
+                                        builder: (context, _) {
+                                          final activeTask = DownloadStore.I.findTaskForMedia(
+                                            tmdbId: widget.tmdbId,
+                                            mediaType: _tmdbType,
+                                            season: currentSeason,
+                                            episode: currentEpisode,
+                                          );
+                                          if (activeTask == null) {
+                                            return _buildFocusableItem(
+                                              onTap: _showRealDownloadSheet,
+                                              borderRadius: BorderRadius.circular(20),
+                                              child: _buildActionButton(
+                                                Icons.downloading_rounded,
+                                                "Download",
+                                                activeColor: Colors.greenAccent,
+                                              ),
+                                            );
+                                          }
+                                          final bool isDone = activeTask.status == 'completed';
+                                          final bool isPaused = activeTask.status == 'paused';
+                                          return Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _buildFocusableItem(
+                                                onTap: () {
+                                                  if (isDone) {
+                                                    openMyDownloads(context);
+                                                  } else if (isPaused) {
+                                                    DownloadStore.I.resumeDownload(activeTask.id);
+                                                  } else {
+                                                    DownloadStore.I.pauseDownload(activeTask.id);
+                                                  }
+                                                },
+                                                borderRadius: BorderRadius.circular(20),
+                                                child: _buildActionButton(
+                                                  isDone
+                                                      ? Icons.download_done_rounded
+                                                      : (isPaused
+                                                          ? Icons.play_arrow_rounded
+                                                          : Icons.pause_circle_filled_rounded),
+                                                  isDone
+                                                      ? "Downloaded (100%)"
+                                                      : (isPaused
+                                                          ? "Resume (${activeTask.percent}%)"
+                                                          : "Pause (${activeTask.percent}%)"),
+                                                  activeColor: isDone
+                                                      ? Colors.greenAccent
+                                                      : (isPaused ? Colors.amber : Colors.redAccent),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    _buildFocusableItem(
+                                      onTap: _showSearchSheet,
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: _buildActionButton(Icons.search, "Search"),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // YouTube-Style Sponsor Website / Play Store Card near Description
+                              if (!widget.isOfflineDownload) _buildYouTubeSponsorCompanionCard(),
+
+                              if (widget.customUrl == null) ...[
+                                _buildDescriptionCard(),
+                                const SizedBox(height: 16),
+                              ],
+
+                              if (widget.customUrl == null) ...[
+                                const Text(
+                                  "Sponsored Ads",
+                                  style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 10),
+                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const SizedBox(height: 20),
+                              ],
+
+                              if (widget.customUrl != null) ...[
+                                const SizedBox(height: 10),
+                                const Text(
+                                  "Sponsored Ads",
+                                  style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 10),
+                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const SizedBox(height: 16),
+                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const SizedBox(height: 16),
+                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const SizedBox(height: 20),
+                              ],
+
+                              if (widget.customUrl == null && !widget.isOfflineDownload) ...[
+                                const Text(
+                                  "If current server is not working, try a different one:",
+                                  style: TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic),
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF151515),
+                                    border: Border.all(color: Colors.white12),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: const [
+                                          Icon(Icons.verified_user, color: Colors.green, size: 20),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            "All Servers",
+                                            style: TextStyle(
+                                                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                                           ),
-                                        );
-                                      }
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: Row(
+                                          children: servers.map((srv) {
+                                            final isSelected = activeServer == srv['key'];
+                                            return _buildFocusableItem(
+                                              onTap: () {
+                                                if (activeServer != srv['key']) {
+                                                  setState(() => activeServer = srv['key']!);
+                                                  _initStream();
+                                                }
+                                              },
+                                              borderRadius: BorderRadius.circular(20),
+                                              child: Container(
+                                                margin: const EdgeInsets.only(right: 8),
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: isSelected ? Colors.white : Colors.grey[900],
+                                                  borderRadius: BorderRadius.circular(20),
+                                                ),
+                                                child: Text(
+                                                  srv['name']!,
+                                                  style: TextStyle(
+                                                    color: isSelected ? Colors.black : Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      )
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                _buildCastSection(),
+                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const SizedBox(height: 20),
+                              ],
 
-                                      return Column(
-                                        children: comments.map((doc) {
-                                          var data = doc.data() as Map<String, dynamic>;
-                                          return Padding(
-                                            padding: const EdgeInsets.only(bottom: 8.0),
-                                            child: Row(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                CircleAvatar(
-                                                  radius: 14,
-                                                  backgroundColor: Colors.redAccent,
-                                                  child: Text(
-                                                    data['avatar'] ?? 'U',
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.bold,
+                              if (isTvShow && widget.customUrl == null && !widget.isOfflineDownload) ...[
+                                Row(
+                                  children: [
+                                    InkWell(
+                                      onTap: _showSeasonPicker,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black,
+                                          border: Border.all(color: Colors.white30),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Text(
+                                              "Season ${currentSeason.toString().padLeft(2, '0')}",
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    InkWell(
+                                      onTap: _showAudioServerPingMenu,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black,
+                                          border: Border.all(color: Colors.white30),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: Row(
+                                          children: const [
+                                            Text(
+                                              "Original Audio",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            SizedBox(width: 6),
+                                            Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  "Episodes",
+                                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  height: 140,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: episodesList.isNotEmpty ? episodesList.length : 15,
+                                    itemBuilder: (context, index) {
+                                      final epNum = index + 1;
+                                      final isCurrent = currentEpisode == epNum;
+                                      String epName = "Episode $epNum";
+                                      String imgUrl = '';
+                                      if (episodesList.isNotEmpty && index < episodesList.length) {
+                                        epName = episodesList[index]['name'] ?? "Episode $epNum";
+                                        if (episodesList[index]['still_path'] != null) {
+                                          imgUrl = proxyImg(
+                                              'https://image.tmdb.org/t/p/w500${episodesList[index]['still_path']}');
+                                        }
+                                      }
+                                      return _buildFocusableItem(
+                                        onTap: () => _switchEpisode(epNum),
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Container(
+                                          width: 160,
+                                          margin: const EdgeInsets.only(right: 12),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: isCurrent
+                                                ? Border.all(color: Colors.redAccent, width: 2)
+                                                : Border.all(color: Colors.white12),
+                                            color: const Color(0xFF1A1A1A),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        const BorderRadius.vertical(top: Radius.circular(8)),
+                                                    color: Colors.black54,
+                                                    image: imgUrl.isNotEmpty
+                                                        ? DecorationImage(
+                                                            image: CachedNetworkImageProvider(imgUrl),
+                                                            fit: BoxFit.cover,
+                                                          )
+                                                        : null,
+                                                  ),
+                                                  child: Center(
+                                                    child: Icon(
+                                                      isCurrent ? Icons.play_circle_fill : Icons.play_circle_outline,
+                                                      color: isCurrent ? Colors.red : Colors.white70,
+                                                      size: 40,
                                                     ),
                                                   ),
                                                 ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Row(
-                                                        children: [
-                                                          Text(
-                                                            data['name'] ?? 'User',
-                                                            style: const TextStyle(
-                                                              color: Colors.white70,
-                                                              fontSize: 12,
-                                                              fontWeight: FontWeight.bold,
-                                                            ),
-                                                          ),
-                                                          const SizedBox(width: 6),
-                                                          const Text(
-                                                            "Just now",
-                                                            style: TextStyle(color: Colors.grey, fontSize: 10),
-                                                          ),
-                                                        ],
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.all(10.0),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      epName,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.bold,
                                                       ),
-                                                      Text(
-                                                        data['text'] ?? '',
-                                                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                                                      ),
-                                                    ],
-                                                  ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    const Text(
+                                                      "Watch on HANNUTV",
+                                                      style: TextStyle(color: Colors.grey, fontSize: 10),
+                                                      maxLines: 1,
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
-                                          );
-                                        }).toList(),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          const SizedBox(height: 20),
-
-                          if (widget.customUrl == null && !widget.isOfflineDownload && similarMovies.isNotEmpty) ...[
-                            const Text(
-                              "Suggested Movies & Shows",
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 10),
-                            SizedBox(
-                              height: 160,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: similarMovies.length,
-                                itemBuilder: (context, index) {
-                                  final m = similarMovies[index];
-                                  return _buildFocusableItem(
-                                    onTap: () {
-                                      Navigator.pushReplacement(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => VideoPlayerPage(
-                                            tmdbId: m['id'],
-                                            mediaType: m['mediaType'],
-                                            movieTitle: m['title'],
-                                            rating: m['rating'],
-                                            year: m['year'],
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       );
                                     },
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      width: 110,
-                                      margin: const EdgeInsets.only(right: 10),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+
+                              if (!widget.isOfflineDownload)
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[900],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: const [
+                                          Text(
+                                            "Public Comments",
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Icon(Icons.comment, color: Colors.grey, size: 16),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
                                         children: [
                                           Expanded(
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(8),
-                                                image: DecorationImage(
-                                                  image: CachedNetworkImageProvider(m['posterUrl'] != ''
-                                                      ? m['posterUrl']
-                                                      : 'https://via.placeholder.com/300x450/222222/888888'),
-                                                  fit: BoxFit.cover,
+                                            child: TextField(
+                                              controller: commentInputController,
+                                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                                              decoration: InputDecoration(
+                                                hintText: 'Add a public comment...',
+                                                hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                                                filled: true,
+                                                fillColor: Colors.black45,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                border: OutlineInputBorder(
+                                                  borderRadius: BorderRadius.circular(20),
+                                                  borderSide: BorderSide.none,
                                                 ),
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            m['title'],
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
+                                          _buildFocusableItem(
+                                            onTap: _addComment,
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(8.0),
+                                              child: Icon(Icons.send, color: Colors.redAccent, size: 20),
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ],
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                          if (widget.customUrl == null && !widget.isOfflineDownload) ..._buildMoreSuggestions(),
-                        ],
+                                      const SizedBox(height: 10),
+                                      StreamBuilder<QuerySnapshot>(
+                                        stream: FirebaseFirestore.instance
+                                            .collection('movies')
+                                            .doc(widget.customUrl == null
+                                                ? widget.tmdbId.toString()
+                                                : 'live_${widget.movieTitle.replaceAll(" ", "_")}')
+                                            .collection('comments')
+                                            .orderBy('timestamp', descending: true)
+                                            .snapshots(),
+                                        builder: (context, snapshot) {
+                                          if (!snapshot.hasData) {
+                                            return const Center(
+                                              child: CircularProgressIndicator(color: Colors.redAccent),
+                                            );
+                                          }
+                                          final comments = snapshot.data!.docs;
+
+                                          if (comments.isEmpty) {
+                                            return const Padding(
+                                              padding: EdgeInsets.all(8.0),
+                                              child: Text(
+                                                "Be the first to comment!",
+                                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                                              ),
+                                            );
+                                          }
+
+                                          return Column(
+                                            children: comments.map((doc) {
+                                              var data = doc.data() as Map<String, dynamic>;
+                                              return Padding(
+                                                padding: const EdgeInsets.only(bottom: 8.0),
+                                                child: Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    CircleAvatar(
+                                                      radius: 14,
+                                                      backgroundColor: Colors.redAccent,
+                                                      child: Text(
+                                                        data['avatar'] ?? 'U',
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Row(
+                                                            children: [
+                                                              Text(
+                                                                data['name'] ?? 'User',
+                                                                style: const TextStyle(
+                                                                  color: Colors.white70,
+                                                                  fontSize: 12,
+                                                                  fontWeight: FontWeight.bold,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(width: 6),
+                                                              const Text(
+                                                                "Just now",
+                                                                style: TextStyle(color: Colors.grey, fontSize: 10),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          Text(
+                                                            data['text'] ?? '',
+                                                            style:
+                                                                const TextStyle(color: Colors.white, fontSize: 12),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              const SizedBox(height: 20),
+
+                              if (widget.customUrl == null &&
+                                  !widget.isOfflineDownload &&
+                                  similarMovies.isNotEmpty) ...[
+                                const Text(
+                                  "Suggested Movies & Shows",
+                                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  height: 160,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: similarMovies.length,
+                                    itemBuilder: (context, index) {
+                                      final m = similarMovies[index];
+                                      return _buildFocusableItem(
+                                        onTap: () {
+                                          Navigator.pushReplacement(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => VideoPlayerPage(
+                                                tmdbId: m['id'],
+                                                mediaType: m['mediaType'],
+                                                movieTitle: m['title'],
+                                                rating: m['rating'],
+                                                year: m['year'],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          width: 110,
+                                          margin: const EdgeInsets.only(right: 10),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    image: DecorationImage(
+                                                      image: CachedNetworkImageProvider(m['posterUrl'] != ''
+                                                          ? m['posterUrl']
+                                                          : 'https://via.placeholder.com/300x450/222222/888888'),
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                m['title'],
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                              if (widget.customUrl == null && !widget.isOfflineDownload) ..._buildMoreSuggestions(),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
+
+            // WhatsApp-Style Top Slide-Down Download Notification Overlay right on VideoPlayerPage
+            const LiveDownloadNotificationBanner(),
+          ],
         ),
       ),
     );
@@ -4172,7 +4364,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
-// 🔥 2-FINGER PINCH ZOOM + 1-FINGER YOUTUBE-STYLE SWIPE UP/DOWN TO ROTATE 🔥
+// 2-Finger Pinch Zoom + 1-Finger YouTube-Style Swipe Up/Down to Rotate (UNTOUCHED!)
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
   final Widget child;
@@ -4226,10 +4418,9 @@ class _PinchZoomState extends State<_PinchZoom> {
     if (!_multiTouchSession && _pointers.length == 1 && _singleSwipeStart != null) {
       final double dy = e.position.dy - _singleSwipeStart!.dy;
       final double dx = (e.position.dx - _singleSwipeStart!.dx).abs();
-      // YouTube-style vertical swipe up to rotate to Landscape Fullscreen, swipe down to exit
-      if (dy < -42 && dx < 90) {
+      if (dy < -40 && dx < 95) {
         widget.onSwipeUp?.call();
-      } else if (dy > 48 && dx < 90) {
+      } else if (dy > 45 && dx < 95) {
         widget.onSwipeDown?.call();
       }
     }
