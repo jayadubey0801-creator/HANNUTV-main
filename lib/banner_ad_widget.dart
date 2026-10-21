@@ -1,7 +1,7 @@
-import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class CustomBannerAd extends StatefulWidget {
   final String htmlBannerCode;
@@ -13,127 +13,214 @@ class CustomBannerAd extends StatefulWidget {
 }
 
 class _CustomBannerAdState extends State<CustomBannerAd> {
-  bool _isAdblockDetected = false;
-  bool _isOffline = false;
-  int _retryKey = 0;
-  Timer? _watchdog;
-
-  // Exact Unity Placement ID from Dashboard
-  static const String kUnityBannerPlacementId = 'BP_Banner_Android';
-
-  static const List<String> _adDomains = [
-    'unityads.unity3d.com',
-    'config.unityads.unity3d.com',
-    'webview.unityads.unity3d.com',
-  ];
+  static bool _unityInitialized = false;
+  bool _unityBannerLoaded = false;
+  late final WebViewController _webController;
+  bool _webBannerReady = false;
 
   @override
   void initState() {
     super.initState();
-    _checkDeepBannerAdblock();
-    _watchdog = Timer.periodic(const Duration(seconds: 4), (_) => _checkDeepBannerAdblock());
+    _initUnityIfNeeded();
+    _initWebBanner();
   }
 
-  Future<void> _checkDeepBannerAdblock() async {
-    // First check if internet is available at all
-    bool netAvailable = false;
+  void _initUnityIfNeeded() {
+    if (_unityInitialized) return;
+    _unityInitialized = true;
     try {
-      final g = await InternetAddress.lookup('google.com').timeout(const Duration(milliseconds: 900));
-      if (g.isNotEmpty) netAvailable = true;
-    } catch (_) {
-      netAvailable = false;
-    }
-
-    if (!netAvailable) {
-      if (mounted && (!_isOffline || _isAdblockDetected)) {
-        setState(() {
-          _isOffline = true;
-          _isAdblockDetected = false;
-        });
-      }
-      return;
-    }
-
-    bool isBlocked = false;
-    for (final host in _adDomains) {
-      try {
-        final addresses = await InternetAddress.lookup(host).timeout(const Duration(milliseconds: 900));
-        for (var addr in addresses) {
-          if (addr.isLoopback ||
-              addr.address == '0.0.0.0' ||
-              addr.address == '127.0.0.1' ||
-              addr.address == '::1' ||
-              addr.address == '::') {
-            isBlocked = true;
-            break;
-          }
-        }
-        if (isBlocked) break;
-      } catch (_) {
-        isBlocked = true;
-        break;
-      }
-    }
-
-    if (mounted && (isBlocked != _isAdblockDetected || _isOffline)) {
-      setState(() {
-        _isOffline = false;
-        _isAdblockDetected = isBlocked;
-      });
-    }
+      UnityAds.init(
+        gameId: '800405137',
+        testMode: false,
+      );
+    } catch (_) {}
   }
 
-  @override
-  void dispose() {
-    _watchdog?.cancel();
-    super.dispose();
+  void _initWebBanner() {
+    final String snippet = widget.htmlBannerCode.trim().isNotEmpty
+        ? widget.htmlBannerCode
+        : '''
+          <script type="text/javascript">
+            atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
+          </script>
+          <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
+        ''';
+
+    final String fullHtml = '''
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          html, body {
+            width: 320px;
+            height: 50px;
+            background: transparent;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+        </style>
+      </head>
+      <body>
+        $snippet
+      </body>
+      </html>
+    ''';
+
+    _webController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.transparent)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            if (mounted) setState(() => _webBannerReady = true);
+          },
+          onNavigationRequest: (NavigationRequest req) {
+            final String u = req.url;
+            if (!req.isMainFrame ||
+                u.contains('highrevenueformat.com') ||
+                u.contains('about:blank')) {
+              return NavigationDecision.navigate;
+            }
+            if (u.startsWith('http://') ||
+                u.startsWith('https://') ||
+                u.startsWith('market://') ||
+                u.startsWith('intent://')) {
+              _openExternalAdLink(u);
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+        ),
+      )
+      ..loadHtmlString(fullHtml);
+  }
+
+  Future<void> _openExternalAdLink(String rawUrl) async {
+    final Uri? uri = Uri.tryParse(rawUrl);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isOffline) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      width: double.infinity,
-      height: 55,
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF12121A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: _isAdblockDetected
-            ? Container(
-                color: Colors.grey[900],
-                child: const Center(
-                  child: Text(
-                    "AdBlocker / Private DNS kindly off then enjoy",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
+    return Center(
+      child: Container(
+        height: 54,
+        width: 320,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF151525), Color(0xFF1E1B32)],
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.amber.withOpacity(0.38)),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Layer 1: Guaranteed Interactive Sponsor Banner (Always visible if network/Unity is loading)
+            GestureDetector(
+              onTap: () => _openExternalAdLink(
+                  'https://play.google.com/store/apps/category/GAME'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.amber,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'AD',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Google Play • Top Trending Games',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'https://play.google.com/store/apps',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontSize: 9.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Text(
+                        'INSTALL',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              )
-            : Center(
+              ),
+            ),
+
+            // Layer 2: Live HTML Iframe Ad Banner
+            if (_webBannerReady)
+              Positioned.fill(
+                child: WebViewWidget(controller: _webController),
+              ),
+
+            // Layer 3: Official Unity Banner Ad (BP_Banner_Android)
+            Positioned.fill(
+              child: Opacity(
+                opacity: _unityBannerLoaded ? 1.0 : 0.01,
                 child: UnityBannerAd(
-                  key: ValueKey('unity_banner_$_retryKey'),
-                  placementId: kUnityBannerPlacementId,
-                  onLoad: (placementId) => debugPrint('Unity Banner loaded: $placementId'),
-                  onClick: (placementId) => debugPrint('Unity Banner clicked: $placementId'),
+                  placementId: 'BP_Banner_Android',
+                  onLoad: (placementId) {
+                    if (mounted) setState(() => _unityBannerLoaded = true);
+                  },
+                  onClick: (placementId) =>
+                      debugPrint('Unity Banner clicked: $placementId'),
                   onFailed: (placementId, error, message) {
-                    debugPrint('Unity Banner failed: $error $message');
-                    _checkDeepBannerAdblock();
-                    Future.delayed(const Duration(seconds: 6), () {
-                      if (mounted && !_isAdblockDetected && !_isOffline) {
-                        setState(() => _retryKey++);
-                      }
-                    });
+                    if (mounted) setState(() => _unityBannerLoaded = false);
                   },
                 ),
               ),
+            ),
+          ],
+        ),
       ),
     );
   }
