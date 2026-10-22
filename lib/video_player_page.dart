@@ -84,8 +84,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   // Persistent GlobalKey so WebView never unmounts or turns black on Portrait <-> Landscape rotation
   final GlobalKey _webViewSurfaceKey = GlobalKey();
 
-  // Local Loopback HTTP Server for 100% Offline Video Playback (Works with Wi-Fi & Data OFF!)
+  // Local Loopback HTTP Server for 100% Offline Video Playback
   HttpServer? _offlineLoopbackServer;
+
+  // ALL MISSING VARIABLES ADDED HERE TO FIX "GETTER NOT DEFINED" ERRORS
+  bool _effectiveOfflineMode = false;
+  String? _effectiveOfflinePath;
+  String? _effectiveOfflineLang;
+  String? _effectiveOfflineQual;
+  String? _effectiveOfflineSrv;
 
   bool isVideoPlaying = false;
   bool isFullScreen = false;
@@ -105,7 +112,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool showControls = true;
   Timer? _hideControlsTimer;
 
-  // YouTube-Style In-Player Video Ad Engine (100% Inside Player Box — Zero 2nd Tab & Zero Movie Audio Leak!)
+  // YouTube-Style In-Player Video Ad Engine (Zero 2nd Tab & Zero Movie Audio Leak!)
   bool _isShowingInPlayerAd = true;
   bool _isAdLoadingWait = true;
   bool _isAdMuted = false;
@@ -133,7 +140,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     'webview.unityads.unity3d.com',
   ];
 
-  // YouTube-Style Video Ad Campaigns with Real Video Stream + Full Visible URL + Play Store / Browser Redirect
+  // YouTube-Style Video Ad Campaigns with Real Video Stream + Full Visible URL + Play Store Redirect
   final List<Map<String, String>> _sponsors = const [
     {
       'title': 'BGMI / Action Battle Royale • Play Now',
@@ -218,11 +225,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _introOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
         CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
-    if (widget.isOfflineDownload) {
+    // Auto-detect if this title/episode is already downloaded
+    final DownloadTaskItem? downloadedTask = DownloadStore.I.findTaskForMedia(
+      tmdbId: widget.tmdbId,
+      mediaType: _tmdbType,
+      season: currentSeason,
+      episode: currentEpisode,
+    );
+
+    if (widget.isOfflineDownload ||
+        (downloadedTask != null && downloadedTask.status == 'completed')) {
       // Offline mode: Zero video ads & zero network requests!
+      _effectiveOfflineMode = true;
+      _effectiveOfflinePath = widget.offlineFilePath ?? downloadedTask?.localFilePath;
+      _effectiveOfflineLang = widget.offlineLanguage ?? downloadedTask?.language;
+      _effectiveOfflineQual = widget.offlineQuality ?? downloadedTask?.quality;
+      _effectiveOfflineSrv = widget.offlineServerName ?? downloadedTask?.serverName;
       _isShowingInPlayerAd = false;
       _isAdLoadingWait = false;
     } else {
+      _effectiveOfflineMode = false;
       _initInPlayerAdWebView();
       _ensureUnityInitialized();
       if (widget.customUrl == null) {
@@ -234,7 +256,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _dnsWatchdogTimer = Timer.periodic(const Duration(seconds: 2), (_) => _runDnsCheck());
       _triggerYouTubeStyleAd();
       _thirtyMinAdCycleTimer = Timer.periodic(const Duration(minutes: 30), (_) {
-        if (mounted && !widget.isOfflineDownload) _triggerYouTubeStyleAd();
+        if (mounted && !_effectiveOfflineMode) _triggerYouTubeStyleAd();
       });
     }
 
@@ -253,8 +275,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
-  /// Dedicated In-Player Video Ad WebView Controller so Video Ads play inside the player box
-  /// and automatically scale when rotated to Fullscreen (Never opens a 2nd Android Activity tab!)
   void _initInPlayerAdWebView() {
     final WebViewController adCtrl = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -278,7 +298,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _loadVideoAdIntoAdWebView() {
-    if (_adWebViewController == null || widget.isOfflineDownload) return;
+    if (_adWebViewController == null || _effectiveOfflineMode) return;
     final sponsor = _sponsors[_activeSponsorIdx];
     final String adVideoUrl = sponsor['adVideo']!;
     final String adHtml = '''
@@ -337,12 +357,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // 🔥 IN-PLAYER YOUTUBE-STYLE AD ENGINE (ZERO BACKGROUND MOVIE AUDIO LEAK!) 🔥
-  // ───────────────────────────────────────────────────────────────────────────
-
   Future<bool> _isDnsBlocked() async {
-    if (widget.isOfflineDownload) return false;
+    if (_effectiveOfflineMode) return false;
     for (final host in _adProbeDomains) {
       try {
         final result = await InternetAddress.lookup(host).timeout(const Duration(milliseconds: 900));
@@ -368,7 +384,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<void> _runDnsCheck() async {
-    if (widget.isOfflineDownload || _checkingDns || !mounted) return;
+    if (_effectiveOfflineMode || _checkingDns || !mounted) return;
     _checkingDns = true;
     try {
       final bool blocked = await _isDnsBlocked();
@@ -393,7 +409,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _triggerYouTubeStyleAd() {
-    if (!mounted || widget.isOfflineDownload) return;
+    if (!mounted || _effectiveOfflineMode) return;
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
 
@@ -408,11 +424,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _canSkipInPlayerAd = false;
     });
 
-    // Load real video ad inside the in-player Ad WebView + register Unity Ad placement
     _loadVideoAdIntoAdWebView();
     _preloadInPlayerUnityAd();
 
-    // Continuously hold any background movie iframe & video so ZERO movie sound leaks during the ad
     _backgroundMuteGuardTimer?.cancel();
     _backgroundMuteGuardTimer = Timer.periodic(const Duration(milliseconds: 180), (_) {
       if (_isShowingInPlayerAd && mounted) {
@@ -439,7 +453,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _preloadInPlayerUnityAd() {
-    if (_isAdblockDetected || widget.isOfflineDownload) return;
+    if (_isAdblockDetected || _effectiveOfflineMode) return;
     try {
       UnityAds.load(
         placementId: kUnityInterstitialId,
@@ -505,11 +519,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _isAdLoadingWait = false;
       isPageLoading = true;
     });
-    // Now load the actual movie server stream!
     _loadOnlineMovieStreamIntoWebView();
   }
 
-  /// Holds cross-origin movie iframes & pauses any video elements during the Ad so 0% movie audio leaks!
   void _enforceBackgroundPrebufferPause() {
     try {
       _controller.runJavaScript('''
@@ -537,7 +549,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
-  /// Restores the pre-warmed movie iframe & unmutes video the instant Skip Ad is pressed!
   void _unmuteAndResumeMovieInstantly() {
     try {
       _controller.runJavaScript('''
@@ -578,9 +589,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
-  /// In-Player YouTube-Style Video Ad Overlay — Plays real video ad inside player & scales to Fullscreen!
   Widget _buildYouTubeInPlayerAdOverlay() {
-    if (widget.isOfflineDownload) return const SizedBox.shrink();
+    if (_effectiveOfflineMode) return const SizedBox.shrink();
     if (!_isShowingInPlayerAd && !_isAdblockDetected) return const SizedBox.shrink();
 
     final sponsor = _sponsors[_activeSponsorIdx];
@@ -591,13 +601,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         color: Colors.black,
         child: Stack(
           children: [
-            // 1. Live Video Ad Player Surface inside the Player Box (Scales automatically on Fullscreen!)
             if (!_isAdblockDetected && _adWebViewController != null)
               Positioned.fill(
                 child: WebViewWidget(controller: _adWebViewController!),
               ),
 
-            // 2. Loading Spinner Overlay during initial 3s Ad Buffer
             if (_isAdLoadingWait && !_isAdblockDetected)
               Positioned.fill(
                 child: Container(
@@ -622,7 +630,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 ),
               ),
 
-            // 3. PvtDNS / AdGuard Freeze Overlay
             if (_isAdblockDetected)
               Positioned.fill(
                 child: Container(
@@ -648,7 +655,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 ),
               ),
 
-            // 4. Top-Left YouTube-style "Ad" Status Badge + Sound Mute Toggle
             Positioned(
               top: full ? 14 : 8,
               left: 12,
@@ -704,7 +710,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               ),
             ),
 
-            // 5. Top-Right Fullscreen Expand/Collapse + HANNUTV Logo inside Ad Overlay
             Positioned(
               top: full ? 14 : 8,
               right: 12,
@@ -746,7 +751,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               ),
             ),
 
-            // 6. Bottom-Left YouTube-Style Advertiser CTA + Full Visible URL Pill (Opens Play Store / Browser!)
             if (!_isAdblockDetected)
               Positioned(
                 bottom: full ? 20 : 10,
@@ -832,7 +836,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 ),
               ),
 
-            // 7. Bottom-Right YouTube-Style 15s Skip Button
             Positioned(
               bottom: full ? 20 : 12,
               right: 10,
@@ -889,7 +892,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               ),
             ),
 
-            // 8. Bottom YouTube-Style Yellow Progress Bar
             Positioned(
               left: 0,
               right: 0,
@@ -907,7 +909,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  /// YouTube-Style Advertiser Companion Card Below Player with Full Visible URL & Direct Redirect
   Widget _buildYouTubeSponsorCompanionCard() {
     final sponsor = _sponsors[_activeSponsorIdx];
     return GestureDetector(
@@ -1103,7 +1104,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _detectedServerQualities.clear();
     });
 
-    // Pre-calculate target proxy URL so Download Analyzer can inspect it anytime
     final id = widget.tmdbId;
     final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
     String originalTargetUrl = isTv
@@ -1153,17 +1153,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final platformController = _controller.platform;
     if (platformController is AndroidWebViewController) {
       platformController.setMediaPlaybackRequiresUserGesture(false);
-      // 🔥 FIX: Enable Local File Access for Offline Video Playback 🔥
-      platformController.setAllowFileAccess(true);
+      platformController.setAllowFileAccess(true); // OFFLINE FIX
     }
 
-    // 1. Offline Download Playback (Works with Wi-Fi and Mobile Data turned OFF!)
-    if (widget.isOfflineDownload) {
+    if (_effectiveOfflineMode) {
       _loadOfflineDownloadedVideo();
       return;
     }
 
-    // 2. Online Playback: First run In-Player Video Ad (if active), then load movie stream on Skip Ad
     if (_isShowingInPlayerAd) {
       _triggerYouTubeStyleAd();
     } else {
@@ -1366,43 +1363,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         _controller.loadRequest(Uri.parse(widget.customUrl!));
       }
     } else {
-      final id = widget.tmdbId;
-      final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
-
-      String originalTargetUrl = isTv
-          ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer'
-          : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer';
-
-      String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
-      String safeFinalUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
-      _currentProxyTargetUrl = safeFinalUrl;
-      _sniffedStreamUrl = safeFinalUrl;
-
-      _controller.loadRequest(Uri.parse(safeFinalUrl));
+      _controller.loadRequest(Uri.parse(_currentProxyTargetUrl));
     }
   }
 
-  /// 100% Crash-Free Offline Video Player (Works with Wi-Fi & Mobile Data completely OFF!)
-  /// Uses Direct file:// URI so Android WebView natively plays the actual local MP4
   Future<void> _loadOfflineDownloadedVideo() async {
     try {
       await _offlineLoopbackServer?.close(force: true);
     } catch (_) {}
 
     File? validVideoFile;
-    if (widget.offlineFilePath != null && widget.offlineFilePath!.isNotEmpty) {
+    if (_effectiveOfflinePath != null && _effectiveOfflinePath!.isNotEmpty) {
       try {
-        final File f = File(widget.offlineFilePath!);
-        if (await f.exists() && await f.length() > 1024 * 16) {
-          // Verify MP4 'ftyp' header so legacy JSON files don't break <video>
-          final List<int> header = await f.openRead(0, 12).expand((x) => x).toList();
-          if (header.length >= 8 &&
-              header[4] == 0x66 &&
-              header[5] == 0x74 &&
-              header[6] == 0x79 &&
-              header[7] == 0x70) {
-            validVideoFile = f;
-          }
+        final File f = File(_effectiveOfflinePath!);
+        if (await f.exists() && await f.length() > 4096) {
+          validVideoFile = f;
         }
       } catch (_) {}
     }
@@ -2026,7 +2001,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<void> _buildAmbientPalette(Map<String, dynamic> data) async {
-    if (widget.isOfflineDownload) return;
+    if (_effectiveOfflineMode) return;
     final List<String> paths = [];
     try {
       final imgs = data['images'];
@@ -2152,7 +2127,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<String> _posterUrlForWatchlist() async {
-    if (widget.isOfflineDownload) return '';
+    if (_effectiveOfflineMode) return '';
     String path = '';
     final Map<String, dynamic>? d = details;
     if (d != null && d['poster_path'] is String) path = d['poster_path'] as String;
@@ -3030,7 +3005,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       ),
                                       const SizedBox(width: 8),
                                     ],
-                                    if (!widget.isOfflineDownload)
+                                    if (!_effectiveOfflineMode)
                                       _buildFocusableItem(
                                         onTap: _showSearchSheet,
                                         borderRadius: BorderRadius.circular(20),
