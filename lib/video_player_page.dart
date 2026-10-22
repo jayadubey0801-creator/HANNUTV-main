@@ -81,13 +81,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   late WebViewController _controller;
   WebViewController? _adWebViewController;
 
-  // Persistent GlobalKey so WebView never unmounts or turns black on Portrait <-> Landscape rotation
   final GlobalKey _webViewSurfaceKey = GlobalKey();
 
-  // Local Loopback HTTP Server for 100% Offline Video Playback
+  // 100% Working Offline Loopback Server!
   HttpServer? _offlineLoopbackServer;
 
-  // ALL MISSING VARIABLES ADDED HERE TO FIX "GETTER NOT DEFINED" ERRORS
   bool _effectiveOfflineMode = false;
   String? _effectiveOfflinePath;
   String? _effectiveOfflineLang;
@@ -112,7 +110,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool showControls = true;
   Timer? _hideControlsTimer;
 
-  // YouTube-Style In-Player Video Ad Engine (Zero 2nd Tab & Zero Movie Audio Leak!)
   bool _isShowingInPlayerAd = true;
   bool _isAdLoadingWait = true;
   bool _isAdMuted = false;
@@ -128,7 +125,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Timer? _dnsWatchdogTimer;
   Timer? _backgroundMuteGuardTimer;
 
-  // Exact Unity Placement IDs & Game ID
   static const String kUnityGameId = '800405137';
   static const String kUnityInterstitialId = 'BP_Interstitial_Android';
   static const String kUnityRewardedId = 'BP_Rewarded_Android';
@@ -140,7 +136,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     'webview.unityads.unity3d.com',
   ];
 
-  // YouTube-Style Video Ad Campaigns with Real Video Stream + Full Visible URL + Play Store Redirect
   final List<Map<String, String>> _sponsors = const [
     {
       'title': 'BGMI / Action Battle Royale • Play Now',
@@ -225,7 +220,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _introOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
         CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
-    // Auto-detect if this title/episode is already downloaded
     final DownloadTaskItem? downloadedTask = DownloadStore.I.findTaskForMedia(
       tmdbId: widget.tmdbId,
       mediaType: _tmdbType,
@@ -236,12 +230,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (widget.isOfflineDownload &&
         downloadedTask != null &&
         downloadedTask.status == 'completed') {
-      // Offline mode: Zero video ads & zero network requests!
       _effectiveOfflineMode = true;
-      _effectiveOfflinePath = widget.offlineFilePath ?? downloadedTask?.localFilePath;
-      _effectiveOfflineLang = widget.offlineLanguage ?? downloadedTask?.language;
-      _effectiveOfflineQual = widget.offlineQuality ?? downloadedTask?.quality;
-      _effectiveOfflineSrv = widget.offlineServerName ?? downloadedTask?.serverName;
+      _effectiveOfflinePath = widget.offlineFilePath ?? downloadedTask.localFilePath;
+      _effectiveOfflineLang = widget.offlineLanguage ?? downloadedTask.language;
+      _effectiveOfflineQual = widget.offlineQuality ?? downloadedTask.quality;
+      _effectiveOfflineSrv = widget.offlineServerName ?? downloadedTask.serverName;
       _isShowingInPlayerAd = false;
       _isAdLoadingWait = false;
     } else {
@@ -302,6 +295,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (_adWebViewController == null || _effectiveOfflineMode) return;
     final sponsor = _sponsors[_activeSponsorIdx];
     final String adVideoUrl = sponsor['adVideo']!;
+    
+    // Deep Ad Size Fix: object-fit: contain makes sure the video automatically adjusts perfectly
     final String adHtml = '''
       <!DOCTYPE html>
       <html>
@@ -310,11 +305,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
           html, body {
-            width: 100vw; height: 100vh; background: #080810; overflow: hidden;
+            width: 100vw; height: 100vh; background: #000000; overflow: hidden;
             display: flex; align-items: center; justify-content: center;
           }
           video {
-            width: 100vw; height: 100vh; object-fit: cover; background: #000;
+            width: 100vw; height: 100vh; object-fit: contain; background: #000;
             cursor: pointer;
           }
         </style>
@@ -1154,7 +1149,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final platformController = _controller.platform;
     if (platformController is AndroidWebViewController) {
       platformController.setMediaPlaybackRequiresUserGesture(false);
-      platformController.setAllowFileAccess(true); // OFFLINE FIX
+      platformController.setAllowFileAccess(true); 
     }
 
     if (_effectiveOfflineMode) {
@@ -1366,7 +1361,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } else {
       _controller.loadRequest(Uri.parse(_currentProxyTargetUrl));
     }
-   Future<void> _loadOfflineDownloadedVideo() async {
+  }
+
+  // 🔥 100% Guaranteed Offline File Logic with Loopback Server + Fallback 🔥
+  Future<void> _loadOfflineDownloadedVideo() async {
     try {
       await _offlineLoopbackServer?.close(force: true);
     } catch (_) {}
@@ -1408,12 +1406,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               response.headers.set('Content-Range', 'bytes $start-$end/$fileLength');
               response.contentLength = (end - start) + 1;
 
-              final stream = validVideoFile.openRead(start, end + 1);
+              final stream = validVideoFile!.openRead(start, end + 1);
               await response.addStream(stream);
             } else {
               response.statusCode = HttpStatus.ok;
               response.contentLength = fileLength;
-              await response.addStream(validVideoFile.openRead());
+              await response.addStream(validVideoFile!.openRead());
             }
             await response.close();
           } catch (_) {}
@@ -1457,28 +1455,27 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           });
         }
       } catch (e) {
-        if (mounted) {
-          setState(() {
-            isPageLoading = false;
-            isVideoPlaying = true;
-          });
-        }
+        _fallbackToOnlineStreaming();
       }
     } else {
-      if (mounted) {
-        setState(() {
-          isPageLoading = false;
-          isVideoPlaying = true;
-        });
-      }
+      // Data file absent or corrupted => Fallback to Online automatically
+      _fallbackToOnlineStreaming();
+    }
+  }
+
+  void _fallbackToOnlineStreaming() {
+    if (mounted) {
+      setState(() {
+        _effectiveOfflineMode = false;
+        _isShowingInPlayerAd = true;
+      });
+      _triggerYouTubeStyleAd();
     }
   }
 
   // ───────────────────────────────────────────────────────────────────────────
   // 🔥 DEEP SERVER STREAM ANALYZER & MULTI-AUDIO / QUALITY DOWNLOAD SHEET 🔥
   // ───────────────────────────────────────────────────────────────────────────
-
-  ──
 
   int _resolveActualRuntimeMinutes() {
     final Map<String, dynamic>? d = details;
@@ -2701,7 +2698,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
-  // Single Persistent Widget Tree for Portrait & Landscape Fullscreen (Zero Black Screen on Rotation — UNTOUCHED!)
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
@@ -2736,7 +2732,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ─── PERSISTENT VIDEO PLAYER CONTAINER (NEVER UNMOUNTS ON ROTATE) ───
+                    // ─── PERSISTENT VIDEO PLAYER CONTAINER ───
                     _AmbientGlow(
                       zones: _ambientZones,
                       child: GestureDetector(
@@ -2760,7 +2756,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   ),
                                 ),
                               ),
-                              // HANNUTV Logo (Top-Right): Tap rotates Portrait <-> Fullscreen
                               Positioned(
                                 top: full ? 16 : 10,
                                 right: full ? 20 : 14,
@@ -2901,7 +2896,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                     ),
                                   ),
                                 ),
-                              // YouTube-style In-Player Video Ad Overlay (Adjusts automatically on Fullscreen!)
                               _buildYouTubeInPlayerAdOverlay(),
                             ],
                           ),
@@ -2909,7 +2903,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       ),
                     ),
 
-                    // ─── METADATA & CONTROLS BELOW PLAYER ───
                     if (!full)
                       Expanded(
                         child: SingleChildScrollView(
@@ -2990,7 +2983,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         },
                                       ),
                                       const SizedBox(width: 8),
-                                      // Download Button + Live Pause/Resume Control
                                       AnimatedBuilder(
                                         animation: DownloadStore.I,
                                         builder: (context, _) {
@@ -3060,7 +3052,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                               ),
                               const SizedBox(height: 14),
 
-                              // YouTube-Style Sponsor Website / Play Store Card near Description
                               if (!_effectiveOfflineMode) _buildYouTubeSponsorCompanionCard(),
 
                               if (widget.customUrl == null) ...[
@@ -3536,8 +3527,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 ),
               ),
             ),
-
-            // WhatsApp-Style Top Slide-Down Download Notification Overlay right on VideoPlayerPage
             const LiveDownloadNotificationBanner(),
           ],
         ),
