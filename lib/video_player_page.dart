@@ -113,7 +113,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool _isShowingInPlayerAd = true;
   bool _isAdLoadingWait = true;
   bool _isAdMuted = false;
-  int _adLoadWaitSeconds = 3;
+  int _adLoadWaitSeconds = 12; // Unity ad load hone ka max wait
+  bool _unityVideoShowing = false;
+  Timer? _unityShowWatchdog;
   int _adSkipTimeLeft = 15;
   int _adElapsedSeconds = 0;
   bool _canSkipInPlayerAd = false;
@@ -430,13 +432,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _isShowingInPlayerAd = true;
       _isAdLoadingWait = true;
       _isAdMuted = false;
-      _adLoadWaitSeconds = 3;
+      _adLoadWaitSeconds = 12;
       _adSkipTimeLeft = 15;
       _adElapsedSeconds = 0;
       _canSkipInPlayerAd = false;
     });
 
-    _loadVideoAdIntoAdWebView();
+    // Google ke sample clips ('ForBigger*.mp4') ab 'Sponsored' ad ban ke nahi chalte; asli Unity ad niche se show hota hai
     _preloadInPlayerUnityAd();
 
     _backgroundMuteGuardTimer?.cancel();
@@ -457,8 +459,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         setState(() => _adLoadWaitSeconds--);
       } else {
         timer.cancel();
-        if (_isAdLoadingWait) {
-          _startAdPlaybackAnd15SecSkipTimer();
+        // Unity ad nahi mila/nahi chala to bina fake countdown ke seedha movie
+        if (_isAdLoadingWait && !_unityVideoShowing) {
+          _unityAdUnavailable();
         }
       }
     });
@@ -466,25 +469,70 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   void _preloadInPlayerUnityAd() {
     if (_isAdblockDetected || _effectiveOfflineMode) return;
+    _loadAndShowUnity(kUnityInterstitialId, <String>[kUnityRewardedId]);
+  }
+
+  // Unity ad load -> show (native full-screen, ad ke creative ke hisaab se screen khud rotate/adjust hoti hai)
+  // -> khatam/skip hote hi movie. Fail ho to agla placement, sab fail ho to movie seedha.
+  void _loadAndShowUnity(String placementId, List<String> fallbacks) {
+    void next() {
+      if (fallbacks.isNotEmpty) {
+        _loadAndShowUnity(fallbacks.first, fallbacks.sublist(1));
+      } else {
+        _unityAdUnavailable();
+      }
+    }
+
     try {
       UnityAds.load(
-        placementId: kUnityInterstitialId,
-        onComplete: (placementId) {
-          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected) return;
-          _startAdPlaybackAnd15SecSkipTimer();
+        placementId: placementId,
+        onComplete: (loadedId) {
+          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityVideoShowing) return;
+          _unityVideoShowing = true;
+          _adLoadWaitTimer?.cancel();
+          // safety: callback kabhi na aaye to bhi movie atke nahi
+          _unityShowWatchdog?.cancel();
+          _unityShowWatchdog = Timer(const Duration(seconds: 150), () {
+            if (_unityVideoShowing) {
+              _unityVideoShowing = false;
+              _finishInPlayerAd();
+            }
+          });
+          try {
+            UnityAds.showVideoAd(
+              placementId: placementId,
+              onComplete: (shownId) {
+                _unityShowWatchdog?.cancel();
+                _unityVideoShowing = false;
+                _finishInPlayerAd();
+              },
+              onSkipped: (shownId) {
+                _unityShowWatchdog?.cancel();
+                _unityVideoShowing = false;
+                _finishInPlayerAd();
+              },
+              onFailed: (shownId, error, message) {
+                _unityShowWatchdog?.cancel();
+                _unityVideoShowing = false;
+                next();
+              },
+            );
+          } catch (_) {
+            _unityShowWatchdog?.cancel();
+            _unityVideoShowing = false;
+            next();
+          }
         },
-        onFailed: (placementId, error, message) {
-          UnityAds.load(
-            placementId: kUnityRewardedId,
-            onComplete: (id) {
-              if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected) return;
-              _startAdPlaybackAnd15SecSkipTimer();
-            },
-            onFailed: (id, err, msg) {},
-          );
-        },
+        onFailed: (failedId, error, message) => next(),
       );
-    } catch (_) {}
+    } catch (_) {
+      next();
+    }
+  }
+
+  void _unityAdUnavailable() {
+    if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityVideoShowing) return;
+    _finishInPlayerAd();
   }
 
   void _startAdPlaybackAnd15SecSkipTimer() {
@@ -2705,6 +2753,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
     _thirtyMinAdCycleTimer?.cancel();
+    _unityShowWatchdog?.cancel();
     _dnsWatchdogTimer?.cancel();
     _backgroundMuteGuardTimer?.cancel();
     _introAnimController.dispose();
