@@ -599,10 +599,6 @@ class ContinueWatchingRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OFFLINE DOWNLOADS ROW, FULL PAGE & WHATSAPP-STYLE TOP BANNER
-// ─────────────────────────────────────────────────────────────────────────────
-
 void _openOfflinePlayer(BuildContext context, DownloadTaskItem t) {
   Navigator.of(context).push(
     MaterialPageRoute(
@@ -1253,6 +1249,7 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
   }
 }
 
+// 🔥 DEEP BLACK FIX FOR OTT LOGOS 🔥
 class OttLogo extends StatelessWidget {
   final Ott ott;
   final double w;
@@ -1298,11 +1295,8 @@ class OttLogo extends StatelessWidget {
   }
 
   Color _resolveBg() {
-    try {
-      final dynamic d = ott;
-      if (d.bg is Color) return d.bg as Color;
-    } catch (_) {}
-    return Colors.white;
+    // 100% Solid Deep Black
+    return const Color(0xFF000000);
   }
 
   @override
