@@ -493,11 +493,16 @@ class DownloadTaskItem {
   int downloadedBytes;
   String status; 
   String? localFilePath;
+  // FIX: Added missing variables
+  final String overview;
+  final String rating;
+  final String year;
 
   DownloadTaskItem({
     required this.id, required this.tmdbId, required this.mediaType, required this.season, required this.episode,
     required this.title, required this.posterUrl, required this.serverName, required this.language, required this.quality,
     required this.streamUrl, required this.totalBytes, required this.downloadedBytes, required this.status, this.localFilePath,
+    this.overview = '', this.rating = '0.0', this.year = '',
   });
 
   double get progress => totalBytes <= 0 ? 0.0 : (downloadedBytes / totalBytes).clamp(0.0, 1.0);
@@ -507,12 +512,14 @@ class DownloadTaskItem {
         'id': id, 'tmdbId': tmdbId, 'mediaType': mediaType, 'season': season, 'episode': episode,
         'title': title, 'posterUrl': posterUrl, 'serverName': serverName, 'language': language, 'quality': quality,
         'streamUrl': streamUrl, 'totalBytes': totalBytes, 'downloadedBytes': downloadedBytes, 'status': status, 'localFilePath': localFilePath,
+        'overview': overview, 'rating': rating, 'year': year,
       };
 
   factory DownloadTaskItem.fromJson(Map<String, dynamic> j) => DownloadTaskItem(
         id: j['id'], tmdbId: j['tmdbId'], mediaType: j['mediaType'], season: j['season'], episode: j['episode'],
         title: j['title'], posterUrl: j['posterUrl'], serverName: j['serverName'], language: j['language'], quality: j['quality'],
         streamUrl: j['streamUrl'], totalBytes: j['totalBytes'], downloadedBytes: j['downloadedBytes'], status: j['status'], localFilePath: j['localFilePath'],
+        overview: j['overview'] ?? '', rating: j['rating'] ?? '0.0', year: j['year'] ?? '',
       );
 }
 
@@ -590,6 +597,7 @@ class DownloadStore extends ChangeNotifier {
     required int tmdbId, required String mediaType, required int season, required int episode,
     required String title, required String posterUrl, required String serverName, required String language,
     required String quality, required String streamUrl, required int estimatedBytes,
+    String overview = '', String rating = '0.0', String year = '',
   }) async {
     final String id = '${mediaType}_${tmdbId}_s${season}_e${episode}_${quality.split(" ").first}';
     final Directory dir = await getApplicationDocumentsDirectory();
@@ -599,6 +607,7 @@ class DownloadStore extends ChangeNotifier {
       id: id, tmdbId: tmdbId, mediaType: mediaType, season: season, episode: episode, title: title,
       posterUrl: posterUrl, serverName: serverName, language: language, quality: quality,
       streamUrl: streamUrl, totalBytes: estimatedBytes, downloadedBytes: 0, status: 'downloading', localFilePath: offlinePath,
+      overview: overview, rating: rating, year: year,
     );
 
     _tasks.removeWhere((t) => t.id == id);

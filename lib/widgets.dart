@@ -19,7 +19,6 @@ const String _kWidgetBannerSnippet = '''
 
 class DashboardHooks {
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
-  // Exact match for lib/main.dart (lines 212, 216) & lib/dashboard_screen.dart (lines 88, 262)
   final void Function(BuildContext context)? onOpenLiveTv;
   final void Function(BuildContext context)? onOpenSearch;
 
@@ -608,9 +607,9 @@ void _openOfflinePlayer(BuildContext context, DownloadTaskItem t) {
         season: t.season,
         episode: t.episode,
         movieTitle: t.title,
-        overview: t.overview,
-        rating: t.rating,
-        year: t.year,
+        overview: t.overview, // FIXED: Now fetching correct data
+        rating: t.rating,     // FIXED
+        year: t.year,         // FIXED
         isOfflineDownload: true,
         offlineFilePath: t.localFilePath,
         offlineLanguage: t.language,
@@ -1249,7 +1248,6 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
   }
 }
 
-// 🔥 DEEP BLACK FIX FOR OTT LOGOS 🔥
 class OttLogo extends StatelessWidget {
   final Ott ott;
   final double w;
@@ -1267,13 +1265,11 @@ class OttLogo extends StatelessWidget {
   String _resolveLogoUrl() {
     try {
       final dynamic d = ott;
-      final dynamic l = d.logo;
-      if (l is String && l.isNotEmpty) return l;
+      if (d.logo is String && d.logo.isNotEmpty) return d.logo;
     } catch (_) {}
     try {
       final dynamic d = ott;
-      final dynamic ls = d.logos;
-      if (ls is List && ls.isNotEmpty) return ls.first.toString();
+      if (d.logos is List && d.logos.isNotEmpty) return d.logos.first.toString();
     } catch (_) {}
     return '';
   }
@@ -1281,21 +1277,15 @@ class OttLogo extends StatelessWidget {
   Color _resolveAccent() {
     try {
       final dynamic d = ott;
-      if (d.accent is Color) return d.accent as Color;
+      if (d.accent is Color) return d.accent;
+      if (d.fg is Color) return d.fg;
+      if (d.color is Color) return d.color;
     } catch (_) {}
-    try {
-      final dynamic d = ott;
-      if (d.fg is Color) return d.fg as Color;
-    } catch (_) {}
-    try {
-      final dynamic d = ott;
-      if (d.color is Color) return d.color as Color;
-    } catch (_) {}
-    return HC.accent;
+    return const Color(0xFF7C3AED);
   }
 
   Color _resolveBg() {
-    // 100% Solid Deep Black
+    // 🔥 DEEP BLACK FIX FOR OTT LOGOS 🔥
     return const Color(0xFF000000);
   }
 
