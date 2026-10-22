@@ -79,16 +79,13 @@ class VideoPlayerPage extends StatefulWidget {
 class _VideoPlayerPageState extends State<VideoPlayerPage>
     with SingleTickerProviderStateMixin {
   late WebViewController _controller;
+  WebViewController? _adWebViewController;
 
   // Persistent GlobalKey so WebView never unmounts or turns black on Portrait <-> Landscape rotation
   final GlobalKey _webViewSurfaceKey = GlobalKey();
 
+  // Local Loopback HTTP Server for 100% Offline Video Playback (Works with Wi-Fi & Data OFF!)
   HttpServer? _offlineLoopbackServer;
-  bool _effectiveOfflineMode = false;
-  String? _effectiveOfflinePath;
-  String? _effectiveOfflineLang;
-  String? _effectiveOfflineQual;
-  String? _effectiveOfflineSrv;
 
   bool isVideoPlaying = false;
   bool isFullScreen = false;
@@ -108,10 +105,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool showControls = true;
   Timer? _hideControlsTimer;
 
-  // YouTube-Style In-Player Ad Engine (Plays inside player BEFORE movie loads so 0% background movie sound leaks!)
+  // YouTube-Style In-Player Video Ad Engine (100% Inside Player Box — Zero 2nd Tab & Zero Movie Audio Leak!)
   bool _isShowingInPlayerAd = true;
-  bool _isAdLoadingWait = false;
-  int _adLoadWaitSeconds = 0;
+  bool _isAdLoadingWait = true;
+  bool _isAdMuted = false;
+  int _adLoadWaitSeconds = 3;
   int _adSkipTimeLeft = 15;
   int _adElapsedSeconds = 0;
   bool _canSkipInPlayerAd = false;
@@ -121,7 +119,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Timer? _inPlayerAdTimer;
   Timer? _thirtyMinAdCycleTimer;
   Timer? _dnsWatchdogTimer;
+  Timer? _backgroundMuteGuardTimer;
 
+  // Exact Unity Placement IDs & Game ID
   static const String kUnityGameId = '800405137';
   static const String kUnityInterstitialId = 'BP_Interstitial_Android';
   static const String kUnityRewardedId = 'BP_Rewarded_Android';
@@ -133,28 +133,31 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     'webview.unityads.unity3d.com',
   ];
 
-  // YouTube-Style In-Player Video Ad Campaigns with Full Visible URL & Direct Play Store / Browser Redirect
+  // YouTube-Style Video Ad Campaigns with Real Video Stream + Full Visible URL + Play Store / Browser Redirect
   final List<Map<String, String>> _sponsors = const [
     {
+      'title': 'BGMI / Action Battle Royale • Play Now',
+      'subtitle': 'Download Official Battle Royale Game on Google Play',
+      'domain': 'play.google.com',
+      'fullUrl': 'https://play.google.com/store/apps/details?id=com.pubg.imobile',
+      'cta': 'Download Game',
+      'adVideo': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    },
+    {
       'title': 'Color Water Sort Puzzle • 3D Brain Game',
+      'subtitle': 'Play the #1 Trending Bottle Sort Game on Android',
       'domain': 'play.google.com',
       'fullUrl': 'https://play.google.com/store/apps/details?id=com.IEC.WaterSort',
       'cta': 'Install Now',
-      'adVideoUrl': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+      'adVideo': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
     },
     {
-      'title': 'Google Play Store • Top Action & Racing Games',
+      'title': 'Google Play Store • Top Racing & Action Games',
+      'subtitle': 'Explore Trending Android Games & Apps Instantly',
       'domain': 'play.google.com',
       'fullUrl': 'https://play.google.com/store/apps/category/GAME',
       'cta': 'Open Play Store',
-      'adVideoUrl': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    },
-    {
-      'title': 'HANNUTV Official Partner • High Speed Streaming',
-      'domain': 'hannutv.blogspot.com',
-      'fullUrl': 'https://hannutv.blogspot.com',
-      'cta': 'Visit Site',
-      'adVideoUrl': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+      'adVideo': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
     },
   ];
   int _activeSponsorIdx = 0;
@@ -215,29 +218,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _introOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
         CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
-    // Auto-detect if this title/episode is already downloaded in DownloadStore
-    final DownloadTaskItem? downloadedTask = DownloadStore.I.findTaskForMedia(
-      tmdbId: widget.tmdbId,
-      mediaType: _tmdbType,
-      season: currentSeason,
-      episode: currentEpisode,
-    );
-
-    if (widget.isOfflineDownload ||
-        (downloadedTask != null && downloadedTask.status == 'completed')) {
-      _effectiveOfflineMode = true;
-      _effectiveOfflinePath =
-          widget.offlineFilePath ?? downloadedTask?.localFilePath;
-      _effectiveOfflineLang =
-          widget.offlineLanguage ?? downloadedTask?.language;
-      _effectiveOfflineQual =
-          widget.offlineQuality ?? downloadedTask?.quality;
-      _effectiveOfflineSrv =
-          widget.offlineServerName ?? downloadedTask?.serverName;
+    if (widget.isOfflineDownload) {
+      // Offline mode: Zero video ads & zero network requests!
       _isShowingInPlayerAd = false;
       _isAdLoadingWait = false;
     } else {
-      _effectiveOfflineMode = false;
+      _initInPlayerAdWebView();
       _ensureUnityInitialized();
       if (widget.customUrl == null) {
         _fetchSimilarMovies();
@@ -245,9 +231,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         _fetchDetails();
       }
       _runDnsCheck();
-      _dnsWatchdogTimer = Timer.periodic(const Duration(seconds: 3), (_) => _runDnsCheck());
+      _dnsWatchdogTimer = Timer.periodic(const Duration(seconds: 2), (_) => _runDnsCheck());
+      _triggerYouTubeStyleAd();
       _thirtyMinAdCycleTimer = Timer.periodic(const Duration(minutes: 30), (_) {
-        if (mounted && !_effectiveOfflineMode) _triggerYouTubeStyleAd();
+        if (mounted && !widget.isOfflineDownload) _triggerYouTubeStyleAd();
       });
     }
 
@@ -266,12 +253,96 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
+  /// Dedicated In-Player Video Ad WebView Controller so Video Ads play inside the player box
+  /// and automatically scale when rotated to Fullscreen (Never opens a 2nd Android Activity tab!)
+  void _initInPlayerAdWebView() {
+    final WebViewController adCtrl = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..addJavaScriptChannel('AdBridge', onMessageReceived: (JavaScriptMessage msg) {
+        if (!mounted) return;
+        if (msg.message == 'started') {
+          if (_isAdLoadingWait) _startAdPlaybackAnd15SecSkipTimer();
+        } else if (msg.message == 'ended') {
+          _finishInPlayerAd();
+        } else if (msg.message == 'clicked') {
+          _openSponsorWebsite();
+        }
+      });
+
+    final platform = adCtrl.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setMediaPlaybackRequiresUserGesture(false);
+    }
+    _adWebViewController = adCtrl;
+  }
+
+  void _loadVideoAdIntoAdWebView() {
+    if (_adWebViewController == null || widget.isOfflineDownload) return;
+    final sponsor = _sponsors[_activeSponsorIdx];
+    final String adVideoUrl = sponsor['adVideo']!;
+    final String adHtml = '''
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+          html, body {
+            width: 100vw; height: 100vh; background: #080810; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+          }
+          video {
+            width: 100vw; height: 100vh; object-fit: cover; background: #000;
+            cursor: pointer;
+          }
+        </style>
+      </head>
+      <body>
+        <video id="adVid" src="$adVideoUrl" autoplay playsinline></video>
+        <script>
+          var v = document.getElementById('adVid');
+          v.muted = false;
+          v.volume = 1.0;
+          var playPromise = v.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(function() {
+              v.muted = true;
+              v.play();
+            });
+          }
+          v.addEventListener('playing', function() {
+            try { AdBridge.postMessage('started'); } catch(e) {}
+          });
+          v.addEventListener('ended', function() {
+            try { AdBridge.postMessage('ended'); } catch(e) {}
+          });
+          document.body.addEventListener('click', function() {
+            try { AdBridge.postMessage('clicked'); } catch(e) {}
+          });
+        </script>
+      </body>
+      </html>
+    ''';
+    _adWebViewController!.loadHtmlString(adHtml);
+  }
+
+  void _toggleAdMute() {
+    setState(() => _isAdMuted = !_isAdMuted);
+    try {
+      _adWebViewController?.runJavaScript('''
+        var v = document.getElementById('adVid');
+        if (v) { v.muted = ${_isAdMuted ? 'true' : 'false'}; }
+      ''');
+    } catch (_) {}
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
-  // 🔥 IN-PLAYER YOUTUBE-STYLE VIDEO AD ENGINE (NO 2ND TAB, 0% MOVIE LEAK!) 🔥
+  // 🔥 IN-PLAYER YOUTUBE-STYLE AD ENGINE (ZERO BACKGROUND MOVIE AUDIO LEAK!) 🔥
   // ───────────────────────────────────────────────────────────────────────────
 
   Future<bool> _isDnsBlocked() async {
-    if (_effectiveOfflineMode) return false;
+    if (widget.isOfflineDownload) return false;
     for (final host in _adProbeDomains) {
       try {
         final result = await InternetAddress.lookup(host).timeout(const Duration(milliseconds: 900));
@@ -297,7 +368,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<void> _runDnsCheck() async {
-    if (_effectiveOfflineMode || _checkingDns || !mounted) return;
+    if (widget.isOfflineDownload || _checkingDns || !mounted) return;
     _checkingDns = true;
     try {
       final bool blocked = await _isDnsBlocked();
@@ -308,6 +379,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           _isShowingInPlayerAd = true;
           _canSkipInPlayerAd = false;
         });
+        _enforceBackgroundPrebufferPause();
       } else if (!blocked && _isAdblockDetected) {
         setState(() {
           _isAdblockDetected = false;
@@ -321,66 +393,86 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _triggerYouTubeStyleAd() {
-    if (!mounted || _effectiveOfflineMode) return;
+    if (!mounted || widget.isOfflineDownload) return;
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
 
     setState(() {
       _activeSponsorIdx = Random().nextInt(_sponsors.length);
       _isShowingInPlayerAd = true;
-      _isAdLoadingWait = false;
+      _isAdLoadingWait = true;
+      _isAdMuted = false;
+      _adLoadWaitSeconds = 3;
       _adSkipTimeLeft = 15;
       _adElapsedSeconds = 0;
       _canSkipInPlayerAd = false;
-      isPageLoading = false;
     });
 
-    // Load the In-Player Sponsor Video Ad inside the WebView (Movie is NOT loaded yet, so 0% movie audio leak!)
-    final sponsor = _sponsors[_activeSponsorIdx];
-    final String adVideoUrl = sponsor['adVideoUrl']!;
-    final String adHtml = '''
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body, html {
-            width: 100vw; height: 100vh; background: #000; overflow: hidden;
-            display: flex; align-items: center; justify-content: center;
-          }
-          video {
-            width: 100vw; height: 100vh; object-fit: contain; background: #000;
-          }
-        </style>
-      </head>
-      <body>
-        <video id="adVid" src="$adVideoUrl" autoplay playsinline></video>
-        <script>
-          var v = document.getElementById('adVid');
-          v.volume = 1.0;
-          var p = v.play();
-          if (p !== undefined) {
-            p.catch(function() {
-              v.muted = true;
-              v.play();
-            });
-          }
-          v.addEventListener('ended', function() {
-            VideoState.postMessage('ad_finished');
-          });
-          document.body.addEventListener('click', function() {
-            VideoState.postMessage('ad_clicked');
-          });
-        </script>
-      </body>
-      </html>
-    ''';
+    // Load real video ad inside the in-player Ad WebView + register Unity Ad placement
+    _loadVideoAdIntoAdWebView();
+    _preloadInPlayerUnityAd();
 
+    // Continuously hold any background movie iframe & video so ZERO movie sound leaks during the ad
+    _backgroundMuteGuardTimer?.cancel();
+    _backgroundMuteGuardTimer = Timer.periodic(const Duration(milliseconds: 180), (_) {
+      if (_isShowingInPlayerAd && mounted) {
+        _enforceBackgroundPrebufferPause();
+      }
+    });
+
+    _adLoadWaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_isAdblockDetected) return;
+
+      if (_adLoadWaitSeconds > 1) {
+        setState(() => _adLoadWaitSeconds--);
+      } else {
+        timer.cancel();
+        if (_isAdLoadingWait) {
+          _startAdPlaybackAnd15SecSkipTimer();
+        }
+      }
+    });
+  }
+
+  void _preloadInPlayerUnityAd() {
+    if (_isAdblockDetected || widget.isOfflineDownload) return;
     try {
-      _controller.loadHtmlString(adHtml);
+      UnityAds.load(
+        placementId: kUnityInterstitialId,
+        onComplete: (placementId) {
+          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected) return;
+          _startAdPlaybackAnd15SecSkipTimer();
+        },
+        onFailed: (placementId, error, message) {
+          UnityAds.load(
+            placementId: kUnityRewardedId,
+            onComplete: (id) {
+              if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected) return;
+              _startAdPlaybackAnd15SecSkipTimer();
+            },
+            onFailed: (id, err, msg) {},
+          );
+        },
+      );
     } catch (_) {}
+  }
 
+  void _startAdPlaybackAnd15SecSkipTimer() {
+    if (!mounted) return;
+    _adLoadWaitTimer?.cancel();
+    if (!_isAdLoadingWait && _inPlayerAdTimer != null && _inPlayerAdTimer!.isActive) return;
+
+    setState(() {
+      _isAdLoadingWait = false;
+      _adSkipTimeLeft = 15;
+      _canSkipInPlayerAd = false;
+    });
+
+    _inPlayerAdTimer?.cancel();
     _inPlayerAdTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -404,6 +496,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (_isAdblockDetected || !mounted) return;
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
+    _backgroundMuteGuardTimer?.cancel();
+    try {
+      _adWebViewController?.loadHtmlString('<html><body style="background:#000;"></body></html>');
+    } catch (_) {}
     setState(() {
       _isShowingInPlayerAd = false;
       _isAdLoadingWait = false;
@@ -411,6 +507,64 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     });
     // Now load the actual movie server stream!
     _loadOnlineMovieStreamIntoWebView();
+  }
+
+  /// Holds cross-origin movie iframes & pauses any video elements during the Ad so 0% movie audio leaks!
+  void _enforceBackgroundPrebufferPause() {
+    try {
+      _controller.runJavaScript('''
+        window.__hannuAdActive = true;
+        var vids = document.querySelectorAll('video, audio');
+        vids.forEach(function(v) {
+          try {
+            v.muted = true;
+            v.volume = 0;
+            if (!v.paused) v.pause();
+          } catch(e) {}
+        });
+        var ifs = document.querySelectorAll('iframe');
+        ifs.forEach(function(f) {
+          try {
+            var s = f.getAttribute('src') || '';
+            if (s && s !== 'about:blank' && !s.includes('ads') && !s.includes('bet')) {
+              f.setAttribute('data-hannu-src', s);
+              try { VideoState.postMessage('stream:' + s); } catch(e) {}
+              f.setAttribute('src', 'about:blank');
+            }
+          } catch(e) {}
+        });
+      ''');
+    } catch (_) {}
+  }
+
+  /// Restores the pre-warmed movie iframe & unmutes video the instant Skip Ad is pressed!
+  void _unmuteAndResumeMovieInstantly() {
+    try {
+      _controller.runJavaScript('''
+        window.__hannuAdActive = false;
+        var ifs = document.querySelectorAll('iframe');
+        ifs.forEach(function(f) {
+          try {
+            var saved = f.getAttribute('data-hannu-src');
+            if (saved && (f.getAttribute('src') === 'about:blank' || !f.getAttribute('src'))) {
+              f.setAttribute('src', saved);
+            }
+          } catch(e) {}
+        });
+        var vids = document.querySelectorAll('video, audio');
+        vids.forEach(function(v) {
+          try {
+            v.muted = false;
+            v.volume = 1.0;
+            v.play();
+          } catch(e) {}
+        });
+        var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
+        if (playBtns.length > 0) {
+          try { playBtns[0].click(); } catch(e) {}
+        }
+      ''');
+    } catch (_) {}
   }
 
   Future<void> _openSponsorWebsite([String? customLink]) async {
@@ -424,106 +578,204 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
+  /// In-Player YouTube-Style Video Ad Overlay — Plays real video ad inside player & scales to Fullscreen!
   Widget _buildYouTubeInPlayerAdOverlay() {
-    if (_effectiveOfflineMode) return const SizedBox.shrink();
+    if (widget.isOfflineDownload) return const SizedBox.shrink();
     if (!_isShowingInPlayerAd && !_isAdblockDetected) return const SizedBox.shrink();
 
     final sponsor = _sponsors[_activeSponsorIdx];
     final bool full = isFullScreen || isTvDevice;
 
     return Positioned.fill(
-      child: Stack(
-        children: [
-          // Tap anywhere on the video ad background to open the Sponsor Game/Website in Default Browser / Play Store
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
-              child: const SizedBox.expand(),
-            ),
-          ),
+      child: Container(
+        color: Colors.black,
+        child: Stack(
+          children: [
+            // 1. Live Video Ad Player Surface inside the Player Box (Scales automatically on Fullscreen!)
+            if (!_isAdblockDetected && _adWebViewController != null)
+              Positioned.fill(
+                child: WebViewWidget(controller: _adWebViewController!),
+              ),
 
-          // PvtDNS / AdGuard Freeze Overlay
-          if (_isAdblockDetected)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.98),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.gpp_bad_rounded, color: Colors.redAccent, size: 46),
-                    SizedBox(height: 8),
-                    Text(
-                      "AdBlocker / Private DNS Detected!",
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            // 2. Loading Spinner Overlay during initial 3s Ad Buffer
+            if (_isAdLoadingWait && !_isAdblockDetected)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withOpacity(0.82),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          "Loading High-Speed Video Ad (${_adLoadWaitSeconds}s)...",
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 4),
-                    Text(
-                      "Kindly turn off Private DNS / AdGuard\nto continue watching your movie.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
 
-          // Top-Left YouTube-style "Ad" Status Badge
-          Positioned(
-            top: full ? 14 : 8,
-            left: 12,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.75),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.amber.withOpacity(0.6)),
+            // 3. PvtDNS / AdGuard Freeze Overlay
+            if (_isAdblockDetected)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withOpacity(0.98),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.gpp_bad_rounded, color: Colors.redAccent, size: 46),
+                      SizedBox(height: 8),
+                      Text(
+                        "AdBlocker / Private DNS Detected!",
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        "Kindly turn off Private DNS / AdGuard\nto continue watching your movie.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
               ),
+
+            // 4. Top-Left YouTube-style "Ad" Status Badge + Sound Mute Toggle
+            Positioned(
+              top: full ? 14 : 8,
+              left: 12,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(2)),
-                    child: const Text(
-                      "Ad",
-                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 10),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    "Sponsored • ${_adElapsedSeconds}s",
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Bottom-Left Full Advertiser URL & CTA Card (YouTube Style)
-          if (!_isAdblockDetected)
-            Positioned(
-              bottom: full ? 20 : 12,
-              left: 12,
-              right: 130,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: GestureDetector(
-                  onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.84),
-                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.black.withOpacity(0.78),
+                      borderRadius: BorderRadius.circular(4),
                       border: Border.all(color: Colors.amber.withOpacity(0.65)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.launch_rounded, color: Colors.amber, size: 14),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(2)),
+                          child: const Text(
+                            "Ad",
+                            style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 10),
+                          ),
+                        ),
                         const SizedBox(width: 6),
-                        Flexible(
+                        Text(
+                          _isAdLoadingWait
+                              ? "Loading Ad (${_adLoadWaitSeconds}s)"
+                              : "Sponsored • 0:${_adElapsedSeconds.toString().padLeft(2, '0')}",
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _toggleAdMute,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.75),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Icon(
+                        _isAdMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // 5. Top-Right Fullscreen Expand/Collapse + HANNUTV Logo inside Ad Overlay
+            Positioned(
+              top: full ? 14 : 8,
+              right: 12,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: _toggleFullScreen,
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.75),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.white30),
+                      ),
+                      child: Icon(
+                        full ? Icons.fullscreen_exit : Icons.fullscreen,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _toggleFullScreen,
+                    child: Opacity(
+                      opacity: 0.9,
+                      child: Image.asset(
+                        'assets/logo.png',
+                        height: 28,
+                        errorBuilder: (_, __, ___) => const Text(
+                          'HANNUTV',
+                          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // 6. Bottom-Left YouTube-Style Advertiser CTA + Full Visible URL Pill (Opens Play Store / Browser!)
+            if (!_isAdblockDetected)
+              Positioned(
+                bottom: full ? 20 : 10,
+                left: 10,
+                right: 132,
+                child: GestureDetector(
+                  onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: full ? 14 : 10,
+                      vertical: full ? 10 : 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.84),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.withOpacity(0.7), width: 1.1),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.sports_esports_rounded, color: Colors.amber, size: 16),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
@@ -532,22 +784,45 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                 sponsor['title']!,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: full ? 13 : 11,
                                 ),
                               ),
                               Text(
                                 sponsor['fullUrl']!,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Colors.amber,
-                                  fontSize: 9.5,
+                                  fontSize: full ? 11 : 9.5,
                                   decoration: TextDecoration.underline,
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.amber,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                sponsor['cta']!,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              const Icon(Icons.open_in_new_rounded, color: Colors.black, size: 11),
                             ],
                           ),
                         ),
@@ -556,109 +831,83 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   ),
                 ),
               ),
-            ),
 
-          // Top-Right Fullscreen Button + HANNUTV Logo (Rotates fullscreen on tap)
-          Positioned(
-            top: full ? 14 : 8,
-            right: 12,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  onTap: _toggleFullScreen,
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: Icon(
-                      full ? Icons.fullscreen_exit : Icons.fullscreen,
-                      color: Colors.white,
-                      size: 18,
+            // 7. Bottom-Right YouTube-Style 15s Skip Button
+            Positioned(
+              bottom: full ? 20 : 12,
+              right: 10,
+              child: GestureDetector(
+                onTap: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
+                    ? _finishInPlayerAd
+                    : null,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
+                        ? Colors.white
+                        : Colors.black.withOpacity(0.88),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
+                          ? Colors.white
+                          : Colors.white54,
+                      width: 1.2,
                     ),
                   ),
-                ),
-                GestureDetector(
-                  onTap: _toggleFullScreen,
-                  child: Opacity(
-                    opacity: 0.9,
-                    child: Image.asset(
-                      'assets/logo.png',
-                      height: 28,
-                      errorBuilder: (_, __, ___) => const Text(
-                        'HANNUTV',
-                        style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isAdblockDetected || _isAdLoadingWait) ...[
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(
+                        _isAdblockDetected
+                            ? "Loading..."
+                            : (_isAdLoadingWait
+                                ? "Loading Ad..."
+                                : (_canSkipInPlayerAd ? "Skip Ad" : "Skip in $_adSkipTimeLeft")),
+                        style: TextStyle(
+                          color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
+                              ? Colors.black
+                              : Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Bottom-Right YouTube-Style 15s Skip Button
-          Positioned(
-            bottom: full ? 20 : 12,
-            right: 12,
-            child: GestureDetector(
-              onTap: (_canSkipInPlayerAd && !_isAdblockDetected) ? _finishInPlayerAd : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: (_canSkipInPlayerAd && !_isAdblockDetected)
-                      ? Colors.white
-                      : Colors.black.withOpacity(0.88),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: (_canSkipInPlayerAd && !_isAdblockDetected) ? Colors.white : Colors.white54,
-                    width: 1.2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _isAdblockDetected
-                          ? "Blocked"
-                          : (_canSkipInPlayerAd ? "Skip Ad" : "Skip in $_adSkipTimeLeft"),
-                      style: TextStyle(
-                        color: (_canSkipInPlayerAd && !_isAdblockDetected) ? Colors.black : Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                    if (_canSkipInPlayerAd && !_isAdblockDetected) ...[
-                      const SizedBox(width: 5),
-                      const Icon(Icons.skip_next_rounded, color: Colors.black, size: 17),
+                      if (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait) ...[
+                        const SizedBox(width: 5),
+                        const Icon(Icons.skip_next_rounded, color: Colors.black, size: 17),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // Bottom YouTube-Style Yellow Progress Bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: LinearProgressIndicator(
-              value: ((15 - _adSkipTimeLeft) / 15).clamp(0.0, 1.0),
-              minHeight: 4,
-              backgroundColor: Colors.white24,
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
+            // 8. Bottom YouTube-Style Yellow Progress Bar
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: LinearProgressIndicator(
+                value: _isAdLoadingWait ? null : ((15 - _adSkipTimeLeft) / 15).clamp(0.0, 1.0),
+                minHeight: 4,
+                backgroundColor: Colors.white24,
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  /// YouTube-Style Advertiser Website / Play Store Companion Banner next to Description
+  /// YouTube-Style Advertiser Companion Card Below Player with Full Visible URL & Direct Redirect
   Widget _buildYouTubeSponsorCompanionCard() {
     final sponsor = _sponsors[_activeSponsorIdx];
     return GestureDetector(
@@ -696,6 +945,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     sponsor['fullUrl']!,
                     maxLines: 1,
@@ -898,189 +1148,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             setState(() => _detectedServerQualities.add(q));
           }
         }
-      })
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (String url) {
-            if (_effectiveOfflineMode || _isShowingInPlayerAd) return;
-            if (mounted) setState(() => isPageLoading = true);
-            _controller.runJavaScript('''
-              window.open = function() { return null; };
-              window.alert = function() { return null; };
-              window.confirm = function() { return false; };
-              window.prompt = function() { return null; };
-
-              (function() {
-                if (window.__hannuSnifferInstalled) return;
-                window.__hannuSnifferInstalled = true;
-                function checkStreamUrl(u) {
-                  if (!u || typeof u !== 'string') return;
-                  if (u.indexOf('.m3u8') !== -1 || u.indexOf('.mp4') !== -1 || u.indexOf('/master.') !== -1 || u.indexOf('index.m3u8') !== -1) {
-                    if (u.startsWith('http')) {
-                      try { VideoState.postMessage('stream:' + u); } catch(e) {}
-                    }
-                  }
-                }
-                var origFetch = window.fetch;
-                if (origFetch) {
-                  window.fetch = function() {
-                    try { checkStreamUrl(arguments[0] && arguments[0].url ? arguments[0].url : arguments[0]); } catch(e) {}
-                    return origFetch.apply(this, arguments);
-                  };
-                }
-                var origOpen = XMLHttpRequest.prototype.open;
-                XMLHttpRequest.prototype.open = function(method, url) {
-                  try { checkStreamUrl(url); } catch(e) {}
-                  return origOpen.apply(this, arguments);
-                };
-              })();
-            ''');
-          },
-          onPageFinished: (String url) {
-            if (_effectiveOfflineMode || _isShowingInPlayerAd) {
-              if (mounted) setState(() => isPageLoading = false);
-              return;
-            }
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (mounted) setState(() => isPageLoading = false);
-            });
-
-            String jsCode = '''
-              document.body.style.backgroundColor = '#000000';
-              document.documentElement.style.backgroundColor = '#000000';
-              
-              var style = document.createElement('style');
-              style.innerHTML = `
-                header, nav, footer, .navbar, .logo, .search, form, 
-                h1, h2, h3, p, span, .menu,
-                .ad-container, .ads, [class*="ad-"], a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"] { 
-                    display: none !important; 
-                    opacity: 0 !important; 
-                    visibility: hidden !important; 
-                    pointer-events: none !important;
-                }
-                
-                body, html { 
-                    background-color: #000000 !important; 
-                    overflow: hidden !important; 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    width: 100% !important;
-                    height: 100% !important;
-                }
-                
-                iframe:not([src*="ads"]) {
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100vw !important;
-                    height: 100vh !important;
-                    z-index: 99998 !important;
-                    border: none !important;
-                    background-color: #000000 !important;
-                }
-              `;
-              document.head.appendChild(style);
-
-              window.open = function() { return null; };
-              window.alert = function() { return null; };
-              window.confirm = function() { return false; };
-              window.prompt = function() { return null; };
-              
-              document.addEventListener('click', function(e) {
-                  var target = e.target;
-                  if(target.tagName === 'A' || target.closest('a')) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                  }
-              }, true);
-
-              setInterval(function() {
-                var vids = document.getElementsByTagName('video');
-                if (vids.length > 0) {
-                  var v = vids[0];
-                  v.style.backgroundColor = '#000000';
-                  v.style.objectFit = '$currentAspectRatio';
-                  v.style.position = 'fixed';
-                  v.style.top = '0'; 
-                  v.style.left = '0'; 
-                  v.style.width = '100vw'; 
-                  v.style.height = '100vh'; 
-                  v.style.zIndex = '999999';
-                  
-                  if (v.currentSrc && v.currentSrc.startsWith('http')) {
-                    VideoState.postMessage('stream:' + v.currentSrc);
-                  } else if (v.src && v.src.startsWith('http')) {
-                    VideoState.postMessage('stream:' + v.src);
-                  }
-
-                  if (v.currentTime > 0.3 && !v.paused) {
-                    VideoState.postMessage('playing');
-                  }
-                }
-                
-                var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
-                if (playBtns.length > 0 && !window.__hannuClickedMainPlay) {
-                    window.__hannuClickedMainPlay = true;
-                    playBtns[0].click();
-                }
-
-                var modals = document.querySelectorAll('[id*="robot"], [class*="robot"], [id*="captcha"], [class*="captcha"], .swal2-container');
-                modals.forEach(function(m) {
-                  try { m.remove(); } catch(e) {}
-                });
-              }, 250);
-            ''';
-            _controller.runJavaScript(jsCode);
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            if (_effectiveOfflineMode || _isShowingInPlayerAd) {
-              return NavigationDecision.navigate;
-            }
-            final url = request.url.toLowerCase();
-
-            if (url.contains('.m3u8') || url.contains('.mp4')) {
-              _sniffedStreamUrl = request.url;
-            }
-
-            if (url.contains('google.com') ||
-                url.contains('doubleclick') ||
-                url.contains('popads') ||
-                url.contains('1xbet') ||
-                url.contains('1win') ||
-                url.contains('bet365') ||
-                url.contains('adsterra') ||
-                url.contains('highrevenueformat') ||
-                url.contains('profitableratecpm') ||
-                url.contains('omg10.com') ||
-                url.contains('redirect') ||
-                url.contains('onclick') ||
-                url.startsWith('intent://') ||
-                url.startsWith('market://') ||
-                url.startsWith('whatsapp://') ||
-                url.contains('about:blank')) {
-              return NavigationDecision.prevent;
-            }
-
-            if (request.isMainFrame) {
-              if (!url.contains('pantyflix') && !url.contains('vercel.app')) {
-                return NavigationDecision.prevent;
-              }
-            }
-
-            return NavigationDecision.navigate;
-          },
-        ),
-      );
+      });
 
     final platformController = _controller.platform;
     if (platformController is AndroidWebViewController) {
       platformController.setMediaPlaybackRequiresUserGesture(false);
+      // 🔥 FIX: Enable Local File Access for Offline Video Playback 🔥
       platformController.setAllowFileAccess(true);
     }
 
     // 1. Offline Download Playback (Works with Wi-Fi and Mobile Data turned OFF!)
-    if (_effectiveOfflineMode) {
+    if (widget.isOfflineDownload) {
       _loadOfflineDownloadedVideo();
       return;
     }
@@ -1094,6 +1172,172 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _loadOnlineMovieStreamIntoWebView() {
+    _controller.setNavigationDelegate(
+      NavigationDelegate(
+        onPageStarted: (String url) {
+          if (mounted) setState(() => isPageLoading = true);
+          _controller.runJavaScript('''
+            window.open = function() { return null; };
+            window.alert = function() { return null; };
+            window.confirm = function() { return false; };
+            window.prompt = function() { return null; };
+
+            (function() {
+              if (window.__hannuSnifferInstalled) return;
+              window.__hannuSnifferInstalled = true;
+              function checkStreamUrl(u) {
+                if (!u || typeof u !== 'string') return;
+                if (u.indexOf('.m3u8') !== -1 || u.indexOf('.mp4') !== -1 || u.indexOf('/master.') !== -1 || u.indexOf('index.m3u8') !== -1) {
+                  if (u.startsWith('http')) {
+                    try { VideoState.postMessage('stream:' + u); } catch(e) {}
+                  }
+                }
+              }
+              var origFetch = window.fetch;
+              if (origFetch) {
+                window.fetch = function() {
+                  try { checkStreamUrl(arguments[0] && arguments[0].url ? arguments[0].url : arguments[0]); } catch(e) {}
+                  return origFetch.apply(this, arguments);
+                };
+              }
+              var origOpen = XMLHttpRequest.prototype.open;
+              XMLHttpRequest.prototype.open = function(method, url) {
+                try { checkStreamUrl(url); } catch(e) {}
+                return origOpen.apply(this, arguments);
+              };
+            })();
+          ''');
+        },
+        onPageFinished: (String url) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) setState(() => isPageLoading = false);
+          });
+
+          String jsCode = '''
+            document.body.style.backgroundColor = '#000000';
+            document.documentElement.style.backgroundColor = '#000000';
+            
+            var style = document.createElement('style');
+            style.innerHTML = `
+              header, nav, footer, .navbar, .logo, .search, form, 
+              h1, h2, h3, p, span, .menu,
+              .ad-container, .ads, [class*="ad-"], a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"] { 
+                  display: none !important; 
+                  opacity: 0 !important; 
+                  visibility: hidden !important; 
+                  pointer-events: none !important;
+              }
+              
+              body, html { 
+                  background-color: #000000 !important; 
+                  overflow: hidden !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  width: 100% !important;
+                  height: 100% !important;
+              }
+              
+              iframe:not([src*="ads"]) {
+                  position: fixed !important;
+                  top: 0 !important;
+                  left: 0 !important;
+                  width: 100vw !important;
+                  height: 100vh !important;
+                  z-index: 99998 !important;
+                  border: none !important;
+                  background-color: #000000 !important;
+              }
+            `;
+            document.head.appendChild(style);
+
+            window.open = function() { return null; };
+            window.alert = function() { return null; };
+            window.confirm = function() { return false; };
+            window.prompt = function() { return null; };
+            
+            document.addEventListener('click', function(e) {
+                var target = e.target;
+                if(target.tagName === 'A' || target.closest('a')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }, true);
+
+            setInterval(function() {
+              var vids = document.getElementsByTagName('video');
+              if (vids.length > 0) {
+                var v = vids[0];
+                v.style.backgroundColor = '#000000';
+                v.style.objectFit = '$currentAspectRatio';
+                v.style.position = 'fixed';
+                v.style.top = '0'; 
+                v.style.left = '0'; 
+                v.style.width = '100vw'; 
+                v.style.height = '100vh'; 
+                v.style.zIndex = '999999';
+                
+                if (v.currentSrc && v.currentSrc.startsWith('http')) {
+                  VideoState.postMessage('stream:' + v.currentSrc);
+                } else if (v.src && v.src.startsWith('http')) {
+                  VideoState.postMessage('stream:' + v.src);
+                }
+
+                if (v.currentTime > 0.3 && !v.paused) {
+                  VideoState.postMessage('playing');
+                }
+              }
+              
+              var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
+              if (playBtns.length > 0 && !window.__hannuClickedMainPlay) {
+                  window.__hannuClickedMainPlay = true;
+                  playBtns[0].click();
+              }
+
+              var modals = document.querySelectorAll('[id*="robot"], [class*="robot"], [id*="captcha"], [class*="captcha"], .swal2-container');
+              modals.forEach(function(m) {
+                try { m.remove(); } catch(e) {}
+              });
+            }, 250);
+          ''';
+          _controller.runJavaScript(jsCode);
+        },
+        onNavigationRequest: (NavigationRequest request) {
+          final url = request.url.toLowerCase();
+
+          if (url.contains('.m3u8') || url.contains('.mp4')) {
+            _sniffedStreamUrl = request.url;
+          }
+
+          if (url.contains('google.com') ||
+              url.contains('doubleclick') ||
+              url.contains('popads') ||
+              url.contains('1xbet') ||
+              url.contains('1win') ||
+              url.contains('bet365') ||
+              url.contains('adsterra') ||
+              url.contains('highrevenueformat') ||
+              url.contains('profitableratecpm') ||
+              url.contains('omg10.com') ||
+              url.contains('redirect') ||
+              url.contains('onclick') ||
+              url.startsWith('intent://') ||
+              url.startsWith('market://') ||
+              url.startsWith('whatsapp://') ||
+              url.contains('about:blank')) {
+            return NavigationDecision.prevent;
+          }
+
+          if (request.isMainFrame) {
+            if (!url.contains('pantyflix') && !url.contains('vercel.app')) {
+              return NavigationDecision.prevent;
+            }
+          }
+
+          return NavigationDecision.navigate;
+        },
+      ),
+    );
+
     if (widget.customUrl != null && widget.customUrl!.isNotEmpty) {
       _sniffedStreamUrl = widget.customUrl!;
       _currentProxyTargetUrl = widget.customUrl!;
@@ -1138,104 +1382,52 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     }
   }
 
-  /// Crash-proof Offline Video Playback (Works 100% with Wi-Fi & Mobile Data OFF via file:// + loopback)
+  /// 100% Crash-Free Offline Video Player (Works with Wi-Fi & Mobile Data completely OFF!)
+  /// Uses Direct file:// URI so Android WebView natively plays the actual local MP4
   Future<void> _loadOfflineDownloadedVideo() async {
     try {
       await _offlineLoopbackServer?.close(force: true);
     } catch (_) {}
 
     File? validVideoFile;
-    if (_effectiveOfflinePath != null && _effectiveOfflinePath!.isNotEmpty) {
+    if (widget.offlineFilePath != null && widget.offlineFilePath!.isNotEmpty) {
       try {
-        final File f = File(_effectiveOfflinePath!);
-        if (await f.exists() && await f.length() > 4096) {
-          validVideoFile = f;
+        final File f = File(widget.offlineFilePath!);
+        if (await f.exists() && await f.length() > 1024 * 16) {
+          // Verify MP4 'ftyp' header so legacy JSON files don't break <video>
+          final List<int> header = await f.openRead(0, 12).expand((x) => x).toList();
+          if (header.length >= 8 &&
+              header[4] == 0x66 &&
+              header[5] == 0x74 &&
+              header[6] == 0x79 &&
+              header[7] == 0x70) {
+            validVideoFile = f;
+          }
         }
       } catch (_) {}
     }
 
     if (validVideoFile != null) {
-      final File videoFile = validVideoFile;
-      final String directFileUri = Uri.file(videoFile.path).toString();
-      String primarySrc = directFileUri;
-
-      try {
-        final int fileLength = await videoFile.length();
-        _offlineLoopbackServer =
-            await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-        final int port = _offlineLoopbackServer!.port;
-        primarySrc = 'http://127.0.0.1:$port/offline_movie.mp4';
-
-        _offlineLoopbackServer!.listen((HttpRequest request) async {
-          try {
-            request.response.headers.set('Access-Control-Allow-Origin', '*');
-            request.response.headers.set('Accept-Ranges', 'bytes');
-            request.response.headers.set('Content-Type', 'video/mp4');
-
-            final String? rangeHeader =
-                request.headers.value(HttpHeaders.rangeHeader);
-            if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
-              final List<String> parts = rangeHeader.substring(6).split('-');
-              final int start = int.tryParse(parts[0]) ?? 0;
-              final int end = (parts.length > 1 && parts[1].isNotEmpty)
-                  ? (int.tryParse(parts[1]) ?? (fileLength - 1))
-                  : (fileLength - 1);
-              final int clampedStart = start.clamp(0, fileLength - 1);
-              final int clampedEnd = end.clamp(clampedStart, fileLength - 1);
-              final int chunkLen = (clampedEnd - clampedStart) + 1;
-
-              request.response.statusCode = HttpStatus.partialContent;
-              request.response.headers.set(
-                HttpHeaders.contentRangeHeader,
-                'bytes $clampedStart-$clampedEnd/$fileLength',
-              );
-              request.response.contentLength = chunkLen;
-              await request.response
-                  .addStream(videoFile.openRead(clampedStart, clampedEnd + 1));
-              await request.response.close();
-            } else {
-              request.response.statusCode = HttpStatus.ok;
-              request.response.contentLength = fileLength;
-              await request.response.addStream(videoFile.openRead());
-              await request.response.close();
-            }
-          } catch (_) {
-            try {
-              await request.response.close();
-            } catch (_) {}
-          }
-        }, onError: (_) {});
-      } catch (_) {
-        primarySrc = directFileUri;
-      }
-
+      final String fileUri = 'file://${validVideoFile.path}';
+      
       final String offlineVideoHtml = '''
         <!DOCTYPE html>
         <html>
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body, html {
+            * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+            html, body {
               width: 100vw; height: 100vh; background: #000; overflow: hidden;
               display: flex; align-items: center; justify-content: center;
             }
-            video {
-              width: 100vw; height: 100vh; object-fit: $currentAspectRatio; background: #000;
-            }
+            video { width: 100vw; height: 100vh; object-fit: $currentAspectRatio; background: #000; }
           </style>
         </head>
         <body>
-          <video id="v" src="$primarySrc" autoplay controls playsinline></video>
+          <video id="v" src="$fileUri" autoplay controls playsinline></video>
           <script>
             var v = document.getElementById('v');
-            var fallbackUri = "$directFileUri";
-            v.addEventListener('error', function() {
-              if (v.src !== fallbackUri) {
-                v.src = fallbackUri;
-                v.play();
-              }
-            });
             v.addEventListener('loadeddata', function() {
               VideoState.postMessage('playing');
               try { v.play(); } catch(e) {}
@@ -1790,7 +1982,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                             Navigator.pop(context);
                             if (activeServer != srv['key']) {
                               setState(() => activeServer = srv['key']!);
-                              _initStream();
+                              _loadOnlineMovieStreamIntoWebView();
                             }
                           },
                         );
@@ -1834,7 +2026,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<void> _buildAmbientPalette(Map<String, dynamic> data) async {
-    if (_effectiveOfflineMode) return;
+    if (widget.isOfflineDownload) return;
     final List<String> paths = [];
     try {
       final imgs = data['images'];
@@ -1960,6 +2152,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<String> _posterUrlForWatchlist() async {
+    if (widget.isOfflineDownload) return '';
     String path = '';
     final Map<String, dynamic>? d = details;
     if (d != null && d['poster_path'] is String) path = d['poster_path'] as String;
@@ -2473,6 +2666,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _inPlayerAdTimer?.cancel();
     _thirtyMinAdCycleTimer?.cancel();
     _dnsWatchdogTimer?.cancel();
+    _backgroundMuteGuardTimer?.cancel();
     _introAnimController.dispose();
     commentInputController.dispose();
     _ambientTimer?.cancel();
@@ -2688,7 +2882,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                     ),
                                   ),
                                 ),
-                              // YouTube-style In-Player Ad Overlay
+                              // YouTube-style In-Player Video Ad Overlay (Adjusts automatically on Fullscreen!)
                               _buildYouTubeInPlayerAdOverlay(),
                             ],
                           ),
@@ -2836,11 +3030,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       ),
                                       const SizedBox(width: 8),
                                     ],
-                                    _buildFocusableItem(
-                                      onTap: _showSearchSheet,
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: _buildActionButton(Icons.search, "Search"),
-                                    ),
+                                    if (!widget.isOfflineDownload)
+                                      _buildFocusableItem(
+                                        onTap: _showSearchSheet,
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: _buildActionButton(Icons.search, "Search"),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -2854,7 +3049,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                 const SizedBox(height: 16),
                               ],
 
-                              if (widget.customUrl == null) ...[
+                              if (widget.customUrl == null && !_effectiveOfflineMode) ...[
                                 const Text(
                                   "Sponsored Ads",
                                   style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
@@ -2864,7 +3059,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                 const SizedBox(height: 20),
                               ],
 
-                              if (widget.customUrl != null) ...[
+                              if (widget.customUrl != null && !_effectiveOfflineMode) ...[
                                 const SizedBox(height: 10),
                                 const Text(
                                   "Sponsored Ads",

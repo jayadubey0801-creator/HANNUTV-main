@@ -19,9 +19,9 @@ const String _kWidgetBannerSnippet = '''
 
 class DashboardHooks {
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
-  // Matches main.dart & dashboard_screen.dart VoidCallback signature 100%
-  final VoidCallback? onOpenLiveTv;
-  final VoidCallback? onOpenSearch;
+  // Exact match for lib/main.dart (lines 212, 216) & lib/dashboard_screen.dart (lines 88, 262)
+  final void Function(BuildContext context)? onOpenLiveTv;
+  final void Function(BuildContext context)? onOpenSearch;
 
   const DashboardHooks({
     this.onOpenTitle,
@@ -47,7 +47,6 @@ class Hooks {
       return;
     }
 
-    // Check if this title is already downloaded for offline playback
     final DownloadTaskItem? existingTask = DownloadStore.I.findTaskForMedia(
       tmdbId: item.id,
       mediaType: item.isTv ? 'tv' : 'movie',
@@ -74,16 +73,14 @@ class Hooks {
     );
   }
 
-  static void openLiveTv([BuildContext? context]) {
-    final VoidCallback? fn =
-        cfg.onOpenLiveTv ?? DashboardHooks.config.onOpenLiveTv;
-    if (fn != null) fn();
+  static void openLiveTv(BuildContext context) {
+    final fn = cfg.onOpenLiveTv ?? DashboardHooks.config.onOpenLiveTv;
+    if (fn != null) fn(context);
   }
 
-  static void openSearch([BuildContext? context]) {
-    final VoidCallback? fn =
-        cfg.onOpenSearch ?? DashboardHooks.config.onOpenSearch;
-    if (fn != null) fn();
+  static void openSearch(BuildContext context) {
+    final fn = cfg.onOpenSearch ?? DashboardHooks.config.onOpenSearch;
+    if (fn != null) fn(context);
   }
 }
 
@@ -517,7 +514,6 @@ class _PosterRowState extends State<PosterRow>
   }
 }
 
-/// GenreBlock required by lib/dashboard_screen.dart line 159
 class GenreBlock extends StatelessWidget {
   final GenreDef g;
   final VoidCallback? onSeeAll;
@@ -770,7 +766,7 @@ class MyDownloadsRow extends StatelessWidget {
                                   children: [
                                     Text(
                                       isDone
-                                          ? '100% Ready (Offline)'
+                                          ? '100% Ready (Play Now)'
                                           : (isPaused
                                               ? 'Paused (${t.percent}%)'
                                               : 'Downloading ${t.percent}%'),
