@@ -113,9 +113,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool _isShowingInPlayerAd = true;
   bool _isAdLoadingWait = true;
   bool _isAdMuted = false;
-  int _adLoadWaitSeconds = 12; // Unity ad load hone ka max wait
-  bool _unityVideoShowing = false;
-  Timer? _unityShowWatchdog;
+  bool _unityAdShowing = false;
+  bool _unityReady = false;
+  int _adLoadWaitSeconds = 3;
   int _adSkipTimeLeft = 15;
   int _adElapsedSeconds = 0;
   bool _canSkipInPlayerAd = false;
@@ -229,23 +229,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       episode: currentEpisode,
     );
 
-    final String? candidatePath = widget.offlineFilePath ?? downloadedTask?.localFilePath;
-    bool hasValidOfflineFile = false;
-    if (candidatePath != null && candidatePath.isNotEmpty) {
-      try {
-        final File f = File(candidatePath);
-        if (f.existsSync() && f.lengthSync() > 1024) {
-          hasValidOfflineFile = true;
-        }
-      } catch (_) {}
-    }
-
     if (widget.isOfflineDownload &&
         downloadedTask != null &&
-        downloadedTask.status == 'completed' &&
-        hasValidOfflineFile) {
+        downloadedTask.status == 'completed') {
       _effectiveOfflineMode = true;
-      _effectiveOfflinePath = candidatePath;
+      _effectiveOfflinePath = widget.offlineFilePath ?? downloadedTask.localFilePath;
       _effectiveOfflineLang = widget.offlineLanguage ?? downloadedTask.language;
       _effectiveOfflineQual = widget.offlineQuality ?? downloadedTask.quality;
       _effectiveOfflineSrv = widget.offlineServerName ?? downloadedTask.serverName;
@@ -279,6 +267,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       UnityAds.init(
         gameId: kUnityGameId,
         testMode: false,
+        onComplete: () {
+          _unityReady = true;
+          if (mounted && _isShowingInPlayerAd && !_effectiveOfflineMode) {
+            _preloadInPlayerUnityAd();
+          }
+        },
+        onFailed: (error, message) {
+          _unityReady = false;
+        },
       );
     } catch (_) {}
   }
@@ -309,7 +306,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (_adWebViewController == null || _effectiveOfflineMode) return;
     final sponsor = _sponsors[_activeSponsorIdx];
     final String adVideoUrl = sponsor['adVideo']!;
-
+    
     // Deep Ad Size Fix: object-fit: contain makes sure the video automatically adjusts perfectly
     final String adHtml = '''
       <!DOCTYPE html>
@@ -355,6 +352,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       </html>
     ''';
     _adWebViewController!.loadHtmlString(adHtml);
+  }
+
+  void _pauseFallbackAdWebView() {
+    try {
+      _adWebViewController?.runJavaScript('''
+        var v = document.getElementById('adVid');
+        if (v) { v.muted = true; v.pause(); }
+      ''');
+    } catch (_) {}
   }
 
   void _toggleAdMute() {
@@ -422,23 +428,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (!mounted || _effectiveOfflineMode) return;
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
-
-    if (_adWebViewController == null) {
-      _initInPlayerAdWebView();
-    }
+    _unityAdShowing = false;
 
     setState(() {
       _activeSponsorIdx = Random().nextInt(_sponsors.length);
       _isShowingInPlayerAd = true;
       _isAdLoadingWait = true;
       _isAdMuted = false;
-      _adLoadWaitSeconds = 12;
+      _adLoadWaitSeconds = 3;
       _adSkipTimeLeft = 15;
       _adElapsedSeconds = 0;
       _canSkipInPlayerAd = false;
     });
 
-    // Google ke sample clips ('ForBigger*.mp4') ab 'Sponsored' ad ban ke nahi chalte; asli Unity ad niche se show hota hai
+    _loadVideoAdIntoAdWebView();
     _preloadInPlayerUnityAd();
 
     _backgroundMuteGuardTimer?.cancel();
@@ -459,80 +462,87 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         setState(() => _adLoadWaitSeconds--);
       } else {
         timer.cancel();
-        // Unity ad nahi mila/nahi chala to bina fake countdown ke seedha movie
-        if (_isAdLoadingWait && !_unityVideoShowing) {
-          _unityAdUnavailable();
+        if (_isAdLoadingWait) {
+          _startAdPlaybackAnd15SecSkipTimer();
         }
       }
     });
   }
 
+  // 🔥 REAL UNITY ADS LOAD + SHOW ON SCREEN BEFORE MOVIE PLAYS 🔥
   void _preloadInPlayerUnityAd() {
-    if (_isAdblockDetected || _effectiveOfflineMode) return;
-    _loadAndShowUnity(kUnityInterstitialId, <String>[kUnityRewardedId]);
-  }
-
-  // Unity ad load -> show (native full-screen, ad ke creative ke hisaab se screen khud rotate/adjust hoti hai)
-  // -> khatam/skip hote hi movie. Fail ho to agla placement, sab fail ho to movie seedha.
-  void _loadAndShowUnity(String placementId, List<String> fallbacks) {
-    void next() {
-      if (fallbacks.isNotEmpty) {
-        _loadAndShowUnity(fallbacks.first, fallbacks.sublist(1));
-      } else {
-        _unityAdUnavailable();
-      }
-    }
-
+    if (_isAdblockDetected || _effectiveOfflineMode || _unityAdShowing) return;
     try {
       UnityAds.load(
-        placementId: placementId,
-        onComplete: (loadedId) {
-          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityVideoShowing) return;
-          _unityVideoShowing = true;
-          _adLoadWaitTimer?.cancel();
-          // safety: callback kabhi na aaye to bhi movie atke nahi
-          _unityShowWatchdog?.cancel();
-          _unityShowWatchdog = Timer(const Duration(seconds: 150), () {
-            if (_unityVideoShowing) {
-              _unityVideoShowing = false;
+        placementId: kUnityInterstitialId,
+        onComplete: (placementId) {
+          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityAdShowing) return;
+          _unityAdShowing = true;
+          _pauseFallbackAdWebView();
+          _startAdPlaybackAnd15SecSkipTimer();
+          UnityAds.showVideoAd(
+            placementId: kUnityInterstitialId,
+            onStart: (id) {
+              _pauseFallbackAdWebView();
+            },
+            onClick: (id) {
+              _openSponsorWebsite();
+            },
+            onComplete: (id) {
+              _unityAdShowing = false;
               _finishInPlayerAd();
-            }
-          });
-          try {
-            UnityAds.showVideoAd(
-              placementId: placementId,
-              onComplete: (shownId) {
-                _unityShowWatchdog?.cancel();
-                _unityVideoShowing = false;
-                _finishInPlayerAd();
-              },
-              onSkipped: (shownId) {
-                _unityShowWatchdog?.cancel();
-                _unityVideoShowing = false;
-                _finishInPlayerAd();
-              },
-              onFailed: (shownId, error, message) {
-                _unityShowWatchdog?.cancel();
-                _unityVideoShowing = false;
-                next();
-              },
-            );
-          } catch (_) {
-            _unityShowWatchdog?.cancel();
-            _unityVideoShowing = false;
-            next();
-          }
+            },
+            onSkipped: (id) {
+              _unityAdShowing = false;
+              _finishInPlayerAd();
+            },
+            onFailed: (id, error, message) {
+              _unityAdShowing = false;
+              _tryRewardedUnityAdFallback();
+            },
+          );
         },
-        onFailed: (failedId, error, message) => next(),
+        onFailed: (placementId, error, message) {
+          _tryRewardedUnityAdFallback();
+        },
       );
-    } catch (_) {
-      next();
-    }
+    } catch (_) {}
   }
 
-  void _unityAdUnavailable() {
-    if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityVideoShowing) return;
-    _finishInPlayerAd();
+  void _tryRewardedUnityAdFallback() {
+    if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _effectiveOfflineMode || _unityAdShowing) return;
+    try {
+      UnityAds.load(
+        placementId: kUnityRewardedId,
+        onComplete: (id) {
+          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityAdShowing) return;
+          _unityAdShowing = true;
+          _pauseFallbackAdWebView();
+          _startAdPlaybackAnd15SecSkipTimer();
+          UnityAds.showVideoAd(
+            placementId: kUnityRewardedId,
+            onStart: (adId) {
+              _pauseFallbackAdWebView();
+            },
+            onClick: (adId) {
+              _openSponsorWebsite();
+            },
+            onComplete: (adId) {
+              _unityAdShowing = false;
+              _finishInPlayerAd();
+            },
+            onSkipped: (adId) {
+              _unityAdShowing = false;
+              _finishInPlayerAd();
+            },
+            onFailed: (adId, err, msg) {
+              _unityAdShowing = false;
+            },
+          );
+        },
+        onFailed: (id, err, msg) {},
+      );
+    } catch (_) {}
   }
 
   void _startAdPlaybackAnd15SecSkipTimer() {
@@ -571,6 +581,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
     _backgroundMuteGuardTimer?.cancel();
+    _unityAdShowing = false;
     try {
       _adWebViewController?.loadHtmlString('<html><body style="background:#000;"></body></html>');
     } catch (_) {}
@@ -1528,21 +1539,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _fallbackToOnlineStreaming() {
-    if (!mounted) return;
-    if (_adWebViewController == null) {
-      _initInPlayerAdWebView();
+    if (mounted) {
+      if (_adWebViewController == null) {
+        _initInPlayerAdWebView();
+      }
+      _ensureUnityInitialized();
+      setState(() {
+        _effectiveOfflineMode = false;
+        _isShowingInPlayerAd = true;
+      });
+      _triggerYouTubeStyleAd();
     }
-    _ensureUnityInitialized();
-    if (widget.customUrl == null && details == null) {
-      _fetchSimilarMovies();
-      _fetchTvDetails();
-      _fetchDetails();
-    }
-    setState(() {
-      _effectiveOfflineMode = false;
-      _isShowingInPlayerAd = true;
-    });
-    _triggerYouTubeStyleAd();
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -1851,9 +1858,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                               quality: activeQ['label'] as String,
                               streamUrl: streamToDownload,
                               estimatedBytes: totalBytes,
-                              year: widget.year,
-                              rating: widget.rating,
-                              overview: widget.overview,
                             );
                           },
                         ),
@@ -2753,7 +2757,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
     _thirtyMinAdCycleTimer?.cancel();
-    _unityShowWatchdog?.cancel();
     _dnsWatchdogTimer?.cancel();
     _backgroundMuteGuardTimer?.cancel();
     _introAnimController.dispose();
