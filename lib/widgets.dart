@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
@@ -19,6 +20,7 @@ const String _kWidgetBannerSnippet = '''
 
 class DashboardHooks {
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
+  // Exact match for lib/main.dart (lines 212, 216) & lib/dashboard_screen.dart (lines 88, 262)
   final void Function(BuildContext context)? onOpenLiveTv;
   final void Function(BuildContext context)? onOpenSearch;
 
@@ -50,8 +52,19 @@ class Hooks {
       tmdbId: item.id,
       mediaType: item.isTv ? 'tv' : 'movie',
     );
-    final bool readyOffline =
-        existingTask != null && existingTask.status == 'completed';
+
+    bool readyOffline = false;
+    if (existingTask != null &&
+        existingTask.status == 'completed' &&
+        existingTask.localFilePath != null &&
+        existingTask.localFilePath!.isNotEmpty) {
+      try {
+        final File f = File(existingTask.localFilePath!);
+        if (f.existsSync() && f.lengthSync() > 1024) {
+          readyOffline = true;
+        }
+      } catch (_) {}
+    }
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -63,10 +76,10 @@ class Hooks {
           rating: item.rating.toStringAsFixed(1),
           year: item.year,
           isOfflineDownload: readyOffline,
-          offlineFilePath: readyOffline ? existingTask.localFilePath : null,
-          offlineLanguage: readyOffline ? existingTask.language : null,
-          offlineQuality: readyOffline ? existingTask.quality : null,
-          offlineServerName: readyOffline ? existingTask.serverName : null,
+          offlineFilePath: readyOffline ? existingTask!.localFilePath : null,
+          offlineLanguage: readyOffline ? existingTask!.language : null,
+          offlineQuality: readyOffline ? existingTask!.quality : null,
+          offlineServerName: readyOffline ? existingTask!.serverName : null,
         ),
       ),
     );
@@ -597,6 +610,10 @@ class ContinueWatchingRow extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OFFLINE DOWNLOADS ROW, FULL PAGE & WHATSAPP-STYLE TOP BANNER
+// ─────────────────────────────────────────────────────────────────────────────
 
 void _openOfflinePlayer(BuildContext context, DownloadTaskItem t) {
   Navigator.of(context).push(
@@ -1248,7 +1265,7 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
   }
 }
 
-// 🔥 100% REAL OTT LOGOS + DEEP BLACK (#000000) FIX 🔥
+// 🔥 DEEP BLACK FIX FOR OTT LOGOS 🔥
 class OttLogo extends StatelessWidget {
   final Ott ott;
   final double w;
@@ -1263,37 +1280,18 @@ class OttLogo extends StatelessWidget {
     this.radius = 14,
   });
 
-  // High-resolution transparent PNG logos (Works even if config.dart has .svg URLs)
-  static const Map<String, String> _kGuaranteedPngLogos = <String, String>{
-    'netflix': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/512px-Netflix_2015_logo.svg.png',
-    'prime': 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Prime_Video.png/512px-Prime_Video.png',
-    'jio': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/JioCinema_Logo.png/512px-JioCinema_Logo.png',
-    'disney': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/512px-Disney%2B_logo.svg.png',
-    'hbo': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/512px-HBO_Max_Logo.svg.png',
-    'apple': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Apple_TV_Plus_logo.svg/512px-Apple_TV_Plus_logo.svg.png',
-    'hulu': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Hulu_Logo.svg/512px-Hulu_Logo.svg.png',
-  };
-
-  String _resolvePrimaryLogoUrl() {
-    final String idKey = ott.id.toLowerCase().trim();
-    // If config.dart has a valid non-SVG URL, use it; if it's .svg, use our guaranteed PNG
-    if (ott.logoUrl.isNotEmpty && !ott.logoUrl.toLowerCase().endsWith('.svg')) {
-      return ott.logoUrl;
-    }
-    if (_kGuaranteedPngLogos.containsKey(idKey)) {
-      return _kGuaranteedPngLogos[idKey]!;
-    }
-    return ott.logoUrl;
-  }
-
-  String _resolveFallbackPngUrl() {
-    final String idKey = ott.id.toLowerCase().trim();
-    if (_kGuaranteedPngLogos.containsKey(idKey)) {
-      return proxyImg(_kGuaranteedPngLogos[idKey]!);
-    }
-    if (ott.logoUrl.isNotEmpty) {
-      return proxyImg(ott.logoUrl);
-    }
+  String _resolveLogoUrl() {
+    if (ott.logoUrl.isNotEmpty) return ott.logoUrl;
+    try {
+      final dynamic d = ott;
+      final dynamic l = d.logo;
+      if (l is String && l.isNotEmpty) return l;
+    } catch (_) {}
+    try {
+      final dynamic d = ott;
+      final dynamic ls = d.logos;
+      if (ls is List && ls.isNotEmpty) return ls.first.toString();
+    } catch (_) {}
     return '';
   }
 
@@ -1301,24 +1299,26 @@ class OttLogo extends StatelessWidget {
     try {
       final dynamic d = ott;
       if (d.accent is Color) return d.accent as Color;
-      if (d.fg is Color) return d.fg as Color;
-      if (d.color is Color) return d.color as Color;
     } catch (_) {}
-    return const Color(0xFF7C3AED);
+    return HC.accent;
+  }
+
+  Color _resolveBg() {
+    return const Color(0xFF000000);
   }
 
   @override
   Widget build(BuildContext context) {
-    final String primaryUrl = _resolvePrimaryLogoUrl();
-    final String fallbackUrl = _resolveFallbackPngUrl();
+    final String logoUrl = _resolveLogoUrl();
     final Color accent = _resolveAccent();
+    final Color bg = _resolveBg();
 
     return Container(
       width: w,
       height: h,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF000000), // Pure Deep Black #000000
+        color: bg,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: accent.withOpacity(0.45), width: 1.4),
         boxShadow: [
@@ -1330,36 +1330,19 @@ class OttLogo extends StatelessWidget {
         ],
       ),
       child: Center(
-        child: primaryUrl.isNotEmpty
+        child: logoUrl.isNotEmpty
             ? CachedNetworkImage(
-                imageUrl: primaryUrl,
+                imageUrl: logoUrl,
                 fit: ott.fit,
-                errorWidget: (BuildContext _, String __, Object ___) {
-                  if (fallbackUrl.isNotEmpty && fallbackUrl != primaryUrl) {
-                    return CachedNetworkImage(
-                      imageUrl: fallbackUrl,
-                      fit: ott.fit,
-                      errorWidget: (BuildContext _, String __, Object ___) => Text(
-                        ott.name,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
-                        ),
-                      ),
-                    );
-                  }
-                  return Text(
-                    ott.name,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11,
-                    ),
-                  );
-                },
+                errorWidget: (BuildContext _, String __, Object ___) => Text(
+                  ott.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
               )
             : Text(
                 ott.name,

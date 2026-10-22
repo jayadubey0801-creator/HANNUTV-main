@@ -227,11 +227,23 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       episode: currentEpisode,
     );
 
+    final String? candidatePath = widget.offlineFilePath ?? downloadedTask?.localFilePath;
+    bool hasValidOfflineFile = false;
+    if (candidatePath != null && candidatePath.isNotEmpty) {
+      try {
+        final File f = File(candidatePath);
+        if (f.existsSync() && f.lengthSync() > 1024) {
+          hasValidOfflineFile = true;
+        }
+      } catch (_) {}
+    }
+
     if (widget.isOfflineDownload &&
         downloadedTask != null &&
-        downloadedTask.status == 'completed') {
+        downloadedTask.status == 'completed' &&
+        hasValidOfflineFile) {
       _effectiveOfflineMode = true;
-      _effectiveOfflinePath = widget.offlineFilePath ?? downloadedTask.localFilePath;
+      _effectiveOfflinePath = candidatePath;
       _effectiveOfflineLang = widget.offlineLanguage ?? downloadedTask.language;
       _effectiveOfflineQual = widget.offlineQuality ?? downloadedTask.quality;
       _effectiveOfflineSrv = widget.offlineServerName ?? downloadedTask.serverName;
@@ -295,7 +307,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (_adWebViewController == null || _effectiveOfflineMode) return;
     final sponsor = _sponsors[_activeSponsorIdx];
     final String adVideoUrl = sponsor['adVideo']!;
-    
+
     // Deep Ad Size Fix: object-fit: contain makes sure the video automatically adjusts perfectly
     final String adHtml = '''
       <!DOCTYPE html>
@@ -408,6 +420,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (!mounted || _effectiveOfflineMode) return;
     _adLoadWaitTimer?.cancel();
     _inPlayerAdTimer?.cancel();
+
+    if (_adWebViewController == null) {
+      _initInPlayerAdWebView();
+    }
 
     setState(() {
       _activeSponsorIdx = Random().nextInt(_sponsors.length);
@@ -1464,13 +1480,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _fallbackToOnlineStreaming() {
-    if (mounted) {
-      setState(() {
-        _effectiveOfflineMode = false;
-        _isShowingInPlayerAd = true;
-      });
-      _triggerYouTubeStyleAd();
+    if (!mounted) return;
+    if (_adWebViewController == null) {
+      _initInPlayerAdWebView();
     }
+    _ensureUnityInitialized();
+    if (widget.customUrl == null && details == null) {
+      _fetchSimilarMovies();
+      _fetchTvDetails();
+      _fetchDetails();
+    }
+    setState(() {
+      _effectiveOfflineMode = false;
+      _isShowingInPlayerAd = true;
+    });
+    _triggerYouTubeStyleAd();
   }
 
   // ───────────────────────────────────────────────────────────────────────────

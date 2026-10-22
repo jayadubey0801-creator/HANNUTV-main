@@ -55,10 +55,8 @@ Color alpha(Color c, double o) {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  OTT PLATFORMS  (logo = tumhare diye hue links)
+//  OTT PLATFORMS
 //  providers = TMDB watch-provider ids ('|' = OR). regions = pehle IN, phir fallback.
-//  ⚠️ Provider ids TMDB kabhi kabhi badalta hai — verify:
-//     https://api.themoviedb.org/3/watch/providers/tv?api_key=KEY&watch_region=IN
 // ─────────────────────────────────────────────────────────────
 class Ott {
   final String id;
@@ -68,15 +66,24 @@ class Ott {
   final List<String> regions;
   final Color tileBg;
   final BoxFit fit;
+
   const Ott({
     required this.id,
     required this.name,
     required this.logoUrl,
     required this.providers,
     this.regions = const <String>['IN'],
-    this.tileBg = Colors.white,
+    this.tileBg = const Color(0xFF000000),
     this.fit = BoxFit.contain,
   });
+
+  // Deep compatibility getters for widgets.dart OttLogo
+  String get logo => logoUrl;
+  List<String> get logos => <String>[logoUrl];
+  Color get bg => tileBg;
+  Color get accent => HC.accent;
+  Color get fg => Colors.white;
+  Color get color => HC.accent;
 }
 
 const List<Ott> kOtts = <Ott>[
@@ -85,7 +92,7 @@ const List<Ott> kOtts = <Ott>[
     name: 'Netflix',
     logoUrl: 'https://assets.stickpng.com/images/580b57fcd9996e24bc43c529.png',
     providers: '8',
-    tileBg: Color(0xFF12121C),
+    tileBg: Color(0xFF000000),
     fit: BoxFit.contain,
   ),
   Ott(
@@ -93,7 +100,7 @@ const List<Ott> kOtts = <Ott>[
     name: 'Amazon Prime Video',
     logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png',
     providers: '119|9',
-    tileBg: Color(0xFF12121C),
+    tileBg: Color(0xFF000000),
     fit: BoxFit.contain,
   ),
   Ott(
@@ -101,43 +108,43 @@ const List<Ott> kOtts = <Ott>[
     name: 'JioCinema / JioHotstar',
     logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/JioCinema_Logo.png',
     providers: '220|2336|122',
-    tileBg: Color(0xFF12121C),
+    tileBg: Color(0xFF000000),
     fit: BoxFit.contain,
   ),
   Ott(
     id: 'disney',
     name: 'Disney+',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/512px-Disney%2B_logo.svg.png',
     providers: '337',
     regions: <String>['US', 'IN'],
-    tileBg: Color(0xFF12121C),
+    tileBg: Color(0xFF000000),
     fit: BoxFit.contain,
   ),
   Ott(
     id: 'hbo',
     name: 'HBO Max',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/17/HBO_Max_Logo.svg',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/512px-HBO_Max_Logo.svg.png',
     providers: '384|1899',
     regions: <String>['US'],
-    tileBg: Colors.black,
+    tileBg: Color(0xFF000000),
     fit: BoxFit.contain,
   ),
   Ott(
     id: 'apple',
     name: 'Apple TV+',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/512px-Apple_TV_Plus_Logo.svg.png',
     providers: '350',
     regions: <String>['IN', 'US'],
-    tileBg: Colors.black,
+    tileBg: Color(0xFF000000),
     fit: BoxFit.contain,
   ),
   Ott(
     id: 'hulu',
     name: 'Hulu',
-    logoUrl: 'https://www.thisishulu.com/app/uploads/2023/10/logo-gradient-3up.svg',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Hulu_Logo.svg/512px-Hulu_Logo.svg.png',
     providers: '15',
     regions: <String>['US'],
-    tileBg: Colors.black,
+    tileBg: Color(0xFF000000),
     fit: BoxFit.contain,
   ),
 ];
