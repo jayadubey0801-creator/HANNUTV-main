@@ -607,9 +607,9 @@ void _openOfflinePlayer(BuildContext context, DownloadTaskItem t) {
         season: t.season,
         episode: t.episode,
         movieTitle: t.title,
-        overview: t.overview, // FIXED: Now fetching correct data
-        rating: t.rating,     // FIXED
-        year: t.year,         // FIXED
+        overview: t.overview,
+        rating: t.rating,
+        year: t.year,
         isOfflineDownload: true,
         offlineFilePath: t.localFilePath,
         offlineLanguage: t.language,
@@ -1248,6 +1248,7 @@ class LiveDownloadNotificationBanner extends StatelessWidget {
   }
 }
 
+// 🔥 100% REAL OTT LOGOS + DEEP BLACK (#000000) FIX 🔥
 class OttLogo extends StatelessWidget {
   final Ott ott;
   final double w;
@@ -1262,45 +1263,62 @@ class OttLogo extends StatelessWidget {
     this.radius = 14,
   });
 
-  String _resolveLogoUrl() {
-    try {
-      final dynamic d = ott;
-      if (d.logo is String && d.logo.isNotEmpty) return d.logo;
-    } catch (_) {}
-    try {
-      final dynamic d = ott;
-      if (d.logos is List && d.logos.isNotEmpty) return d.logos.first.toString();
-    } catch (_) {}
+  // High-resolution transparent PNG logos (Works even if config.dart has .svg URLs)
+  static const Map<String, String> _kGuaranteedPngLogos = <String, String>{
+    'netflix': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/512px-Netflix_2015_logo.svg.png',
+    'prime': 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Prime_Video.png/512px-Prime_Video.png',
+    'jio': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/JioCinema_Logo.png/512px-JioCinema_Logo.png',
+    'disney': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/512px-Disney%2B_logo.svg.png',
+    'hbo': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/512px-HBO_Max_Logo.svg.png',
+    'apple': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Apple_TV_Plus_logo.svg/512px-Apple_TV_Plus_logo.svg.png',
+    'hulu': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Hulu_Logo.svg/512px-Hulu_Logo.svg.png',
+  };
+
+  String _resolvePrimaryLogoUrl() {
+    final String idKey = ott.id.toLowerCase().trim();
+    // If config.dart has a valid non-SVG URL, use it; if it's .svg, use our guaranteed PNG
+    if (ott.logoUrl.isNotEmpty && !ott.logoUrl.toLowerCase().endsWith('.svg')) {
+      return ott.logoUrl;
+    }
+    if (_kGuaranteedPngLogos.containsKey(idKey)) {
+      return _kGuaranteedPngLogos[idKey]!;
+    }
+    return ott.logoUrl;
+  }
+
+  String _resolveFallbackPngUrl() {
+    final String idKey = ott.id.toLowerCase().trim();
+    if (_kGuaranteedPngLogos.containsKey(idKey)) {
+      return proxyImg(_kGuaranteedPngLogos[idKey]!);
+    }
+    if (ott.logoUrl.isNotEmpty) {
+      return proxyImg(ott.logoUrl);
+    }
     return '';
   }
 
   Color _resolveAccent() {
     try {
       final dynamic d = ott;
-      if (d.accent is Color) return d.accent;
-      if (d.fg is Color) return d.fg;
-      if (d.color is Color) return d.color;
+      if (d.accent is Color) return d.accent as Color;
+      if (d.fg is Color) return d.fg as Color;
+      if (d.color is Color) return d.color as Color;
     } catch (_) {}
     return const Color(0xFF7C3AED);
   }
 
-  Color _resolveBg() {
-    // 🔥 DEEP BLACK FIX FOR OTT LOGOS 🔥
-    return const Color(0xFF000000);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final String logoUrl = _resolveLogoUrl();
+    final String primaryUrl = _resolvePrimaryLogoUrl();
+    final String fallbackUrl = _resolveFallbackPngUrl();
     final Color accent = _resolveAccent();
-    final Color bg = _resolveBg();
 
     return Container(
       width: w,
       height: h,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: bg,
+        color: const Color(0xFF000000), // Pure Deep Black #000000
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: accent.withOpacity(0.45), width: 1.4),
         boxShadow: [
@@ -1312,25 +1330,42 @@ class OttLogo extends StatelessWidget {
         ],
       ),
       child: Center(
-        child: logoUrl.isNotEmpty
+        child: primaryUrl.isNotEmpty
             ? CachedNetworkImage(
-                imageUrl: logoUrl,
-                fit: BoxFit.contain,
-                errorWidget: (BuildContext _, String __, Object ___) => Text(
-                  ott.name,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: accent,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 11,
-                  ),
-                ),
+                imageUrl: primaryUrl,
+                fit: ott.fit,
+                errorWidget: (BuildContext _, String __, Object ___) {
+                  if (fallbackUrl.isNotEmpty && fallbackUrl != primaryUrl) {
+                    return CachedNetworkImage(
+                      imageUrl: fallbackUrl,
+                      fit: ott.fit,
+                      errorWidget: (BuildContext _, String __, Object ___) => Text(
+                        ott.name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                        ),
+                      ),
+                    );
+                  }
+                  return Text(
+                    ott.name,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 11,
+                    ),
+                  );
+                },
               )
             : Text(
                 ott.name,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: accent,
+                style: const TextStyle(
+                  color: Colors.white,
                   fontWeight: FontWeight.w900,
                   fontSize: 11,
                 ),

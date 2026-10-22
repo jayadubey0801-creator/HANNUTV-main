@@ -1149,7 +1149,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final platformController = _controller.platform;
     if (platformController is AndroidWebViewController) {
       platformController.setMediaPlaybackRequiresUserGesture(false);
-      platformController.setAllowFileAccess(true); 
+      platformController.setAllowFileAccess(true);
     }
 
     if (_effectiveOfflineMode) {
@@ -1721,7 +1721,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         ),
                                       ),
                                       Text(
-                                        '${q['tag']} • ${q['kbps']} kbps',
+                                        '${q['tag'] ?? 'Direct Stream'} • ${q['kbps']} kbps',
                                         style: const TextStyle(color: Colors.grey, fontSize: 11),
                                       ),
                                     ],
