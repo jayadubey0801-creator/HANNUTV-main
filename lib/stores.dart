@@ -2,14 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config.dart';
-import 'tmdb_service.dart';
+import 'tmdbservice.dart';
 
 Future<String> appVersion() async => kVersionFallback;
 
@@ -50,7 +49,7 @@ class AppNotification {
     this.url,
     int? ts,
     this.read = false,
-  })  : id = id ?? '${DateTime.now().millisecondsSinceEpoch}',
+  })  : id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         ts = ts ?? DateTime.now().millisecondsSinceEpoch;
 
   String? get imageUrl => image;
@@ -63,15 +62,14 @@ class AppNotification {
     try {
       final dynamic notif = m.notification;
       final Map data = (m.data is Map) ? m.data as Map : const {};
-      final String title =
-          (notif?.title ?? data['title'] ?? 'HANNUTV Update').toString();
-      final String body = (notif?.body ?? data['body'] ?? '').toString();
-      final String? img = (notif?.android?.imageUrl ??
-              notif?.apple?.imageUrl ??
-              data['image'] ??
-              data['imageUrl'])
-          ?.toString();
-      final String? link = (data['url'] ?? data['link'])?.toString();
+      final String title = notif?.title ?? data['title'] ?? 'HANNUTV Update'.toString();
+      final String body = notif?.body ?? data['body'] ?? ''.toString();
+      final String? img = notif?.android?.imageUrl ??
+          notif?.apple?.imageUrl ??
+          data['image'] ??
+          data['imageUrl']?.toString();
+      final String? link = data['url'] ?? data['link']?.toString();
+
       return AppNotification(
         title: title,
         body: body,
@@ -98,14 +96,13 @@ class AppNotification {
       };
 
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
-        id: (j['id'] ?? '${DateTime.now().millisecondsSinceEpoch}').toString(),
-        title: (j['title'] ?? 'HANNUTV').toString(),
-        body: (j['body'] ?? '').toString(),
+        id: j['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        title: j['title'] ?? 'HANNUTV'.toString(),
+        body: j['body'] ?? ''.toString(),
         image: j['image']?.toString() ?? j['imageUrl']?.toString(),
         url: j['url']?.toString(),
-        ts: (j['ts'] ?? j['timestamp'] ?? DateTime.now().millisecondsSinceEpoch)
-            as int,
-        read: (j['read'] ?? false) as bool,
+        ts: j['ts'] ?? j['timestamp'] ?? DateTime.now().millisecondsSinceEpoch as int,
+        read: j['read'] ?? false as bool,
       );
 }
 
@@ -121,21 +118,15 @@ class NotificationStore extends ChangeNotifier {
   bool _loaded = false;
 
   UpdateInfo? get update => _update;
-
   List<AppNotification> get active {
-    final int cutoff =
-        DateTime.now().millisecondsSinceEpoch - (24 * 3600 * 1000);
+    final int cutoff = DateTime.now().millisecondsSinceEpoch - (24 * 3600 * 1000);
     return _items.where((AppNotification n) => n.ts >= cutoff).toList();
   }
 
   List<AppNotification> get items => List<AppNotification>.unmodifiable(active);
-  List<AppNotification> get notifications =>
-      List<AppNotification>.unmodifiable(active);
-
+  List<AppNotification> get notifications => List<AppNotification>.unmodifiable(active);
   int get count => active.length + (_update != null ? 1 : 0);
-  int get unreadCount =>
-      active.where((AppNotification e) => !e.read).length +
-      (_update != null ? 1 : 0);
+  int get unreadCount => active.where((AppNotification e) => !e.read).length + (_update != null ? 1 : 0);
   int get unread => unreadCount;
   bool get hasUnread => unreadCount > 0;
   int get badge => unreadCount;
@@ -151,25 +142,21 @@ class NotificationStore extends ChangeNotifier {
       final String? raw = sp.getString(_kKey);
       if (raw != null && raw.isNotEmpty) {
         final List list = json.decode(raw) as List;
-        final int cutoff =
-            DateTime.now().millisecondsSinceEpoch - (24 * 3600 * 1000);
+        final int cutoff = DateTime.now().millisecondsSinceEpoch - (24 * 3600 * 1000);
         _items
           ..clear()
           ..addAll(
             list
-                .map((dynamic e) =>
-                    AppNotification.fromJson(Map<String, dynamic>.from(e as Map)))
+                .map((dynamic e) => AppNotification.fromJson(Map<String, dynamic>.from(e as Map)))
                 .where((AppNotification n) => n.ts >= cutoff),
           );
       }
       if (_items.isEmpty) {
-        _items.add(
-          AppNotification(
-            id: 'welcome_1',
-            title: 'Welcome to HANNUTV',
-            body: 'Enjoy high-speed streaming & offline downloads in Multi-Audio!',
-          ),
-        );
+        _items.add(AppNotification(
+          id: 'welcome1',
+          title: 'Welcome to HANNUTV',
+          body: 'Enjoy high-speed streaming & offline downloads in Multi-Audio!',
+        ));
       }
       notifyListeners();
     } catch (_) {}
@@ -185,9 +172,7 @@ class NotificationStore extends ChangeNotifier {
     } catch (_) {}
   }
 
-  static Future<void> appendRaw(AppNotification item) async {
-    await I.add(item);
-  }
+  static Future<void> appendRaw(AppNotification item) async => await I.add(item);
 
   Future<void> add(AppNotification item) async {
     await load();
@@ -204,9 +189,7 @@ class NotificationStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> checkUpdate() async {
-    notifyListeners();
-  }
+  Future<void> checkUpdate() async => notifyListeners();
 
   void markAllRead() {
     for (final AppNotification e in _items) {
@@ -244,7 +227,7 @@ class ContinueEntry {
 
   factory ContinueEntry.fromJson(Map<String, dynamic> j) => ContinueEntry(
         item: TmdbItem.fromStored(Map<String, dynamic>.from(j['item'] as Map)),
-        progress: ((j['progress'] ?? 0.2) as num).toDouble(),
+        progress: (j['progress'] ?? 0.2 as num).toDouble(),
         updatedAt: (j['updatedAt'] ?? 0) as int,
       );
 }
@@ -257,10 +240,8 @@ class ContinueStore extends ChangeNotifier {
   final List<ContinueEntry> _entries = <ContinueEntry>[];
   bool _loaded = false;
 
-  List<ContinueEntry> get entries =>
-      List<ContinueEntry>.unmodifiable(_entries);
-  List<TmdbItem> get items =>
-      _entries.map((ContinueEntry e) => e.item).toList(growable: false);
+  List<ContinueEntry> get entries => List<ContinueEntry>.unmodifiable(_entries);
+  List<TmdbItem> get items => _entries.map((ContinueEntry e) => e.item).toList(growable: false);
   int get length => _entries.length;
 
   Future<void> init() => load();
@@ -275,8 +256,7 @@ class ContinueStore extends ChangeNotifier {
         final List list = json.decode(raw) as List;
         _entries
           ..clear()
-          ..addAll(list.map((dynamic e) =>
-              ContinueEntry.fromJson(Map<String, dynamic>.from(e as Map))));
+          ..addAll(list.map((dynamic e) => ContinueEntry.fromJson(Map<String, dynamic>.from(e as Map))));
         notifyListeners();
       }
     } catch (_) {}
@@ -286,14 +266,15 @@ class ContinueStore extends ChangeNotifier {
     try {
       final SharedPreferences sp = await SharedPreferences.getInstance();
       await sp.setString(
-          _kKey, json.encode(_entries.map((ContinueEntry e) => e.toJson()).toList()));
+        _kKey,
+        json.encode(_entries.map((ContinueEntry e) => e.toJson()).toList()),
+      );
     } catch (_) {}
   }
 
   Future<void> push(TmdbItem item, {double progress = 0.22}) async {
     await load();
-    _entries.removeWhere(
-        (ContinueEntry e) => e.item.id == item.id && e.item.isTv == item.isTv);
+    _entries.removeWhere((ContinueEntry e) => e.item.id == item.id && e.item.isTv == item.isTv);
     _entries.insert(
       0,
       ContinueEntry(
@@ -307,11 +288,8 @@ class ContinueStore extends ChangeNotifier {
     await _save();
   }
 
-  Future<void> add(TmdbItem item, {double progress = 0.22}) =>
-      push(item, progress: progress);
-
-  Future<void> record(TmdbItem item, [double progress = 0.22]) =>
-      push(item, progress: progress);
+  Future<void> add(TmdbItem item, {double progress = 0.22}) => push(item, progress: progress);
+  Future<void> record(TmdbItem item, {double progress = 0.22}) => push(item, progress: progress);
 
   Future<void> remove(int id) async {
     _entries.removeWhere((ContinueEntry e) => e.item.id == id);
@@ -352,8 +330,7 @@ class HistoryStore extends ChangeNotifier {
         final List list = json.decode(raw) as List;
         _items
           ..clear()
-          ..addAll(list.map((dynamic e) =>
-              TmdbItem.fromStored(Map<String, dynamic>.from(e as Map))));
+          ..addAll(list.map((dynamic e) => TmdbItem.fromStored(Map<String, dynamic>.from(e as Map))));
         notifyListeners();
       }
     } catch (_) {}
@@ -363,7 +340,9 @@ class HistoryStore extends ChangeNotifier {
     try {
       final SharedPreferences sp = await SharedPreferences.getInstance();
       await sp.setString(
-          _kKey, json.encode(_items.map((TmdbItem e) => e.toJson()).toList()));
+        _kKey,
+        json.encode(_items.map((TmdbItem e) => e.toJson()).toList()),
+      );
     } catch (_) {}
   }
 
@@ -415,8 +394,7 @@ class WatchlistStore extends ChangeNotifier {
         final List list = json.decode(raw) as List;
         _items
           ..clear()
-          ..addAll(list.map((dynamic e) =>
-              TmdbItem.fromStored(Map<String, dynamic>.from(e as Map))));
+          ..addAll(list.map((dynamic e) => TmdbItem.fromStored(Map<String, dynamic>.from(e as Map))));
         notifyListeners();
       }
     } catch (_) {}
@@ -426,7 +404,9 @@ class WatchlistStore extends ChangeNotifier {
     try {
       final SharedPreferences sp = await SharedPreferences.getInstance();
       await sp.setString(
-          _kKey, json.encode(_items.map((TmdbItem e) => e.toJson()).toList()));
+        _kKey,
+        json.encode(_items.map((TmdbItem e) => e.toJson()).toList()),
+      );
     } catch (_) {}
   }
 
@@ -437,8 +417,7 @@ class WatchlistStore extends ChangeNotifier {
 
   Future<void> toggle(TmdbItem item) async {
     await load();
-    final int idx =
-        _items.indexWhere((TmdbItem e) => e.id == item.id && e.isTv == item.isTv);
+    final int idx = _items.indexWhere((TmdbItem e) => e.id == item.id && e.isTv == item.isTv);
     if (idx >= 0) {
       _items.removeAt(idx);
     } else {
@@ -461,7 +440,6 @@ class WatchlistStore extends ChangeNotifier {
   }
 }
 
-/// Deep Server Analysis Result containing Confirmed Stream URL, Audio Languages & Video Qualities
 class ServerStreamAnalysis {
   final String serverName;
   final String confirmedStreamUrl;
@@ -492,7 +470,7 @@ class DownloadTaskItem {
   final String streamUrl;
   int totalBytes;
   int downloadedBytes;
-  String status; // 'downloading' | 'paused' | 'completed'
+  String status;
   String? localFilePath;
   final String year;
   final String rating;
@@ -521,8 +499,7 @@ class DownloadTaskItem {
     required this.createdAt,
   });
 
-  double get progress =>
-      totalBytes <= 0 ? 0.0 : (downloadedBytes / totalBytes).clamp(0.0, 1.0);
+  double get progress => totalBytes <= 0 ? 0.0 : (downloadedBytes / totalBytes).clamp(0.0, 1.0);
   int get percent => (progress * 100).round().clamp(0, 100);
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -581,7 +558,6 @@ class DownloadStore extends ChangeNotifier {
     'Accept': '*/*',
   };
 
-  // High-speed verified playable MP4 streams so offline files always have valid MP4 video tracks
   static const Map<String, String> _kVerifiedFallbackStreams = <String, String>{
     '360p': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     '480p': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
@@ -597,16 +573,14 @@ class DownloadStore extends ChangeNotifier {
   Timer? _autoHideBannerTimer;
   bool _loaded = false;
 
-  List<DownloadTaskItem> get tasks =>
-      List<DownloadTaskItem>.unmodifiable(_tasks);
+  List<DownloadTaskItem> get tasks => List<DownloadTaskItem>.unmodifiable(_tasks);
   DownloadTaskItem? get activeBannerTask => _activeBannerTask;
   int get length => _tasks.length;
   int get count => _tasks.length;
 
-  static int calculateRealBytes(
-      {required int runtimeMinutes, required int bitrateKbps}) {
+  static int calculateRealBytes({required int runtimeMinutes, required int bitrateKbps}) {
     final int secs = max(15, runtimeMinutes) * 60;
-    return ((secs * bitrateKbps * 1000) ~/ 8);
+    return (secs * bitrateKbps * 1000) ~/ 8;
   }
 
   static String formatBytes(int bytes) {
@@ -630,8 +604,8 @@ class DownloadStore extends ChangeNotifier {
         final List list = json.decode(raw) as List;
         _tasks
           ..clear()
-          ..addAll(list.map((dynamic e) =>
-              DownloadTaskItem.fromJson(Map<String, dynamic>.from(e as Map))));
+          ..addAll(list.map((dynamic e) => DownloadTaskItem.fromJson(Map<String, dynamic>.from(e as Map))));
+
         for (final DownloadTaskItem t in _tasks) {
           if (t.status == 'downloading') {
             _startHybridRealDownload(t);
@@ -667,7 +641,6 @@ class DownloadStore extends ChangeNotifier {
     return null;
   }
 
-  /// Deeply analyzes the active server's stream URL, HLS master manifest, audio tracks, and qualities
   Future<ServerStreamAnalysis> analyzeServerStream({
     required String sniffedUrl,
     required String proxyUrl,
@@ -718,23 +691,18 @@ class DownloadStore extends ChangeNotifier {
           final List<String> lines = res.body.split('\n');
           for (int i = 0; i < lines.length; i++) {
             final String line = lines[i].trim();
-            if (line.startsWith('#EXT-X-MEDIA:') && line.contains('TYPE=AUDIO')) {
+            if (line.startsWith('#EXT-X-MEDIA') && line.contains('TYPE=AUDIO')) {
               final Match? nameMatch = RegExp(r'NAME="([^"]+)"').firstMatch(line);
-              final Match? langMatch =
-                  RegExp(r'LANGUAGE="([^"]+)"').firstMatch(line);
-              final String trackName =
-                  nameMatch?.group(1) ?? langMatch?.group(1) ?? '';
+              final Match? langMatch = RegExp(r'LANGUAGE="([^"]+)"').firstMatch(line);
+              final String trackName = nameMatch?.group(1) ?? langMatch?.group(1) ?? '';
               if (trackName.isNotEmpty && !languages.contains(trackName)) {
                 languages.add(trackName);
               }
-            } else if (line.startsWith('#EXT-X-STREAM-INF:')) {
-              final Match? resMatch =
-                  RegExp(r'RESOLUTION=(\d+)x(\d+)').firstMatch(line);
+            } else if (line.startsWith('#EXT-X-STREAM-INF')) {
+              final Match? resMatch = RegExp(r'RESOLUTION=(\d+)x(\d+)').firstMatch(line);
               final Match? bwMatch = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
-              final int height =
-                  resMatch != null ? (int.tryParse(resMatch.group(2)!) ?? 720) : 720;
-              final int bw =
-                  bwMatch != null ? (int.tryParse(bwMatch.group(1)!) ?? 1450000) : 1450000;
+              final int height = resMatch != null ? (int.tryParse(resMatch.group(2)!) ?? 720) : 720;
+              final int bw = bwMatch != null ? (int.tryParse(bwMatch.group(1)!) ?? 1450000) : 1450000;
               final int kbps = max(350, bw ~/ 1000);
 
               String variantUrl = candidateUrl;
@@ -751,8 +719,7 @@ class DownloadStore extends ChangeNotifier {
                   'label': qLabel,
                   'tag': 'Server $serverName Verified Stream',
                   'kbps': kbps,
-                  'bytes': calculateRealBytes(
-                      runtimeMinutes: runtimeMinutes, bitrateKbps: kbps),
+                  'bytes': calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: kbps),
                   'streamUrl': variantUrl,
                 });
               }
@@ -763,21 +730,19 @@ class DownloadStore extends ChangeNotifier {
     } catch (_) {}
 
     if (languages.isEmpty) {
-      if (serverKey.contains('hindi') ||
-          serverKey == 'cinezo' ||
-          serverKey == 'screenscape') {
+      if (serverKey.contains('hindi') || serverKey == 'cinezo' || serverKey == 'screenscape') {
         languages.addAll(<String>[
           'Hindi Dubbed (DD 5.1)',
-          'Dual Audio [Hindi + English]',
+          'Dual Audio (Hindi + English)',
           'Tamil Dubbed',
           'Telugu Dubbed',
         ]);
       } else {
         languages.addAll(<String>[
           'Hindi Dubbed (DD 5.1)',
-          'Dual Audio [Hindi + English]',
+          'Dual Audio (Hindi + English)',
           'English (Original)',
-          'Multi-Audio [Hin • Eng • Tam • Tel]',
+          'Multi-Audio (Hin / Eng / Tam / Tel)',
         ]);
       }
     }
@@ -786,34 +751,30 @@ class DownloadStore extends ChangeNotifier {
       qualities.addAll(<Map<String, dynamic>>[
         <String, dynamic>{
           'label': '360p Data Saver',
-          'tag': '$serverName Server • Mobile Saver',
+          'tag': '$serverName Server Mobile Saver',
           'kbps': 440,
-          'bytes':
-              calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 440),
+          'bytes': calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 440),
           'streamUrl': candidateUrl,
         },
         <String, dynamic>{
           'label': '480p SD',
-          'tag': '$serverName Server • Standard Definition',
+          'tag': '$serverName Server Standard Definition',
           'kbps': 780,
-          'bytes':
-              calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 780),
+          'bytes': calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 780),
           'streamUrl': candidateUrl,
         },
         <String, dynamic>{
           'label': '720p HD',
-          'tag': '$serverName Server • High Definition',
+          'tag': '$serverName Server High Definition',
           'kbps': 1450,
-          'bytes':
-              calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 1450),
+          'bytes': calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 1450),
           'streamUrl': candidateUrl,
         },
         <String, dynamic>{
           'label': '1080p Full HD',
-          'tag': '$serverName Server • BluRay Full HD',
+          'tag': '$serverName Server BluRay Full HD',
           'kbps': 2850,
-          'bytes':
-              calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 2850),
+          'bytes': calculateRealBytes(runtimeMinutes: runtimeMinutes, bitrateKbps: 2850),
           'streamUrl': candidateUrl,
         },
       ]);
@@ -845,8 +806,7 @@ class DownloadStore extends ChangeNotifier {
     String overview = '',
   }) async {
     await load();
-    final String id =
-        '${mediaType}_${tmdbId}_s${season}_e${episode}_${quality.split(" ").first}';
+    final String id = '${mediaType}_${tmdbId}_s${season}e${episode}_${quality.split(' ').first}';
 
     _progressTimers[id]?.cancel();
     _activeWorkers[id] = false;
@@ -856,7 +816,9 @@ class DownloadStore extends ChangeNotifier {
     try {
       final Directory dir = await getApplicationDocumentsDirectory();
       final Directory folder = Directory('${dir.path}/hannutv_offline');
-      if (!await folder.exists()) await folder.create(recursive: true);
+      if (!await folder.exists()) {
+        await folder.create(recursive: true);
+      }
       offlinePath = '${folder.path}/$id.mp4';
     } catch (_) {}
 
@@ -891,14 +853,11 @@ class DownloadStore extends ChangeNotifier {
     _startHybridRealDownload(task);
   }
 
-  /// Never gets stuck at 0%! Runs instant visual progress while streaming real MP4 video bytes to disk
   void _startHybridRealDownload(DownloadTaskItem task) {
     _progressTimers[task.id]?.cancel();
 
-    // 1. Background binary MP4 fetcher so the file on disk is a real playable video
     _fetchRealMp4BinaryToDisk(task);
 
-    // 2. Smooth, non-blocking progress ticker so UI never freezes at 0%
     final int stepBytes = max(1024 * 640, task.totalBytes ~/ 26);
     _progressTimers[task.id] =
         Timer.periodic(const Duration(milliseconds: 420), (Timer timer) async {
@@ -906,8 +865,7 @@ class DownloadStore extends ChangeNotifier {
         timer.cancel();
         return;
       }
-      task.downloadedBytes =
-          min(task.totalBytes, task.downloadedBytes + stepBytes);
+      task.downloadedBytes = min(task.totalBytes, task.downloadedBytes + stepBytes);
       if (task.downloadedBytes >= task.totalBytes) {
         task.downloadedBytes = task.totalBytes;
         task.status = 'completed';
@@ -938,10 +896,8 @@ class DownloadStore extends ChangeNotifier {
       String urlToFetch = task.streamUrl.trim();
       final String qKey = task.quality.split(' ').first.toLowerCase();
 
-      // If streamUrl is not a direct .mp4, fetch verified playable MP4 stream so offline player works 100%
       if (!urlToFetch.contains('.mp4')) {
-        urlToFetch = _kVerifiedFallbackStreams[qKey] ??
-            _kVerifiedFallbackStreams['360p']!;
+        urlToFetch = _kVerifiedFallbackStreams[qKey] ?? _kVerifiedFallbackStreams['360p']!;
       }
 
       final http.Response res = await http
@@ -954,25 +910,6 @@ class DownloadStore extends ChangeNotifier {
     } finally {
       _activeWorkers[task.id] = false;
     }
-  }
-
-  /// Ensures the offline file is a valid playable MP4 binary
-  Future<File?> ensurePlayableOfflineVideoFile(String path) async {
-    try {
-      final File f = File(path);
-      if (await f.exists() && await f.length() > 1024 * 32) {
-        return f;
-      }
-      final http.Response res = await http
-          .get(Uri.parse(_kVerifiedFallbackStreams['360p']!),
-              headers: _kStreamHeaders)
-          .timeout(const Duration(seconds: 12));
-      if (res.statusCode == 200 && res.bodyBytes.length > 1024 * 32) {
-        await f.writeAsBytes(res.bodyBytes, flush: true);
-        return f;
-      }
-    } catch (_) {}
-    return null;
   }
 
   void pauseDownload(String id) {
@@ -1004,6 +941,7 @@ class DownloadStore extends ChangeNotifier {
     _progressTimers[id]?.cancel();
     _progressTimers.remove(id);
     _activeWorkers[id] = false;
+
     final int idx = _tasks.indexWhere((DownloadTaskItem t) => t.id == id);
     if (idx >= 0) {
       final String? path = _tasks[idx].localFilePath;
@@ -1013,7 +951,9 @@ class DownloadStore extends ChangeNotifier {
           if (await f.exists()) await f.delete();
         } catch (_) {}
       }
-      if (_activeBannerTask?.id == id) _activeBannerTask = null;
+      if (_activeBannerTask?.id == id) {
+        _activeBannerTask = null;
+      }
       _tasks.removeAt(idx);
       notifyListeners();
       await _save();

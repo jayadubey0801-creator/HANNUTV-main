@@ -233,8 +233,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       episode: currentEpisode,
     );
 
-    if (widget.isOfflineDownload ||
-        (downloadedTask != null && downloadedTask.status == 'completed')) {
+    if (widget.isOfflineDownload &&
+        downloadedTask != null &&
+        downloadedTask.status == 'completed') {
       // Offline mode: Zero video ads & zero network requests!
       _effectiveOfflineMode = true;
       _effectiveOfflinePath = widget.offlineFilePath ?? downloadedTask?.localFilePath;
@@ -1365,9 +1366,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } else {
       _controller.loadRequest(Uri.parse(_currentProxyTargetUrl));
     }
-  }
-
-  Future<void> _loadOfflineDownloadedVideo() async {
+   Future<void> _loadOfflineDownloadedVideo() async {
     try {
       await _offlineLoopbackServer?.close(force: true);
     } catch (_) {}
@@ -1376,51 +1375,94 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (_effectiveOfflinePath != null && _effectiveOfflinePath!.isNotEmpty) {
       try {
         final File f = File(_effectiveOfflinePath!);
-        if (await f.exists() && await f.length() > 4096) {
+        if (await f.exists() && await f.length() > 1024) {
           validVideoFile = f;
         }
       } catch (_) {}
     }
 
     if (validVideoFile != null) {
-      final String fileUri = 'file://${validVideoFile.path}';
-      
-      final String offlineVideoHtml = '''
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-          <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-            html, body {
-              width: 100vw; height: 100vh; background: #000; overflow: hidden;
-              display: flex; align-items: center; justify-content: center;
-            }
-            video { width: 100vw; height: 100vh; object-fit: $currentAspectRatio; background: #000; }
-          </style>
-        </head>
-        <body>
-          <video id="v" src="$fileUri" autoplay controls playsinline></video>
-          <script>
-            var v = document.getElementById('v');
-            v.addEventListener('loadeddata', function() {
-              VideoState.postMessage('playing');
-              try { v.play(); } catch(e) {}
-            });
-            v.addEventListener('playing', function() {
-              VideoState.postMessage('playing');
-            });
-          </script>
-        </body>
-        </html>
-      ''';
+      try {
+        _offlineLoopbackServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final int port = _offlineLoopbackServer!.port;
+        final String localStreamUrl = 'http://127.0.0.1:$port/video.mp4';
 
-      await _controller.loadHtmlString(offlineVideoHtml);
-      if (mounted) {
-        setState(() {
-          isPageLoading = false;
-          isVideoPlaying = true;
+        _offlineLoopbackServer!.listen((HttpRequest request) async {
+          try {
+            final response = request.response;
+            response.headers.contentType = ContentType('video', 'mp4');
+            response.headers.set('Accept-Ranges', 'bytes');
+            response.headers.set('Access-Control-Allow-Origin', '*');
+
+            final int fileLength = await validVideoFile!.length();
+            final String? rangeHeader = request.headers.value('range');
+
+            if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+              final parts = rangeHeader.substring(6).split('-');
+              final int start = int.tryParse(parts[0]) ?? 0;
+              final int end = parts.length > 1 && parts[1].isNotEmpty
+                  ? int.tryParse(parts[1]) ?? (fileLength - 1)
+                  : (fileLength - 1);
+
+              response.statusCode = HttpStatus.partialContent;
+              response.headers.set('Content-Range', 'bytes $start-$end/$fileLength');
+              response.contentLength = (end - start) + 1;
+
+              final stream = validVideoFile.openRead(start, end + 1);
+              await response.addStream(stream);
+            } else {
+              response.statusCode = HttpStatus.ok;
+              response.contentLength = fileLength;
+              await response.addStream(validVideoFile.openRead());
+            }
+            await response.close();
+          } catch (_) {}
         });
+
+        final String offlineVideoHtml = '''
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+              * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+              html, body {
+                width: 100vw; height: 100vh; background: #000; overflow: hidden;
+                display: flex; align-items: center; justify-content: center;
+              }
+              video { width: 100vw; height: 100vh; object-fit: $currentAspectRatio; background: #000; }
+            </style>
+          </head>
+          <body>
+            <video id="v" src="$localStreamUrl" autoplay controls playsinline></video>
+            <script>
+              var v = document.getElementById('v');
+              v.addEventListener('loadeddata', function() {
+                try { VideoState.postMessage('playing'); } catch(e) {}
+                try { v.play(); } catch(e) {}
+              });
+              v.addEventListener('playing', function() {
+                try { VideoState.postMessage('playing'); } catch(e) {}
+              });
+            </script>
+          </body>
+          </html>
+        ''';
+
+        await _controller.loadHtmlString(offlineVideoHtml);
+        if (mounted) {
+          setState(() {
+            isPageLoading = false;
+            isVideoPlaying = true;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            isPageLoading = false;
+            isVideoPlaying = true;
+          });
+        }
       }
     } else {
       if (mounted) {
@@ -1435,6 +1477,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   // ───────────────────────────────────────────────────────────────────────────
   // 🔥 DEEP SERVER STREAM ANALYZER & MULTI-AUDIO / QUALITY DOWNLOAD SHEET 🔥
   // ───────────────────────────────────────────────────────────────────────────
+
+  ──
 
   int _resolveActualRuntimeMinutes() {
     final Map<String, dynamic>? d = details;

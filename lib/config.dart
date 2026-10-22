@@ -83,49 +83,53 @@ const List<Ott> kOtts = <Ott>[
   Ott(
     id: 'netflix',
     name: 'Netflix',
-    logoUrl:
-        'https://static.vecteezy.com/system/resources/previews/020/190/493/non_2x/netflix-logo-netflix-icon-free-free-vector.jpg',
+    logoUrl: 'https://assets.stickpng.com/images/580b57fcd9996e24bc43c529.png',
     providers: '8',
+    tileBg: Color(0xFF12121C),
+    fit: BoxFit.contain,
   ),
   Ott(
     id: 'prime',
     name: 'Amazon Prime Video',
-    logoUrl:
-        'https://television-b26f.kxcdn.com/wp-content/uploads/2023/03/Amazon-Prime-Video-Logo-2023.png',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png',
     providers: '119|9',
+    tileBg: Color(0xFF12121C),
+    fit: BoxFit.contain,
   ),
   Ott(
     id: 'jio',
     name: 'JioCinema / JioHotstar',
-    logoUrl: 'https://miro.medium.com/v2/resize:fit:2000/1*Nehq1KYRgFWTanqsLwWeFQ.png',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/JioCinema_Logo.png',
     providers: '220|2336|122',
+    tileBg: Color(0xFF12121C),
+    fit: BoxFit.contain,
   ),
   Ott(
     id: 'disney',
     name: 'Disney+',
-    logoUrl: 'https://logos-world.net/wp-content/uploads/2021/02/Disney-Symbol.png',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg',
     providers: '337',
     regions: <String>['US', 'IN'],
+    tileBg: Color(0xFF12121C),
+    fit: BoxFit.contain,
   ),
   Ott(
     id: 'hbo',
     name: 'HBO Max',
-    logoUrl:
-        'https://sm.ign.com/ign_in/news/m/max-changi/max-changing-its-name-back-to-hbo-max-warner-bros-discovery_5g77.jpg',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/17/HBO_Max_Logo.svg',
     providers: '384|1899',
     regions: <String>['US'],
     tileBg: Colors.black,
-    fit: BoxFit.cover,
+    fit: BoxFit.contain,
   ),
   Ott(
     id: 'apple',
     name: 'Apple TV+',
-    logoUrl:
-        'https://www.apple.com/v/apple-tv/c/images/meta/apple-tv__ft1nltyknfmi_og.png?202609180346',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
     providers: '350',
     regions: <String>['IN', 'US'],
     tileBg: Colors.black,
-    fit: BoxFit.cover,
+    fit: BoxFit.contain,
   ),
   Ott(
     id: 'hulu',
@@ -134,6 +138,7 @@ const List<Ott> kOtts = <Ott>[
     providers: '15',
     regions: <String>['US'],
     tileBg: Colors.black,
+    fit: BoxFit.contain,
   ),
 ];
 
