@@ -11,8 +11,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:unity_ads_plugin/unity_ads_plugin.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
@@ -79,7 +77,6 @@ class VideoPlayerPage extends StatefulWidget {
 class _VideoPlayerPageState extends State<VideoPlayerPage>
     with SingleTickerProviderStateMixin {
   late WebViewController _controller;
-  WebViewController? _adWebViewController;
 
   final GlobalKey _webViewSurfaceKey = GlobalKey();
 
@@ -110,62 +107,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool showControls = true;
   Timer? _hideControlsTimer;
 
-  bool _isShowingInPlayerAd = true;
-  bool _isAdLoadingWait = true;
-  bool _isAdMuted = false;
-  bool _unityAdShowing = false;
-  bool _unityReady = false;
-  int _adLoadWaitSeconds = 3;
-  int _adSkipTimeLeft = 15;
-  int _adElapsedSeconds = 0;
-  bool _canSkipInPlayerAd = false;
-  bool _isAdblockDetected = false;
-  bool _checkingDns = false;
-  Timer? _adLoadWaitTimer;
-  Timer? _inPlayerAdTimer;
-  Timer? _thirtyMinAdCycleTimer;
-  Timer? _dnsWatchdogTimer;
-  Timer? _backgroundMuteGuardTimer;
-
-  static const String kUnityGameId = '800405137';
-  static const String kUnityInterstitialId = 'BP_Interstitial_Android';
-  static const String kUnityRewardedId = 'BP_Rewarded_Android';
-  static const String kUnityBannerId = 'BP_Banner_Android';
-
-  static const List<String> _adProbeDomains = [
-    'unityads.unity3d.com',
-    'config.unityads.unity3d.com',
-    'webview.unityads.unity3d.com',
-  ];
-
-  final List<Map<String, String>> _sponsors = const [
-    {
-      'title': 'BGMI / Action Battle Royale • Play Now',
-      'subtitle': 'Download Official Battle Royale Game on Google Play',
-      'domain': 'play.google.com',
-      'fullUrl': 'https://play.google.com/store/apps/details?id=com.pubg.imobile',
-      'cta': 'Download Game',
-      'adVideo': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    },
-    {
-      'title': 'Color Water Sort Puzzle • 3D Brain Game',
-      'subtitle': 'Play the #1 Trending Bottle Sort Game on Android',
-      'domain': 'play.google.com',
-      'fullUrl': 'https://play.google.com/store/apps/details?id=com.IEC.WaterSort',
-      'cta': 'Install Now',
-      'adVideo': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    },
-    {
-      'title': 'Google Play Store • Top Racing & Action Games',
-      'subtitle': 'Explore Trending Android Games & Apps Instantly',
-      'domain': 'play.google.com',
-      'fullUrl': 'https://play.google.com/store/apps/category/GAME',
-      'cta': 'Open Play Store',
-      'adVideo': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-    },
-  ];
-  int _activeSponsorIdx = 0;
-
   bool showIntroAnimation = false;
   late AnimationController _introAnimController;
   late Animation<double> _introScaleAnimation;
@@ -177,8 +118,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List castList = [];
   bool isLoadingDetails = false;
   bool descExpanded = false;
-  final ValueNotifier<Color> _ambientColor = ValueNotifier<Color>(const Color(0xFF5B2A86));
-  List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
+  final ValueNotifier<Color> _ambientColor =
+      ValueNotifier<Color>(const Color(0xFF5B2A86));
+  List<Color> _ambientPalette = const [
+    Color(0xFF5B2A86),
+    Color(0xFF1E5AA8),
+    Color(0xFFB02A4A)
+  ];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
   final ValueNotifier<List<Color>> _ambientZones =
@@ -214,13 +160,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     super.initState();
     currentSeason = widget.season;
     currentEpisode = widget.episode;
-    _activeSponsorIdx = Random().nextInt(_sponsors.length);
 
-    _introAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
-    _introScaleAnimation = Tween<double>(begin: 0.7, end: 1.3)
-        .animate(CurvedAnimation(parent: _introAnimController, curve: Curves.easeOutBack));
+    _introAnimController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1400));
+    _introScaleAnimation = Tween<double>(begin: 0.7, end: 1.3).animate(
+        CurvedAnimation(
+            parent: _introAnimController, curve: Curves.easeOutBack));
     _introOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-        CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
+        CurvedAnimation(
+            parent: _introAnimController,
+            curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
     final DownloadTaskItem? downloadedTask = DownloadStore.I.findTaskForMedia(
       tmdbId: widget.tmdbId,
@@ -233,827 +182,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         downloadedTask != null &&
         downloadedTask.status == 'completed') {
       _effectiveOfflineMode = true;
-      _effectiveOfflinePath = widget.offlineFilePath ?? downloadedTask.localFilePath;
-      _effectiveOfflineLang = widget.offlineLanguage ?? downloadedTask.language;
+      _effectiveOfflinePath =
+          widget.offlineFilePath ?? downloadedTask.localFilePath;
+      _effectiveOfflineLang =
+          widget.offlineLanguage ?? downloadedTask.language;
       _effectiveOfflineQual = widget.offlineQuality ?? downloadedTask.quality;
-      _effectiveOfflineSrv = widget.offlineServerName ?? downloadedTask.serverName;
-      _isShowingInPlayerAd = false;
-      _isAdLoadingWait = false;
+      _effectiveOfflineSrv =
+          widget.offlineServerName ?? downloadedTask.serverName;
     } else {
       _effectiveOfflineMode = false;
-      _initInPlayerAdWebView();
-      _ensureUnityInitialized();
       if (widget.customUrl == null) {
         _fetchSimilarMovies();
         _fetchTvDetails();
         _fetchDetails();
       }
-      _runDnsCheck();
-      _dnsWatchdogTimer = Timer.periodic(const Duration(seconds: 2), (_) => _runDnsCheck());
-      _triggerYouTubeStyleAd();
-      _thirtyMinAdCycleTimer = Timer.periodic(const Duration(minutes: 30), (_) {
-        if (mounted && !_effectiveOfflineMode) _triggerYouTubeStyleAd();
-      });
     }
 
     _checkDeviceType();
     WatchlistStore.I.load();
     DownloadStore.I.load();
     _startAmbientCycle();
-  }
-
-  void _ensureUnityInitialized() {
-    try {
-      UnityAds.init(
-        gameId: kUnityGameId,
-        testMode: false,
-        onComplete: () {
-          _unityReady = true;
-          if (mounted && _isShowingInPlayerAd && !_effectiveOfflineMode) {
-            _preloadInPlayerUnityAd();
-          }
-        },
-        onFailed: (error, message) {
-          _unityReady = false;
-        },
-      );
-    } catch (_) {}
-  }
-
-  void _initInPlayerAdWebView() {
-    final WebViewController adCtrl = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
-      ..addJavaScriptChannel('AdBridge', onMessageReceived: (JavaScriptMessage msg) {
-        if (!mounted) return;
-        if (msg.message == 'started') {
-          if (_isAdLoadingWait) _startAdPlaybackAnd15SecSkipTimer();
-        } else if (msg.message == 'ended') {
-          _finishInPlayerAd();
-        } else if (msg.message == 'clicked') {
-          _openSponsorWebsite();
-        }
-      });
-
-    final platform = adCtrl.platform;
-    if (platform is AndroidWebViewController) {
-      platform.setMediaPlaybackRequiresUserGesture(false);
-    }
-    _adWebViewController = adCtrl;
-  }
-
-  void _loadVideoAdIntoAdWebView() {
-    if (_adWebViewController == null || _effectiveOfflineMode) return;
-    final sponsor = _sponsors[_activeSponsorIdx];
-    final String adVideoUrl = sponsor['adVideo']!;
-    
-    // Deep Ad Size Fix: object-fit: contain makes sure the video automatically adjusts perfectly
-    final String adHtml = '''
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
-          html, body {
-            width: 100vw; height: 100vh; background: #000000; overflow: hidden;
-            display: flex; align-items: center; justify-content: center;
-          }
-          video {
-            width: 100vw; height: 100vh; object-fit: contain; background: #000;
-            cursor: pointer;
-          }
-        </style>
-      </head>
-      <body>
-        <video id="adVid" src="$adVideoUrl" autoplay playsinline></video>
-        <script>
-          var v = document.getElementById('adVid');
-          v.muted = false;
-          v.volume = 1.0;
-          var playPromise = v.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(function() {
-              v.muted = true;
-              v.play();
-            });
-          }
-          v.addEventListener('playing', function() {
-            try { AdBridge.postMessage('started'); } catch(e) {}
-          });
-          v.addEventListener('ended', function() {
-            try { AdBridge.postMessage('ended'); } catch(e) {}
-          });
-          document.body.addEventListener('click', function() {
-            try { AdBridge.postMessage('clicked'); } catch(e) {}
-          });
-        </script>
-      </body>
-      </html>
-    ''';
-    _adWebViewController!.loadHtmlString(adHtml);
-  }
-
-  void _pauseFallbackAdWebView() {
-    try {
-      _adWebViewController?.runJavaScript('''
-        var v = document.getElementById('adVid');
-        if (v) { v.muted = true; v.pause(); }
-      ''');
-    } catch (_) {}
-  }
-
-  void _toggleAdMute() {
-    setState(() => _isAdMuted = !_isAdMuted);
-    try {
-      _adWebViewController?.runJavaScript('''
-        var v = document.getElementById('adVid');
-        if (v) { v.muted = ${_isAdMuted ? 'true' : 'false'}; }
-      ''');
-    } catch (_) {}
-  }
-
-  Future<bool> _isDnsBlocked() async {
-    if (_effectiveOfflineMode) return false;
-    for (final host in _adProbeDomains) {
-      try {
-        final result = await InternetAddress.lookup(host).timeout(const Duration(milliseconds: 900));
-        if (result.isEmpty) return true;
-        if (result.any((a) =>
-            a.isLoopback ||
-            a.address == '0.0.0.0' ||
-            a.address == '127.0.0.1' ||
-            a.address == '::1' ||
-            a.address == '::')) {
-          return true;
-        }
-      } catch (_) {
-        try {
-          final g = await InternetAddress.lookup('google.com').timeout(const Duration(milliseconds: 900));
-          if (g.isNotEmpty) return true;
-        } catch (_) {
-          return false;
-        }
-      }
-    }
-    return false;
-  }
-
-  Future<void> _runDnsCheck() async {
-    if (_effectiveOfflineMode || _checkingDns || !mounted) return;
-    _checkingDns = true;
-    try {
-      final bool blocked = await _isDnsBlocked();
-      if (!mounted) return;
-      if (blocked && !_isAdblockDetected) {
-        setState(() {
-          _isAdblockDetected = true;
-          _isShowingInPlayerAd = true;
-          _canSkipInPlayerAd = false;
-        });
-        _enforceBackgroundPrebufferPause();
-      } else if (!blocked && _isAdblockDetected) {
-        setState(() {
-          _isAdblockDetected = false;
-        });
-        _triggerYouTubeStyleAd();
-      }
-    } catch (_) {
-    } finally {
-      _checkingDns = false;
-    }
-  }
-
-  void _triggerYouTubeStyleAd() {
-    if (!mounted || _effectiveOfflineMode) return;
-    _adLoadWaitTimer?.cancel();
-    _inPlayerAdTimer?.cancel();
-    _unityAdShowing = false;
-
-    setState(() {
-      _activeSponsorIdx = Random().nextInt(_sponsors.length);
-      _isShowingInPlayerAd = true;
-      _isAdLoadingWait = true;
-      _isAdMuted = false;
-      _adLoadWaitSeconds = 3;
-      _adSkipTimeLeft = 15;
-      _adElapsedSeconds = 0;
-      _canSkipInPlayerAd = false;
-    });
-
-    _loadVideoAdIntoAdWebView();
-    _preloadInPlayerUnityAd();
-
-    _backgroundMuteGuardTimer?.cancel();
-    _backgroundMuteGuardTimer = Timer.periodic(const Duration(milliseconds: 180), (_) {
-      if (_isShowingInPlayerAd && mounted) {
-        _enforceBackgroundPrebufferPause();
-      }
-    });
-
-    _adLoadWaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_isAdblockDetected) return;
-
-      if (_adLoadWaitSeconds > 1) {
-        setState(() => _adLoadWaitSeconds--);
-      } else {
-        timer.cancel();
-        if (_isAdLoadingWait) {
-          _startAdPlaybackAnd15SecSkipTimer();
-        }
-      }
-    });
-  }
-
-  // 🔥 REAL UNITY ADS LOAD + SHOW ON SCREEN BEFORE MOVIE PLAYS 🔥
-  void _preloadInPlayerUnityAd() {
-    if (_isAdblockDetected || _effectiveOfflineMode || _unityAdShowing) return;
-    try {
-      UnityAds.load(
-        placementId: kUnityInterstitialId,
-        onComplete: (placementId) {
-          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityAdShowing) return;
-          _unityAdShowing = true;
-          _pauseFallbackAdWebView();
-          _startAdPlaybackAnd15SecSkipTimer();
-          UnityAds.showVideoAd(
-            placementId: kUnityInterstitialId,
-            onStart: (id) {
-              _pauseFallbackAdWebView();
-            },
-            onClick: (id) {
-              _openSponsorWebsite();
-            },
-            onComplete: (id) {
-              _unityAdShowing = false;
-              _finishInPlayerAd();
-            },
-            onSkipped: (id) {
-              _unityAdShowing = false;
-              _finishInPlayerAd();
-            },
-            onFailed: (id, error, message) {
-              _unityAdShowing = false;
-              _tryRewardedUnityAdFallback();
-            },
-          );
-        },
-        onFailed: (placementId, error, message) {
-          _tryRewardedUnityAdFallback();
-        },
-      );
-    } catch (_) {}
-  }
-
-  void _tryRewardedUnityAdFallback() {
-    if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _effectiveOfflineMode || _unityAdShowing) return;
-    try {
-      UnityAds.load(
-        placementId: kUnityRewardedId,
-        onComplete: (id) {
-          if (!mounted || !_isShowingInPlayerAd || _isAdblockDetected || _unityAdShowing) return;
-          _unityAdShowing = true;
-          _pauseFallbackAdWebView();
-          _startAdPlaybackAnd15SecSkipTimer();
-          UnityAds.showVideoAd(
-            placementId: kUnityRewardedId,
-            onStart: (adId) {
-              _pauseFallbackAdWebView();
-            },
-            onClick: (adId) {
-              _openSponsorWebsite();
-            },
-            onComplete: (adId) {
-              _unityAdShowing = false;
-              _finishInPlayerAd();
-            },
-            onSkipped: (adId) {
-              _unityAdShowing = false;
-              _finishInPlayerAd();
-            },
-            onFailed: (adId, err, msg) {
-              _unityAdShowing = false;
-            },
-          );
-        },
-        onFailed: (id, err, msg) {},
-      );
-    } catch (_) {}
-  }
-
-  void _startAdPlaybackAnd15SecSkipTimer() {
-    if (!mounted) return;
-    _adLoadWaitTimer?.cancel();
-    if (!_isAdLoadingWait && _inPlayerAdTimer != null && _inPlayerAdTimer!.isActive) return;
-
-    setState(() {
-      _isAdLoadingWait = false;
-      _adSkipTimeLeft = 15;
-      _canSkipInPlayerAd = false;
-    });
-
-    _inPlayerAdTimer?.cancel();
-    _inPlayerAdTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_isAdblockDetected) return;
-
-      setState(() {
-        _adElapsedSeconds++;
-        if (_adSkipTimeLeft > 1) {
-          _adSkipTimeLeft--;
-        } else {
-          _adSkipTimeLeft = 0;
-          _canSkipInPlayerAd = true;
-        }
-      });
-    });
-  }
-
-  void _finishInPlayerAd() {
-    if (_isAdblockDetected || !mounted) return;
-    _adLoadWaitTimer?.cancel();
-    _inPlayerAdTimer?.cancel();
-    _backgroundMuteGuardTimer?.cancel();
-    _unityAdShowing = false;
-    try {
-      _adWebViewController?.loadHtmlString('<html><body style="background:#000;"></body></html>');
-    } catch (_) {}
-    setState(() {
-      _isShowingInPlayerAd = false;
-      _isAdLoadingWait = false;
-      isPageLoading = true;
-    });
-    _loadOnlineMovieStreamIntoWebView();
-  }
-
-  void _enforceBackgroundPrebufferPause() {
-    try {
-      _controller.runJavaScript('''
-        window.__hannuAdActive = true;
-        var vids = document.querySelectorAll('video, audio');
-        vids.forEach(function(v) {
-          try {
-            v.muted = true;
-            v.volume = 0;
-            if (!v.paused) v.pause();
-          } catch(e) {}
-        });
-        var ifs = document.querySelectorAll('iframe');
-        ifs.forEach(function(f) {
-          try {
-            var s = f.getAttribute('src') || '';
-            if (s && s !== 'about:blank' && !s.includes('ads') && !s.includes('bet')) {
-              f.setAttribute('data-hannu-src', s);
-              try { VideoState.postMessage('stream:' + s); } catch(e) {}
-              f.setAttribute('src', 'about:blank');
-            }
-          } catch(e) {}
-        });
-      ''');
-    } catch (_) {}
-  }
-
-  void _unmuteAndResumeMovieInstantly() {
-    try {
-      _controller.runJavaScript('''
-        window.__hannuAdActive = false;
-        var ifs = document.querySelectorAll('iframe');
-        ifs.forEach(function(f) {
-          try {
-            var saved = f.getAttribute('data-hannu-src');
-            if (saved && (f.getAttribute('src') === 'about:blank' || !f.getAttribute('src'))) {
-              f.setAttribute('src', saved);
-            }
-          } catch(e) {}
-        });
-        var vids = document.querySelectorAll('video, audio');
-        vids.forEach(function(v) {
-          try {
-            v.muted = false;
-            v.volume = 1.0;
-            v.play();
-          } catch(e) {}
-        });
-        var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
-        if (playBtns.length > 0) {
-          try { playBtns[0].click(); } catch(e) {}
-        }
-      ''');
-    } catch (_) {}
-  }
-
-  Future<void> _openSponsorWebsite([String? customLink]) async {
-    final String url = customLink ??
-        _sponsors[_activeSponsorIdx]['fullUrl'] ??
-        'https://play.google.com/store/apps';
-    final Uri? u = Uri.tryParse(url);
-    if (u == null) return;
-    try {
-      await launchUrl(u, mode: LaunchMode.externalApplication);
-    } catch (_) {}
-  }
-
-  Widget _buildYouTubeInPlayerAdOverlay() {
-    if (_effectiveOfflineMode) return const SizedBox.shrink();
-    if (!_isShowingInPlayerAd && !_isAdblockDetected) return const SizedBox.shrink();
-
-    final sponsor = _sponsors[_activeSponsorIdx];
-    final bool full = isFullScreen || isTvDevice;
-
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black,
-        child: Stack(
-          children: [
-            if (!_isAdblockDetected && _adWebViewController != null)
-              Positioned.fill(
-                child: WebViewWidget(controller: _adWebViewController!),
-              ),
-
-            if (_isAdLoadingWait && !_isAdblockDetected)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.black.withOpacity(0.82),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(
-                          width: 34,
-                          height: 34,
-                          child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          "Loading High-Speed Video Ad (${_adLoadWaitSeconds}s)...",
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            if (_isAdblockDetected)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.black.withOpacity(0.98),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.gpp_bad_rounded, color: Colors.redAccent, size: 46),
-                      SizedBox(height: 8),
-                      Text(
-                        "AdBlocker / Private DNS Detected!",
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        "Kindly turn off Private DNS / AdGuard\nto continue watching your movie.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            Positioned(
-              top: full ? 14 : 8,
-              left: 12,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.78),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.amber.withOpacity(0.65)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(2)),
-                          child: const Text(
-                            "Ad",
-                            style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 10),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isAdLoadingWait
-                              ? "Loading Ad (${_adLoadWaitSeconds}s)"
-                              : "Sponsored • 0:${_adElapsedSeconds.toString().padLeft(2, '0')}",
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _toggleAdMute,
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Icon(
-                        _isAdMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Positioned(
-              top: full ? 14 : 8,
-              right: 12,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: _toggleFullScreen,
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.white30),
-                      ),
-                      child: Icon(
-                        full ? Icons.fullscreen_exit : Icons.fullscreen,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _toggleFullScreen,
-                    child: Opacity(
-                      opacity: 0.9,
-                      child: Image.asset(
-                        'assets/logo.png',
-                        height: 28,
-                        errorBuilder: (_, __, ___) => const Text(
-                          'HANNUTV',
-                          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            if (!_isAdblockDetected)
-              Positioned(
-                bottom: full ? 20 : 10,
-                left: 10,
-                right: 132,
-                child: GestureDetector(
-                  onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: full ? 14 : 10,
-                      vertical: full ? 10 : 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.84),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.amber.withOpacity(0.7), width: 1.1),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.sports_esports_rounded, color: Colors.amber, size: 16),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                sponsor['title']!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: full ? 13 : 11,
-                                ),
-                              ),
-                              Text(
-                                sponsor['fullUrl']!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.amber,
-                                  fontSize: full ? 11 : 9.5,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.amber,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                sponsor['cta']!,
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 10,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              const Icon(Icons.open_in_new_rounded, color: Colors.black, size: 11),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            Positioned(
-              bottom: full ? 20 : 12,
-              right: 10,
-              child: GestureDetector(
-                onTap: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
-                    ? _finishInPlayerAd
-                    : null,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
-                        ? Colors.white
-                        : Colors.black.withOpacity(0.88),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
-                          ? Colors.white
-                          : Colors.white54,
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_isAdblockDetected || _isAdLoadingWait) ...[
-                        const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Text(
-                        _isAdblockDetected
-                            ? "Loading..."
-                            : (_isAdLoadingWait
-                                ? "Loading Ad..."
-                                : (_canSkipInPlayerAd ? "Skip Ad" : "Skip in $_adSkipTimeLeft")),
-                        style: TextStyle(
-                          color: (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait)
-                              ? Colors.black
-                              : Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                      if (_canSkipInPlayerAd && !_isAdblockDetected && !_isAdLoadingWait) ...[
-                        const SizedBox(width: 5),
-                        const Icon(Icons.skip_next_rounded, color: Colors.black, size: 17),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: LinearProgressIndicator(
-                value: _isAdLoadingWait ? null : ((15 - _adSkipTimeLeft) / 15).clamp(0.0, 1.0),
-                minHeight: 4,
-                backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildYouTubeSponsorCompanionCard() {
-    final sponsor = _sponsors[_activeSponsorIdx];
-    return GestureDetector(
-      onTap: () => _openSponsorWebsite(sponsor['fullUrl']),
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF171722),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.amber.withOpacity(0.45)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.amber,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'Ad',
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    sponsor['title']!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    sponsor['fullUrl']!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.amber,
-                      fontSize: 11,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.redAccent,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    sponsor['cta']!,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11.5),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.open_in_new_rounded, color: Colors.white, size: 14),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _fetchTvDetails() async {
@@ -1133,7 +281,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _fetchSimilarMovies() async {
     setState(() => isLoadingSimilar = true);
     try {
-      final type = widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
+      final type =
+          widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
       final res = await tmdbHttpGet(
         'https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US',
         headers: kApiHeaders,
@@ -1148,10 +297,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       'id': m['id'],
                       'title': m['title'] ?? m['name'] ?? 'Unknown',
                       'posterUrl': m['poster_path'] != null
-                          ? proxyImg('https://image.tmdb.org/t/p/w500${m['poster_path']}')
+                          ? proxyImg(
+                              'https://image.tmdb.org/t/p/w500${m['poster_path']}')
                           : '',
                       'rating': (m['vote_average'] ?? 0).toStringAsFixed(1),
-                      'year': (m['release_date'] ?? m['first_air_date'] ?? '').toString().split('-').first,
+                      'year': (m['release_date'] ?? m['first_air_date'] ?? '')
+                          .toString()
+                          .split('-')
+                          .first,
                       'mediaType': type,
                     })
                 .toList();
@@ -1180,8 +333,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     String originalTargetUrl = isTv
         ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer'
         : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer';
-    String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
-    _currentProxyTargetUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
+    String vercelProxyBase =
+        "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
+    _currentProxyTargetUrl =
+        vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
     if (_sniffedStreamUrl.isEmpty) {
       _sniffedStreamUrl = _currentProxyTargetUrl;
     }
@@ -1192,17 +347,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       ..setUserAgent(isTvDevice
           ? "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1"
           : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-      ..setOnJavaScriptAlertDialog((JavaScriptAlertDialogRequest request) async {})
-      ..setOnJavaScriptConfirmDialog((JavaScriptConfirmDialogRequest request) async => false)
-      ..setOnJavaScriptTextInputDialog((JavaScriptTextInputDialogRequest request) async => '')
-      ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) {
+      ..setOnJavaScriptAlertDialog(
+          (JavaScriptAlertDialogRequest request) async {})
+      ..setOnJavaScriptConfirmDialog(
+          (JavaScriptConfirmDialogRequest request) async => false)
+      ..setOnJavaScriptTextInputDialog(
+          (JavaScriptTextInputDialogRequest request) async => '')
+      ..addJavaScriptChannel('VideoState',
+          onMessageReceived: (JavaScriptMessage message) {
         final String msg = message.message;
         if (msg == 'playing' && mounted) {
           _triggerCinematicPlayAnimation();
-        } else if (msg == 'ad_finished' && mounted) {
-          if (_canSkipInPlayerAd) _finishInPlayerAd();
-        } else if (msg == 'ad_clicked' && mounted) {
-          _openSponsorWebsite();
         } else if (msg.startsWith('stream:') && mounted) {
           final String url = msg.substring(7).trim();
           if (url.isNotEmpty && url.startsWith('http')) {
@@ -1232,14 +387,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       return;
     }
 
-    if (_isShowingInPlayerAd) {
-      _triggerYouTubeStyleAd();
-    } else {
-      _loadOnlineMovieStreamIntoWebView();
-    }
+    _loadOnlineMovieStreamIntoWebView();
   }
 
   void _loadOnlineMovieStreamIntoWebView() {
+    final id = widget.tmdbId;
+    final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
+    String originalTargetUrl = isTv
+        ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer'
+        : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer';
+    String vercelProxyBase =
+        "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
+    _currentProxyTargetUrl =
+        vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
+
     _controller.setNavigationDelegate(
       NavigationDelegate(
         onPageStarted: (String url) {
@@ -1456,7 +617,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
     if (validVideoFile != null) {
       try {
-        _offlineLoopbackServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        _offlineLoopbackServer =
+            await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         final int port = _offlineLoopbackServer!.port;
         final String localStreamUrl = 'http://127.0.0.1:$port/video.mp4';
 
@@ -1478,7 +640,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   : (fileLength - 1);
 
               response.statusCode = HttpStatus.partialContent;
-              response.headers.set('Content-Range', 'bytes $start-$end/$fileLength');
+              response.headers
+                  .set('Content-Range', 'bytes $start-$end/$fileLength');
               response.contentLength = (end - start) + 1;
 
               final stream = validVideoFile!.openRead(start, end + 1);
@@ -1533,28 +696,23 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         _fallbackToOnlineStreaming();
       }
     } else {
-      // Data file absent or corrupted => Fallback to Online automatically
       _fallbackToOnlineStreaming();
     }
   }
 
   void _fallbackToOnlineStreaming() {
     if (mounted) {
-      if (_adWebViewController == null) {
-        _initInPlayerAdWebView();
-      }
-      _ensureUnityInitialized();
       setState(() {
         _effectiveOfflineMode = false;
-        _isShowingInPlayerAd = true;
       });
-      _triggerYouTubeStyleAd();
+      if (widget.customUrl == null && details == null) {
+        _fetchSimilarMovies();
+        _fetchTvDetails();
+        _fetchDetails();
+      }
+      _loadOnlineMovieStreamIntoWebView();
     }
   }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // 🔥 DEEP SERVER STREAM ANALYZER & MULTI-AUDIO / QUALITY DOWNLOAD SHEET 🔥
-  // ───────────────────────────────────────────────────────────────────────────
 
   int _resolveActualRuntimeMinutes() {
     final Map<String, dynamic>? d = details;
@@ -1563,7 +721,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         final dynamic rt = d['runtime'];
         if (rt is int && rt > 15) return rt;
       } else {
-        if (episodesList.isNotEmpty && currentEpisode - 1 < episodesList.length) {
+        if (episodesList.isNotEmpty &&
+            currentEpisode - 1 < episodesList.length) {
           final dynamic epRt = episodesList[currentEpisode - 1]['runtime'];
           if (epRt is int && epRt > 10) return epRt;
         }
@@ -1601,7 +760,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF14141D),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (sheetCtx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
@@ -1630,19 +790,24 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             if (isAnalyzingServer || analysisResult == null) {
               return SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 32),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 22, vertical: 32),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const SizedBox(
                         width: 42,
                         height: 42,
-                        child: CircularProgressIndicator(color: Colors.greenAccent, strokeWidth: 3),
+                        child: CircularProgressIndicator(
+                            color: Colors.greenAccent, strokeWidth: 3),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'Deep Analyzing Server ($srvName) Player...',
-                        style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -1659,8 +824,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             final ServerStreamAnalysis res = analysisResult!;
             final List<String> dubbedLanguages = res.availableLanguages;
             final List<Map<String, dynamic>> qualityProfiles = res.qualities;
-            final Map<String, dynamic> activeQ =
-                qualityProfiles[selectedQualityIdx.clamp(0, qualityProfiles.length - 1)];
+            final Map<String, dynamic> activeQ = qualityProfiles[
+                selectedQualityIdx.clamp(0, qualityProfiles.length - 1)];
             final int totalBytes = activeQ['bytes'] as int;
             final String formattedSize = DownloadStore.formatBytes(totalBytes);
             final String streamToDownload =
@@ -1680,7 +845,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         child: Container(
                           width: 42,
                           height: 4,
-                          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                          decoration: BoxDecoration(
+                              color: Colors.white24,
+                              borderRadius: BorderRadius.circular(2)),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -1692,7 +859,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                               color: Colors.greenAccent.withOpacity(0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.verified_rounded, color: Colors.greenAccent, size: 22),
+                            child: const Icon(Icons.verified_rounded,
+                                color: Colors.greenAccent, size: 22),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -1703,7 +871,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   fullTitle,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 Text(
                                   'Server Confirmed: $srvName (${res.streamProtocol}) • ${dubbedLanguages.length} Audio Tracks',
@@ -1717,7 +888,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   'URL: ${res.confirmedStreamUrl}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                  style: const TextStyle(
+                                      color: Colors.white38, fontSize: 10),
                                 ),
                               ],
                             ),
@@ -1727,7 +899,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       const SizedBox(height: 16),
                       Text(
                         'Available Audio on $srvName Server:',
-                        style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Wrap(
@@ -1736,20 +911,28 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         children: dubbedLanguages.map((lang) {
                           final bool isSel = selectedLang == lang;
                           return GestureDetector(
-                            onTap: () => setModalState(() => selectedLang = lang),
+                            onTap: () =>
+                                setModalState(() => selectedLang = lang),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 7),
                               decoration: BoxDecoration(
-                                color: isSel ? Colors.redAccent : Colors.white.withOpacity(0.06),
+                                color: isSel
+                                    ? Colors.redAccent
+                                    : Colors.white.withOpacity(0.06),
                                 borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: isSel ? Colors.redAccent : Colors.white24),
+                                border: Border.all(
+                                    color: isSel
+                                        ? Colors.redAccent
+                                        : Colors.white24),
                               ),
                               child: Text(
                                 lang,
                                 style: TextStyle(
                                   color: isSel ? Colors.white : Colors.white70,
                                   fontSize: 11.5,
-                                  fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                                  fontWeight:
+                                      isSel ? FontWeight.bold : FontWeight.w500,
                                 ),
                               ),
                             ),
@@ -1759,37 +942,51 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       const SizedBox(height: 16),
                       Text(
                         'Available Video Qualities on $srvName Server:',
-                        style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       ...List.generate(qualityProfiles.length, (i) {
                         final q = qualityProfiles[i];
                         final bool isSel = selectedQualityIdx == i;
-                        final String qSize = DownloadStore.formatBytes(q['bytes'] as int);
+                        final String qSize =
+                            DownloadStore.formatBytes(q['bytes'] as int);
                         return GestureDetector(
-                          onTap: () => setModalState(() => selectedQualityIdx = i),
+                          onTap: () =>
+                              setModalState(() => selectedQualityIdx = i),
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: isSel ? Colors.redAccent.withOpacity(0.15) : const Color(0xFF1E1E2A),
+                              color: isSel
+                                  ? Colors.redAccent.withOpacity(0.15)
+                                  : const Color(0xFF1E1E2A),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: isSel ? Colors.redAccent : Colors.white12,
+                                color:
+                                    isSel ? Colors.redAccent : Colors.white12,
                                 width: isSel ? 1.5 : 1.0,
                               ),
                             ),
                             child: Row(
                               children: [
                                 Icon(
-                                  isSel ? Icons.radio_button_checked : Icons.radio_button_off,
-                                  color: isSel ? Colors.redAccent : Colors.white38,
+                                  isSel
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_off,
+                                  color: isSel
+                                      ? Colors.redAccent
+                                      : Colors.white38,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         q['label'] as String,
@@ -1801,13 +998,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       ),
                                       Text(
                                         '${q['tag'] ?? 'Direct Stream'} • ${q['kbps']} kbps',
-                                        style: const TextStyle(color: Colors.grey, fontSize: 11),
+                                        style: const TextStyle(
+                                            color: Colors.grey, fontSize: 11),
                                       ),
                                     ],
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: Colors.black54,
                                     borderRadius: BorderRadius.circular(8),
@@ -1833,18 +1032,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.redAccent,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
                           ),
-                          icon: const Icon(Icons.download_rounded, color: Colors.white),
+                          icon: const Icon(Icons.download_rounded,
+                              color: Colors.white),
                           label: Text(
                             'Download from $srvName ($formattedSize)',
-                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold),
                           ),
                           onPressed: () async {
                             Navigator.pop(sheetCtx);
-                            final String posterPath = await _posterUrlForWatchlist();
-                            final String fullPoster =
-                                posterPath.isNotEmpty ? proxyImg('https://image.tmdb.org/t/p/w500$posterPath') : '';
+                            final String posterPath =
+                                await _posterUrlForWatchlist();
+                            final String fullPoster = posterPath.isNotEmpty
+                                ? proxyImg(
+                                    'https://image.tmdb.org/t/p/w500$posterPath')
+                                : '';
 
                             await DownloadStore.I.startDownload(
                               tmdbId: widget.tmdbId,
@@ -1938,15 +1145,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => VideoPlayerPage(
-          tmdbId: widget.tmdbId,
-          mediaType: widget.mediaType,
-          season: currentSeason,
-          episode: ep,
-          movieTitle: widget.movieTitle,
-          overview: widget.overview,
-          rating: widget.rating,
-          year: widget.year,
+        builder: (context) => SkippableAdScreen(
+          adDuration: 15,
+          nextScreen: VideoPlayerPage(
+            tmdbId: widget.tmdbId,
+            mediaType: widget.mediaType,
+            season: currentSeason,
+            episode: ep,
+            movieTitle: widget.movieTitle,
+            overview: widget.overview,
+            rating: widget.rating,
+            year: widget.year,
+          ),
         ),
       ),
     );
@@ -1966,7 +1176,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(16),
@@ -1978,8 +1189,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text("$totalSeasons Seasons Available",
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                  const Text("Full Catalog", style: TextStyle(color: Colors.redAccent, fontSize: 12))
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold)),
+                  const Text("Full Catalog",
+                      style: TextStyle(color: Colors.redAccent, fontSize: 12))
                 ],
               ),
               const SizedBox(height: 16),
@@ -1989,9 +1204,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   itemBuilder: (context, index) {
                     int seasonNum = index + 1;
                     return ListTile(
-                      title: Text("Season ${seasonNum.toString().padLeft(2, '0')}",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      trailing: const Icon(Icons.play_circle_outline, color: Colors.grey, size: 20),
+                      title: Text(
+                          "Season ${seasonNum.toString().padLeft(2, '0')}",
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                      trailing: const Icon(Icons.play_circle_outline,
+                          color: Colors.grey, size: 20),
                       onTap: () {
                         Navigator.pop(context);
                         _switchSeason(seasonNum);
@@ -2011,7 +1230,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF151515),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateModal) {
@@ -2025,9 +1245,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text("Server Status & Audio",
-                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold)),
                       IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context))
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context))
                     ],
                   ),
                   const Text("Real-time deep analysis of active servers:",
@@ -2041,34 +1265,49 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         int mockPing = Random().nextInt(250) + 15;
                         Color pingColor = mockPing < 80
                             ? Colors.greenAccent
-                            : (mockPing < 150 ? Colors.orangeAccent : Colors.redAccent);
+                            : (mockPing < 150
+                                ? Colors.orangeAccent
+                                : Colors.redAccent);
                         IconData towerIcon = mockPing < 80
                             ? Icons.signal_cellular_alt
-                            : (mockPing < 150 ? Icons.signal_cellular_alt_2_bar : Icons.signal_cellular_alt_1_bar);
+                            : (mockPing < 150
+                                ? Icons.signal_cellular_alt_2_bar
+                                : Icons.signal_cellular_alt_1_bar);
 
                         List<String> langs = ['English'];
-                        if (srv['name']!.toLowerCase().contains('hindi') || srv['key'] == 'cinezo') {
+                        if (srv['name']!.toLowerCase().contains('hindi') ||
+                            srv['key'] == 'cinezo') {
                           langs.addAll(['Hindi', 'Tamil', 'Telugu']);
                         }
-                        if (srv['key'] == 'vidrift' || srv['key'] == 'bingr' || srv['key'] == 'vidbolt') {
+                        if (srv['key'] == 'vidrift' ||
+                            srv['key'] == 'bingr' ||
+                            srv['key'] == 'vidbolt') {
                           langs.addAll(['Hindi', 'Spanish']);
                         }
 
                         return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 4),
                           leading: Icon(towerIcon, color: pingColor, size: 28),
                           title: Text(srv['name']!,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          subtitle:
-                              Text("Audio: ${langs.join(', ')}", style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                          subtitle: Text("Audio: ${langs.join(', ')}",
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 11)),
                           trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                                 color: pingColor.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: pingColor)),
                             child: Text("${mockPing}ms",
-                                style: TextStyle(color: pingColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                                style: TextStyle(
+                                    color: pingColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12)),
                           ),
                           onTap: () {
                             Navigator.pop(context);
@@ -2090,7 +1329,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  String get _tmdbType => (widget.mediaType == 'tv' || widget.mediaType == 'series') ? 'tv' : 'movie';
+  String get _tmdbType =>
+      (widget.mediaType == 'tv' || widget.mediaType == 'series')
+          ? 'tv'
+          : 'movie';
 
   Future<void> _fetchDetails() async {
     if (mounted) setState(() => isLoadingDetails = true);
@@ -2103,7 +1345,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         final data = json.decode(res.body);
         if (data is Map<String, dynamic> && mounted) {
           final List cast =
-              (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
+              (data['credits'] is Map && data['credits']['cast'] is List)
+                  ? data['credits']['cast']
+                  : [];
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -2130,7 +1374,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         }
       }
       final bp = data['backdrop_path'];
-      if (bp is String && bp.isNotEmpty && !paths.contains(bp)) paths.insert(0, bp);
+      if (bp is String && bp.isNotEmpty && !paths.contains(bp)) {
+        paths.insert(0, bp);
+      }
       final pp = data['poster_path'];
       if (pp is String && pp.isNotEmpty) paths.add(pp);
     } catch (_) {}
@@ -2139,9 +1385,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final List<List<Color>> zonePalette = [];
     for (final p in paths) {
       if (!mounted) return;
-      final Color? c = await _dominantColorFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
+      final Color? c = await _dominantColorFromUrl(
+          proxyImg('https://image.tmdb.org/t/p/w300$p'));
       if (!mounted) return;
-      final List<Color>? z = await _zoneColorsFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
+      final List<Color>? z = await _zoneColorsFromUrl(
+          proxyImg('https://image.tmdb.org/t/p/w300$p'));
       if (!mounted) return;
       if (c != null) {
         palette.add(c);
@@ -2164,7 +1412,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<Color?> _dominantColorFromUrl(String url) async {
     try {
       final Completer<ui.Image> completer = Completer<ui.Image>();
-      final ImageStream stream = NetworkImage(url).resolve(const ImageConfiguration());
+      final ImageStream stream =
+          NetworkImage(url).resolve(const ImageConfiguration());
       late ImageStreamListener listener;
       listener = ImageStreamListener(
         (ImageInfo info, bool _) {
@@ -2177,8 +1426,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         },
       );
       stream.addListener(listener);
-      final ui.Image img = await completer.future.timeout(const Duration(seconds: 10));
-      final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final ui.Image img =
+          await completer.future.timeout(const Duration(seconds: 10));
+      final ByteData? data =
+          await img.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (data == null) return null;
       final Uint8List bytes = data.buffer.asUint8List();
 
@@ -2247,7 +1498,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (_effectiveOfflineMode) return '';
     String path = '';
     final Map<String, dynamic>? d = details;
-    if (d != null && d['poster_path'] is String) path = d['poster_path'] as String;
+    if (d != null && d['poster_path'] is String) {
+      path = d['poster_path'] as String;
+    }
     if (path.isEmpty) {
       try {
         final res = await tmdbHttpGet(
@@ -2256,7 +1509,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         ).timeout(const Duration(seconds: 6));
         if (res.statusCode == 200) {
           final data = json.decode(res.body);
-          if (data is Map && data['poster_path'] is String) path = data['poster_path'] as String;
+          if (data is Map && data['poster_path'] is String) {
+            path = data['poster_path'] as String;
+          }
         }
       } catch (_) {}
     }
@@ -2273,7 +1528,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       'release_date': widget.year,
       'first_air_date': widget.year,
       'vote_average': num.tryParse(widget.rating) ?? 0.0,
-      'overview': widget.overview.isNotEmpty ? widget.overview : (details?['overview'] ?? ''),
+      'overview': widget.overview.isNotEmpty
+          ? widget.overview
+          : (details?['overview'] ?? ''),
       'poster_path': posterPath.isEmpty ? null : posterPath,
     };
     final item = TmdbItem.fromStored(tmdbData);
@@ -2302,7 +1559,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<List<Color>?> _zoneColorsFromUrl(String url) async {
     try {
       final Completer<ui.Image> completer = Completer<ui.Image>();
-      final ImageStream stream = NetworkImage(url).resolve(const ImageConfiguration());
+      final ImageStream stream =
+          NetworkImage(url).resolve(const ImageConfiguration());
       late ImageStreamListener listener;
       listener = ImageStreamListener(
         (ImageInfo info, bool _) {
@@ -2315,8 +1573,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         },
       );
       stream.addListener(listener);
-      final ui.Image img = await completer.future.timeout(const Duration(seconds: 10));
-      final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final ui.Image img =
+          await completer.future.timeout(const Duration(seconds: 10));
+      final ByteData? data =
+          await img.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (data == null) return null;
       final Uint8List bytes = data.buffer.asUint8List();
       final int w = img.width;
@@ -2350,15 +1610,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         }
       }
       final HSVColor fh = HSVColor.fromColor(fallback);
-      final Color dim =
-          HSVColor.fromAHSV(1.0, fh.hue, fh.saturation, (fh.value * 0.6).clamp(0.0, 1.0).toDouble()).toColor();
+      final Color dim = HSVColor.fromAHSV(1.0, fh.hue, fh.saturation,
+              (fh.value * 0.6).clamp(0.0, 1.0).toDouble())
+          .toColor();
       return raw.map((Color? c) => c ?? dim).toList();
     } catch (_) {
       return null;
     }
   }
 
-  Color? _zoneCellColor(Uint8List bytes, int w, int x0, int x1, int y0, int y1) {
+  Color? _zoneCellColor(
+      Uint8List bytes, int w, int x0, int x1, int y0, int y1) {
     final List<double> wS = List<double>.filled(12, 0);
     final List<double> rS = List<double>.filled(12, 0);
     final List<double> gS = List<double>.filled(12, 0);
@@ -2416,7 +1678,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       }
     }
     if (ids.isEmpty) return <TmdbItem>[];
-    return Tmdb.I.discover(tv: _tmdbType == 'tv', genres: ids.join(','), count: 20);
+    return Tmdb.I
+        .discover(tv: _tmdbType == 'tv', genres: ids.join(','), count: 20);
   }
 
   List<Widget> _buildMoreSuggestions() {
@@ -2440,13 +1703,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         focusable: _buildFocusableItem,
       ));
     }
-    for (final String label in const <String>['Action', 'Comedy', 'Romance', 'Horror', 'Thriller']) {
-      final GenreDef g = kAllGenres.firstWhere((GenreDef d) => d.label == label, orElse: () => kAllGenres.first);
+    for (final String label in const <String>[
+      'Action',
+      'Comedy',
+      'Romance',
+      'Horror',
+      'Thriller'
+    ]) {
+      final GenreDef g = kAllGenres.firstWhere((GenreDef d) => d.label == label,
+          orElse: () => kAllGenres.first);
       rows.add(_SuggestRow(
         key: ValueKey('$label-${widget.tmdbId}'),
         title: tv ? '$label Series' : '$label Movies',
         excludeId: widget.tmdbId,
-        loader: () => Tmdb.I.genreRow(g, tv ? RowKind.series : RowKind.movie, count: 20),
+        loader: () =>
+            Tmdb.I.genreRow(g, tv ? RowKind.series : RowKind.movie, count: 20),
         onOpen: open,
         focusable: _buildFocusableItem,
       ));
@@ -2466,13 +1737,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => VideoPlayerPage(
-          tmdbId: id,
-          mediaType: mediaType,
-          movieTitle: title,
-          overview: overview,
-          rating: rating,
-          year: year,
+        builder: (context) => SkippableAdScreen(
+          adDuration: 15,
+          nextScreen: VideoPlayerPage(
+            tmdbId: id,
+            mediaType: mediaType,
+            movieTitle: title,
+            overview: overview,
+            rating: rating,
+            year: year,
+          ),
         ),
       ),
     );
@@ -2494,7 +1768,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF111111),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return _SearchSheet(
           onOpenTitle: (Map<String, dynamic> m) {
@@ -2533,7 +1808,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Cast", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text("Cast",
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         SizedBox(
           height: 140,
@@ -2552,29 +1831,38 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 child: Container(
                   width: 86,
                   margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
                   child: Column(
                     children: [
                       CircleAvatar(
                         radius: 34,
                         backgroundColor: Colors.grey[900],
                         backgroundImage: hasPhoto
-                            ? CachedNetworkImageProvider(proxyImg('https://image.tmdb.org/t/p/w185$profile'))
+                            ? CachedNetworkImageProvider(proxyImg(
+                                'https://image.tmdb.org/t/p/w185$profile'))
                             : null,
-                        child: hasPhoto ? null : const Icon(Icons.person, color: Colors.white38, size: 30),
+                        child: hasPhoto
+                            ? null
+                            : const Icon(Icons.person,
+                                color: Colors.white38, size: 30),
                       ),
                       const SizedBox(height: 6),
                       Text(name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold)),
                       if (character.isNotEmpty)
                         Text(character,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 10)),
                     ],
                   ),
                 ),
@@ -2594,8 +1882,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 90, child: Text(k, style: const TextStyle(color: Colors.grey, fontSize: 12))),
-          Expanded(child: Text(v, style: const TextStyle(color: Colors.white, fontSize: 12))),
+          SizedBox(
+              width: 90,
+              child:
+                  Text(k, style: const TextStyle(color: Colors.grey, fontSize: 12))),
+          Expanded(
+              child: Text(v,
+                  style: const TextStyle(color: Colors.white, fontSize: 12))),
         ],
       ),
     );
@@ -2604,12 +1897,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Widget _buildDescriptionCard() {
     final Map<String, dynamic>? d = details;
     final String fetched = (d?['overview'] ?? '').toString().trim();
-    final String overview = fetched.isNotEmpty ? fetched : widget.overview.trim();
+    final String overview =
+        fetched.isNotEmpty ? fetched : widget.overview.trim();
     final String tagline = (d?['tagline'] ?? '').toString().trim();
     final List genres = (d?['genres'] is List) ? d!['genres'] as List : [];
-    final List langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List : [];
+    final List langs =
+        (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List : [];
     final String languages = langs
-        .map((l) => (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
+        .map((l) =>
+            (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
         .where((s) => s.isNotEmpty)
         .join(', ');
 
@@ -2630,7 +1926,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       }
     }
 
-    final String release = (d?['release_date'] ?? d?['first_air_date'] ?? '').toString();
+    final String release =
+        (d?['release_date'] ?? d?['first_air_date'] ?? '').toString();
     final String status = (d?['status'] ?? '').toString();
     String ratingStr = '';
     final dynamic va = d?['vote_average'];
@@ -2652,34 +1949,50 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+            color: Colors.grey[900], borderRadius: BorderRadius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 const Text("Description",
-                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold)),
                 const Spacer(),
-                Icon(descExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    color: Colors.white54, size: 22),
+                Icon(
+                    descExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: Colors.white54,
+                    size: 22),
               ],
             ),
             if (metaLine.isNotEmpty)
               Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Text(metaLine, style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                  child: Text(metaLine,
+                      style:
+                          const TextStyle(color: Colors.grey, fontSize: 12))),
             if (genres.isNotEmpty) ...[
               const SizedBox(height: 10),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: genres.take(5).map<Widget>((g) {
-                  final String gName = (g is Map ? (g['name'] ?? '') : '').toString();
+                  final String gName =
+                      (g is Map ? (g['name'] ?? '') : '').toString();
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(12)),
-                    child: Text(gName, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: Colors.white10,
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Text(gName,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 11)),
                   );
                 }).toList(),
               ),
@@ -2687,7 +2000,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             if (tagline.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(tagline,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12, fontStyle: FontStyle.italic)),
+                  style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic)),
             ],
             const SizedBox(height: 10),
             AnimatedSize(
@@ -2695,11 +2011,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               alignment: Alignment.topCenter,
               child: Text(
                 overview.isEmpty
-                    ? (isLoadingDetails ? "Loading description..." : "No description available.")
+                    ? (isLoadingDetails
+                        ? "Loading description..."
+                        : "No description available.")
                     : overview,
                 maxLines: descExpanded ? null : 3,
-                overflow: descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.45),
+                overflow:
+                    descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 13, height: 1.45),
               ),
             ),
             if (descExpanded) ...[
@@ -2714,7 +2034,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             ],
             const SizedBox(height: 8),
             Text(descExpanded ? "Show less" : "...more",
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -2728,19 +2051,27 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (text.isNotEmpty) {
       if (user == null || user.isAnonymous) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Please login from Dashboard to comment!'), backgroundColor: Colors.redAccent));
+            content: Text('Please login from Dashboard to comment!'),
+            backgroundColor: Colors.redAccent));
         return;
       }
 
-      String movieId =
-          widget.customUrl == null ? widget.tmdbId.toString() : 'live_${widget.movieTitle.replaceAll(" ", "_")}';
+      String movieId = widget.customUrl == null
+          ? widget.tmdbId.toString()
+          : 'live_${widget.movieTitle.replaceAll(" ", "_")}';
 
-      await FirebaseFirestore.instance.collection('movies').doc(movieId).collection('comments').add({
+      await FirebaseFirestore.instance
+          .collection('movies')
+          .doc(movieId)
+          .collection('comments')
+          .add({
         'name': user.displayName ?? 'HANNUTV User',
         'text': text,
         'time': DateTime.now().toIso8601String(),
         'timestamp': FieldValue.serverTimestamp(),
-        'avatar': (user.displayName != null && user.displayName!.isNotEmpty) ? user.displayName![0].toUpperCase() : 'H',
+        'avatar': (user.displayName != null && user.displayName!.isNotEmpty)
+            ? user.displayName![0].toUpperCase()
+            : 'H',
       });
 
       commentInputController.clear();
@@ -2754,11 +2085,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _offlineLoopbackServer?.close(force: true);
     } catch (_) {}
     _hideControlsTimer?.cancel();
-    _adLoadWaitTimer?.cancel();
-    _inPlayerAdTimer?.cancel();
-    _thirtyMinAdCycleTimer?.cancel();
-    _dnsWatchdogTimer?.cancel();
-    _backgroundMuteGuardTimer?.cancel();
     _introAnimController.dispose();
     commentInputController.dispose();
     _ambientTimer?.cancel();
@@ -2766,12 +2092,19 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _ambientZones.dispose();
     _videoZoom.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
-  Widget _buildFocusableItem({required Widget child, required VoidCallback onTap, BorderRadius? borderRadius}) {
-    return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
+  Widget _buildFocusableItem(
+      {required Widget child,
+      required VoidCallback onTap,
+      BorderRadius? borderRadius}) {
+    return _TvFocusButton(
+        onTap: onTap,
+        borderRadius: borderRadius ?? BorderRadius.circular(8),
+        child: child);
   }
 
   @override
@@ -2783,7 +2116,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     bool isTvShow = widget.mediaType == 'tv' || widget.mediaType == 'series';
     String displayTitle = widget.movieTitle;
     if (isTvShow && widget.customUrl == null && !_effectiveOfflineMode) {
-      displayTitle += " S${currentSeason.toString().padLeft(2, '0')} - E${currentEpisode.toString().padLeft(2, '0')}";
+      displayTitle +=
+          " S${currentSeason.toString().padLeft(2, '0')} - E${currentEpisode.toString().padLeft(2, '0')}";
     }
 
     return WillPopScope(
@@ -2827,7 +2161,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       zoom: _videoZoom,
                                       onSwipeUp: _enterFullScreenOnSwipeUp,
                                       onSwipeDown: _exitFullScreenOnSwipeDown,
-                                      child: WebViewWidget(controller: _controller),
+                                      child:
+                                          WebViewWidget(controller: _controller),
                                     ),
                                   ),
                                 ),
@@ -2866,13 +2201,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         animation: _introAnimController,
                                         builder: (context, child) {
                                           return Opacity(
-                                            opacity: _introOpacityAnimation.value,
+                                            opacity:
+                                                _introOpacityAnimation.value,
                                             child: Transform.scale(
                                               scale: _introScaleAnimation.value,
                                               child: Image.asset(
                                                 'assets/logo.png',
                                                 height: 60,
-                                                errorBuilder: (_, __, ___) => const Icon(
+                                                errorBuilder: (_, __, ___) =>
+                                                    const Icon(
                                                   Icons.play_circle_fill,
                                                   color: Colors.red,
                                                   size: 60,
@@ -2886,7 +2223,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   ),
                                 ),
                               if (showControls) ...[
-                                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black26))),
+                                Positioned.fill(
+                                    child: IgnorePointer(
+                                        child:
+                                            Container(color: Colors.black26))),
                                 Positioned(
                                   top: full ? 18 : 10,
                                   left: full ? 18 : 10,
@@ -2895,8 +2235,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       if (isFullScreen && !isTvDevice) {
                                         _toggleFullScreen();
                                       } else {
-                                        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-                                        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+                                        SystemChrome.setPreferredOrientations(
+                                            [DeviceOrientation.portraitUp]);
+                                        SystemChrome.setEnabledSystemUIMode(
+                                            SystemUiMode.edgeToEdge);
                                         Navigator.pop(context);
                                       }
                                     },
@@ -2940,7 +2282,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         backgroundColor: Colors.black54,
                                         radius: full ? 20 : 16,
                                         child: Icon(
-                                          full ? Icons.fullscreen_exit : Icons.fullscreen,
+                                          full
+                                              ? Icons.fullscreen_exit
+                                              : Icons.fullscreen,
                                           color: Colors.white,
                                           size: full ? 26 : 22,
                                         ),
@@ -2948,7 +2292,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                     ),
                                   ),
                               ],
-                              if (isPageLoading && !isVideoPlaying && !_isShowingInPlayerAd)
+                              if (isPageLoading && !isVideoPlaying)
                                 Positioned.fill(
                                   child: Container(
                                     color: Colors.black,
@@ -2959,20 +2303,23 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                           SizedBox(
                                             width: 30,
                                             height: 30,
-                                            child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5),
+                                            child: CircularProgressIndicator(
+                                                color: Colors.redAccent,
+                                                strokeWidth: 2.5),
                                           ),
                                           SizedBox(height: 10),
                                           Text(
                                             "Connecting to Server...",
                                             style: TextStyle(
-                                                color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold),
                                           ),
                                         ],
                                       ),
                                     ),
                                   ),
                                 ),
-                              _buildYouTubeInPlayerAdOverlay(),
                             ],
                           ),
                         ),
@@ -2982,23 +2329,27 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     if (!full)
                       Expanded(
                         child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (_effectiveOfflineMode)
                                 Container(
                                   margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: Colors.green.withOpacity(0.18),
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.greenAccent),
+                                    border:
+                                        Border.all(color: Colors.greenAccent),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.offline_pin_rounded, color: Colors.greenAccent, size: 16),
+                                      const Icon(Icons.offline_pin_rounded,
+                                          color: Colors.greenAccent, size: 16),
                                       const SizedBox(width: 6),
                                       Flexible(
                                         child: Text(
@@ -3015,24 +2366,35 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                 ),
                               Text(
                                 displayTitle,
-                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  const Icon(Icons.star, color: Colors.amber, size: 18),
+                                  const Icon(Icons.star,
+                                      color: Colors.amber, size: 18),
                                   const SizedBox(width: 4),
                                   Text(
                                     widget.rating,
                                     style: const TextStyle(
-                                        color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(width: 12),
-                                  Text(widget.year, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                                  Text(widget.year,
+                                      style: const TextStyle(
+                                          color: Colors.grey, fontSize: 14)),
                                   const SizedBox(width: 16),
-                                  const Icon(Icons.visibility, color: Colors.grey, size: 16),
+                                  const Icon(Icons.visibility,
+                                      color: Colors.grey, size: 16),
                                   const SizedBox(width: 4),
-                                  Text("$viewCount Views", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text("$viewCount Views",
+                                      style: const TextStyle(
+                                          color: Colors.grey, fontSize: 12)),
                                 ],
                               ),
                               const SizedBox(height: 14),
@@ -3045,15 +2407,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       AnimatedBuilder(
                                         animation: WatchlistStore.I,
                                         builder: (context, _) {
-                                          final bool saved = WatchlistStore.I.items.any(
-                                              (e) => e.id == widget.tmdbId && (e.isTv ? 'tv' : 'movie') == _tmdbType);
+                                          final bool saved = WatchlistStore
+                                              .I.items
+                                              .any((e) =>
+                                                  e.id == widget.tmdbId &&
+                                                  (e.isTv ? 'tv' : 'movie') ==
+                                                      _tmdbType);
                                           return _buildFocusableItem(
                                             onTap: _toggleWatchlist,
-                                            borderRadius: BorderRadius.circular(20),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
                                             child: _buildActionButton(
-                                              saved ? Icons.bookmark : Icons.bookmark_border,
-                                              saved ? "In Watchlist" : "Add to Watchlist",
-                                              activeColor: saved ? Colors.amber : Colors.white,
+                                              saved
+                                                  ? Icons.bookmark
+                                                  : Icons.bookmark_border,
+                                              saved
+                                                  ? "In Watchlist"
+                                                  : "Add to Watchlist",
+                                              activeColor: saved
+                                                  ? Colors.amber
+                                                  : Colors.white,
                                             ),
                                           );
                                         },
@@ -3062,7 +2435,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       AnimatedBuilder(
                                         animation: DownloadStore.I,
                                         builder: (context, _) {
-                                          final activeTask = DownloadStore.I.findTaskForMedia(
+                                          final activeTask =
+                                              DownloadStore.I.findTaskForMedia(
                                             tmdbId: widget.tmdbId,
                                             mediaType: _tmdbType,
                                             season: currentSeason,
@@ -3071,7 +2445,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                           if (activeTask == null) {
                                             return _buildFocusableItem(
                                               onTap: _showRealDownloadSheet,
-                                              borderRadius: BorderRadius.circular(20),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                               child: _buildActionButton(
                                                 Icons.downloading_rounded,
                                                 "Download",
@@ -3079,8 +2454,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                               ),
                                             );
                                           }
-                                          final bool isDone = activeTask.status == 'completed';
-                                          final bool isPaused = activeTask.status == 'paused';
+                                          final bool isDone =
+                                              activeTask.status == 'completed';
+                                          final bool isPaused =
+                                              activeTask.status == 'paused';
                                           return Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
@@ -3089,18 +2466,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                                   if (isDone) {
                                                     openMyDownloads(context);
                                                   } else if (isPaused) {
-                                                    DownloadStore.I.resumeDownload(activeTask.id);
+                                                    DownloadStore.I
+                                                        .resumeDownload(
+                                                            activeTask.id);
                                                   } else {
-                                                    DownloadStore.I.pauseDownload(activeTask.id);
+                                                    DownloadStore.I
+                                                        .pauseDownload(
+                                                            activeTask.id);
                                                   }
                                                 },
-                                                borderRadius: BorderRadius.circular(20),
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
                                                 child: _buildActionButton(
                                                   isDone
-                                                      ? Icons.download_done_rounded
+                                                      ? Icons
+                                                          .download_done_rounded
                                                       : (isPaused
-                                                          ? Icons.play_arrow_rounded
-                                                          : Icons.pause_circle_filled_rounded),
+                                                          ? Icons
+                                                              .play_arrow_rounded
+                                                          : Icons
+                                                              .pause_circle_filled_rounded),
                                                   isDone
                                                       ? "Downloaded (100%)"
                                                       : (isPaused
@@ -3108,7 +2493,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                                           : "Pause (${activeTask.percent}%)"),
                                                   activeColor: isDone
                                                       ? Colors.greenAccent
-                                                      : (isPaused ? Colors.amber : Colors.redAccent),
+                                                      : (isPaused
+                                                          ? Colors.amber
+                                                          : Colors.redAccent),
                                                 ),
                                               ),
                                             ],
@@ -3121,49 +2508,64 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                       _buildFocusableItem(
                                         onTap: _showSearchSheet,
                                         borderRadius: BorderRadius.circular(20),
-                                        child: _buildActionButton(Icons.search, "Search"),
+                                        child: _buildActionButton(
+                                            Icons.search, "Search"),
                                       ),
                                   ],
                                 ),
                               ),
                               const SizedBox(height: 14),
 
-                              if (!_effectiveOfflineMode) _buildYouTubeSponsorCompanionCard(),
-
                               if (widget.customUrl == null) ...[
                                 _buildDescriptionCard(),
                                 const SizedBox(height: 16),
                               ],
 
-                              if (widget.customUrl == null && !_effectiveOfflineMode) ...[
+                              if (widget.customUrl == null &&
+                                  !_effectiveOfflineMode) ...[
                                 const Text(
                                   "Sponsored Ads",
-                                  style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 10),
-                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const CustomBannerAd(
+                                    htmlBannerCode: _adsterraBannerSnippet),
                                 const SizedBox(height: 20),
                               ],
 
-                              if (widget.customUrl != null && !_effectiveOfflineMode) ...[
+                              if (widget.customUrl != null &&
+                                  !_effectiveOfflineMode) ...[
                                 const SizedBox(height: 10),
                                 const Text(
                                   "Sponsored Ads",
-                                  style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 10),
-                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const CustomBannerAd(
+                                    htmlBannerCode: _adsterraBannerSnippet),
                                 const SizedBox(height: 16),
-                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const CustomBannerAd(
+                                    htmlBannerCode: _adsterraBannerSnippet),
                                 const SizedBox(height: 16),
-                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const CustomBannerAd(
+                                    htmlBannerCode: _adsterraBannerSnippet),
                                 const SizedBox(height: 20),
                               ],
 
-                              if (widget.customUrl == null && !_effectiveOfflineMode) ...[
+                              if (widget.customUrl == null &&
+                                  !_effectiveOfflineMode) ...[
                                 const Text(
                                   "If current server is not working, try a different one:",
-                                  style: TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic),
+                                  style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 13,
+                                      fontStyle: FontStyle.italic),
                                 ),
                                 const SizedBox(height: 10),
                                 Container(
@@ -3174,16 +2576,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: const [
-                                          Icon(Icons.verified_user, color: Colors.green, size: 20),
+                                          Icon(Icons.verified_user,
+                                              color: Colors.green, size: 20),
                                           SizedBox(width: 8),
                                           Text(
                                             "All Servers",
                                             style: TextStyle(
-                                                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14),
                                           ),
                                         ],
                                       ),
@@ -3192,26 +2598,39 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         scrollDirection: Axis.horizontal,
                                         child: Row(
                                           children: servers.map((srv) {
-                                            final isSelected = activeServer == srv['key'];
+                                            final isSelected =
+                                                activeServer == srv['key'];
                                             return _buildFocusableItem(
                                               onTap: () {
-                                                if (activeServer != srv['key']) {
-                                                  setState(() => activeServer = srv['key']!);
+                                                if (activeServer !=
+                                                    srv['key']) {
+                                                  setState(() => activeServer =
+                                                      srv['key']!);
                                                   _loadOnlineMovieStreamIntoWebView();
                                                 }
                                               },
-                                              borderRadius: BorderRadius.circular(20),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                               child: Container(
-                                                margin: const EdgeInsets.only(right: 8),
-                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                margin: const EdgeInsets.only(
+                                                    right: 8),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 8),
                                                 decoration: BoxDecoration(
-                                                  color: isSelected ? Colors.white : Colors.grey[900],
-                                                  borderRadius: BorderRadius.circular(20),
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : Colors.grey[900],
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
                                                 ),
                                                 child: Text(
                                                   srv['name']!,
                                                   style: TextStyle(
-                                                    color: isSelected ? Colors.black : Colors.white,
+                                                    color: isSelected
+                                                        ? Colors.black
+                                                        : Colors.white,
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 13,
                                                   ),
@@ -3226,21 +2645,27 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                 ),
                                 const SizedBox(height: 20),
                                 _buildCastSection(),
-                                const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                                const CustomBannerAd(
+                                    htmlBannerCode: _adsterraBannerSnippet),
                                 const SizedBox(height: 20),
                               ],
 
-                              if (isTvShow && widget.customUrl == null && !_effectiveOfflineMode) ...[
+                              if (isTvShow &&
+                                  widget.customUrl == null &&
+                                  !_effectiveOfflineMode) ...[
                                 Row(
                                   children: [
                                     InkWell(
                                       onTap: _showSeasonPicker,
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 10),
                                         decoration: BoxDecoration(
                                           color: Colors.black,
-                                          border: Border.all(color: Colors.white30),
-                                          borderRadius: BorderRadius.circular(20),
+                                          border:
+                                              Border.all(color: Colors.white30),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
                                         ),
                                         child: Row(
                                           children: [
@@ -3253,7 +2678,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                               ),
                                             ),
                                             const SizedBox(width: 6),
-                                            const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+                                            const Icon(
+                                                Icons.keyboard_arrow_down,
+                                                color: Colors.white,
+                                                size: 18),
                                           ],
                                         ),
                                       ),
@@ -3262,11 +2690,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                     InkWell(
                                       onTap: _showAudioServerPingMenu,
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 10),
                                         decoration: BoxDecoration(
                                           color: Colors.black,
-                                          border: Border.all(color: Colors.white30),
-                                          borderRadius: BorderRadius.circular(20),
+                                          border:
+                                              Border.all(color: Colors.white30),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
                                         ),
                                         child: Row(
                                           children: const [
@@ -3279,7 +2710,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                               ),
                                             ),
                                             SizedBox(width: 6),
-                                            Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+                                            Icon(Icons.keyboard_arrow_down,
+                                                color: Colors.white, size: 18),
                                           ],
                                         ),
                                       ),
@@ -3289,22 +2721,30 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                 const SizedBox(height: 20),
                                 const Text(
                                   "Episodes",
-                                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 12),
                                 SizedBox(
                                   height: 140,
                                   child: ListView.builder(
                                     scrollDirection: Axis.horizontal,
-                                    itemCount: episodesList.isNotEmpty ? episodesList.length : 15,
+                                    itemCount: episodesList.isNotEmpty
+                                        ? episodesList.length
+                                        : 15,
                                     itemBuilder: (context, index) {
                                       final epNum = index + 1;
                                       final isCurrent = currentEpisode == epNum;
                                       String epName = "Episode $epNum";
                                       String imgUrl = '';
-                                      if (episodesList.isNotEmpty && index < episodesList.length) {
-                                        epName = episodesList[index]['name'] ?? "Episode $epNum";
-                                        if (episodesList[index]['still_path'] != null) {
+                                      if (episodesList.isNotEmpty &&
+                                          index < episodesList.length) {
+                                        epName = episodesList[index]['name'] ??
+                                            "Episode $epNum";
+                                        if (episodesList[index]['still_path'] !=
+                                            null) {
                                           imgUrl = proxyImg(
                                               'https://image.tmdb.org/t/p/w500${episodesList[index]['still_path']}');
                                         }
@@ -3314,57 +2754,80 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         borderRadius: BorderRadius.circular(10),
                                         child: Container(
                                           width: 160,
-                                          margin: const EdgeInsets.only(right: 12),
+                                          margin:
+                                              const EdgeInsets.only(right: 12),
                                           decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(10),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
                                             border: isCurrent
-                                                ? Border.all(color: Colors.redAccent, width: 2)
-                                                : Border.all(color: Colors.white12),
+                                                ? Border.all(
+                                                    color: Colors.redAccent,
+                                                    width: 2)
+                                                : Border.all(
+                                                    color: Colors.white12),
                                             color: const Color(0xFF1A1A1A),
                                           ),
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Expanded(
                                                 child: Container(
                                                   decoration: BoxDecoration(
                                                     borderRadius:
-                                                        const BorderRadius.vertical(top: Radius.circular(8)),
+                                                        const BorderRadius
+                                                            .vertical(
+                                                            top: Radius
+                                                                .circular(8)),
                                                     color: Colors.black54,
                                                     image: imgUrl.isNotEmpty
                                                         ? DecorationImage(
-                                                            image: CachedNetworkImageProvider(imgUrl),
+                                                            image:
+                                                                CachedNetworkImageProvider(
+                                                                    imgUrl),
                                                             fit: BoxFit.cover,
                                                           )
                                                         : null,
                                                   ),
                                                   child: Center(
                                                     child: Icon(
-                                                      isCurrent ? Icons.play_circle_fill : Icons.play_circle_outline,
-                                                      color: isCurrent ? Colors.red : Colors.white70,
+                                                      isCurrent
+                                                          ? Icons
+                                                              .play_circle_fill
+                                                          : Icons
+                                                              .play_circle_outline,
+                                                      color: isCurrent
+                                                          ? Colors.red
+                                                          : Colors.white70,
                                                       size: 40,
                                                     ),
                                                   ),
                                                 ),
                                               ),
                                               Padding(
-                                                padding: const EdgeInsets.all(10.0),
+                                                padding:
+                                                    const EdgeInsets.all(10.0),
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
                                                       epName,
                                                       style: const TextStyle(
                                                         color: Colors.white,
                                                         fontSize: 13,
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                       ),
                                                       maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     ),
                                                     const Text(
                                                       "Watch on HANNUTV",
-                                                      style: TextStyle(color: Colors.grey, fontSize: 10),
+                                                      style: TextStyle(
+                                                          color: Colors.grey,
+                                                          fontSize: 10),
                                                       maxLines: 1,
                                                     ),
                                                   ],
@@ -3388,10 +2851,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: const [
                                           Text(
                                             "Public Comments",
@@ -3401,7 +2866,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
-                                          Icon(Icons.comment, color: Colors.grey, size: 16),
+                                          Icon(Icons.comment,
+                                              color: Colors.grey, size: 16),
                                         ],
                                       ),
                                       const SizedBox(height: 10),
@@ -3409,17 +2875,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         children: [
                                           Expanded(
                                             child: TextField(
-                                              controller: commentInputController,
-                                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                                              controller:
+                                                  commentInputController,
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12),
                                               decoration: InputDecoration(
-                                                hintText: 'Add a public comment...',
-                                                hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                                                hintText:
+                                                    'Add a public comment...',
+                                                hintStyle: const TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12),
                                                 filled: true,
                                                 fillColor: Colors.black45,
                                                 contentPadding:
-                                                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 8),
                                                 border: OutlineInputBorder(
-                                                  borderRadius: BorderRadius.circular(20),
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
                                                   borderSide: BorderSide.none,
                                                 ),
                                               ),
@@ -3427,10 +2902,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                           ),
                                           _buildFocusableItem(
                                             onTap: _addComment,
-                                            borderRadius: BorderRadius.circular(20),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
                                             child: const Padding(
                                               padding: EdgeInsets.all(8.0),
-                                              child: Icon(Icons.send, color: Colors.redAccent, size: 20),
+                                              child: Icon(Icons.send,
+                                                  color: Colors.redAccent,
+                                                  size: 20),
                                             ),
                                           ),
                                         ],
@@ -3443,12 +2921,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                                 ? widget.tmdbId.toString()
                                                 : 'live_${widget.movieTitle.replaceAll(" ", "_")}')
                                             .collection('comments')
-                                            .orderBy('timestamp', descending: true)
+                                            .orderBy('timestamp',
+                                                descending: true)
                                             .snapshots(),
                                         builder: (context, snapshot) {
                                           if (!snapshot.hasData) {
                                             return const Center(
-                                              child: CircularProgressIndicator(color: Colors.redAccent),
+                                              child: CircularProgressIndicator(
+                                                  color: Colors.redAccent),
                                             );
                                           }
                                           final comments = snapshot.data!.docs;
@@ -3458,57 +2938,80 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                               padding: EdgeInsets.all(8.0),
                                               child: Text(
                                                 "Be the first to comment!",
-                                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                                                style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12),
                                               ),
                                             );
                                           }
 
                                           return Column(
                                             children: comments.map((doc) {
-                                              var data = doc.data() as Map<String, dynamic>;
+                                              var data = doc.data()
+                                                  as Map<String, dynamic>;
                                               return Padding(
-                                                padding: const EdgeInsets.only(bottom: 8.0),
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 8.0),
                                                 child: Row(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     CircleAvatar(
                                                       radius: 14,
-                                                      backgroundColor: Colors.redAccent,
+                                                      backgroundColor:
+                                                          Colors.redAccent,
                                                       child: Text(
                                                         data['avatar'] ?? 'U',
                                                         style: const TextStyle(
                                                           color: Colors.white,
                                                           fontSize: 12,
-                                                          fontWeight: FontWeight.bold,
+                                                          fontWeight:
+                                                              FontWeight.bold,
                                                         ),
                                                       ),
                                                     ),
                                                     const SizedBox(width: 10),
                                                     Expanded(
                                                       child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
                                                           Row(
                                                             children: [
                                                               Text(
-                                                                data['name'] ?? 'User',
-                                                                style: const TextStyle(
-                                                                  color: Colors.white70,
+                                                                data['name'] ??
+                                                                    'User',
+                                                                style:
+                                                                    const TextStyle(
+                                                                  color: Colors
+                                                                      .white70,
                                                                   fontSize: 12,
-                                                                  fontWeight: FontWeight.bold,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
                                                                 ),
                                                               ),
-                                                              const SizedBox(width: 6),
+                                                              const SizedBox(
+                                                                  width: 6),
                                                               const Text(
                                                                 "Just now",
-                                                                style: TextStyle(color: Colors.grey, fontSize: 10),
+                                                                style: TextStyle(
+                                                                    color: Colors
+                                                                        .grey,
+                                                                    fontSize:
+                                                                        10),
                                                               ),
                                                             ],
                                                           ),
                                                           Text(
                                                             data['text'] ?? '',
                                                             style:
-                                                                const TextStyle(color: Colors.white, fontSize: 12),
+                                                                const TextStyle(
+                                                                    color: Colors
+                                                                        .white,
+                                                                    fontSize:
+                                                                        12),
                                                           ),
                                                         ],
                                                       ),
@@ -3530,7 +3033,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   similarMovies.isNotEmpty) ...[
                                 const Text(
                                   "Suggested Movies & Shows",
-                                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 10),
                                 SizedBox(
@@ -3545,12 +3051,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                           Navigator.pushReplacement(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (context) => VideoPlayerPage(
-                                                tmdbId: m['id'],
-                                                mediaType: m['mediaType'],
-                                                movieTitle: m['title'],
-                                                rating: m['rating'],
-                                                year: m['year'],
+                                              builder: (context) =>
+                                                  SkippableAdScreen(
+                                                adDuration: 15,
+                                                nextScreen: VideoPlayerPage(
+                                                  tmdbId: m['id'],
+                                                  mediaType: m['mediaType'],
+                                                  movieTitle: m['title'],
+                                                  rating: m['rating'],
+                                                  year: m['year'],
+                                                ),
                                               ),
                                             ),
                                           );
@@ -3558,18 +3068,23 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                         borderRadius: BorderRadius.circular(8),
                                         child: Container(
                                           width: 110,
-                                          margin: const EdgeInsets.only(right: 10),
+                                          margin:
+                                              const EdgeInsets.only(right: 10),
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Expanded(
                                                 child: Container(
                                                   decoration: BoxDecoration(
-                                                    borderRadius: BorderRadius.circular(8),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
                                                     image: DecorationImage(
-                                                      image: CachedNetworkImageProvider(m['posterUrl'] != ''
-                                                          ? m['posterUrl']
-                                                          : 'https://via.placeholder.com/300x450/222222/888888'),
+                                                      image: CachedNetworkImageProvider(
+                                                          m['posterUrl'] != ''
+                                                              ? m['posterUrl']
+                                                              : 'https://via.placeholder.com/300x450/222222/888888'),
                                                       fit: BoxFit.cover,
                                                     ),
                                                   ),
@@ -3594,7 +3109,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                                   ),
                                 ),
                               ],
-                              if (widget.customUrl == null && !_effectiveOfflineMode) ..._buildMoreSuggestions(),
+                              if (widget.customUrl == null &&
+                                  !_effectiveOfflineMode)
+                                ..._buildMoreSuggestions(),
                             ],
                           ),
                         ),
@@ -3610,16 +3127,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  Widget _buildActionButton(IconData icon, String title, {Color activeColor = Colors.white}) {
+  Widget _buildActionButton(IconData icon, String title,
+      {Color activeColor = Colors.white}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+          color: Colors.grey[900], borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: activeColor, size: 16),
           const SizedBox(width: 6),
-          Text(title, style: TextStyle(color: activeColor, fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(title,
+              style: TextStyle(
+                  color: activeColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -3630,7 +3153,8 @@ class _TvFocusButton extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
   final BorderRadius borderRadius;
-  const _TvFocusButton({required this.child, required this.onTap, required this.borderRadius});
+  const _TvFocusButton(
+      {required this.child, required this.onTap, required this.borderRadius});
   @override
   State<_TvFocusButton> createState() => _TvFocusButtonState();
 }
@@ -3651,8 +3175,15 @@ class _TvFocusButtonState extends State<_TvFocusButton> {
             decoration: BoxDecoration(
                 borderRadius: widget.borderRadius,
                 border: Border.all(
-                    color: _hasFocus ? Colors.redAccent : Colors.transparent, width: _hasFocus ? 3.5 : 0),
-                boxShadow: _hasFocus ? [BoxShadow(color: Colors.redAccent.withOpacity(0.65), blurRadius: 10)] : []),
+                    color: _hasFocus ? Colors.redAccent : Colors.transparent,
+                    width: _hasFocus ? 3.5 : 0),
+                boxShadow: _hasFocus
+                    ? [
+                        BoxShadow(
+                            color: Colors.redAccent.withOpacity(0.65),
+                            blurRadius: 10)
+                      ]
+                    : []),
             child: widget.child),
       ),
     );
@@ -3685,14 +3216,15 @@ class _AmbientGlow extends StatelessWidget {
 }
 
 class _ZonesTween extends Tween<List<Color>> {
-  _ZonesTween({List<Color>? begin, required List<Color> end}) : super(begin: begin, end: end);
+  _ZonesTween({List<Color>? begin, required List<Color> end})
+      : super(begin: begin, end: end);
 
   @override
   List<Color> lerp(double t) {
     final List<Color> a = begin ?? end!;
     final List<Color> b = end!;
-    return List<Color>.generate(
-        b.length, (int i) => Color.lerp(i < a.length ? a[i] : b[i], b[i], t) ?? b[i]);
+    return List<Color>.generate(b.length,
+        (int i) => Color.lerp(i < a.length ? a[i] : b[i], b[i], t) ?? b[i]);
   }
 }
 
@@ -3806,7 +3338,9 @@ class _ExternalWebPageState extends State<_ExternalWebPage> {
           if (_loading)
             const Align(
                 alignment: Alignment.topCenter,
-                child: LinearProgressIndicator(color: Colors.redAccent, backgroundColor: Colors.transparent)),
+                child: LinearProgressIndicator(
+                    color: Colors.redAccent,
+                    backgroundColor: Colors.transparent)),
         ],
       ),
     );
@@ -3867,7 +3401,8 @@ class _SearchSheetState extends State<_SearchSheet> {
       if (!mounted || q != _lastQuery) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List raw = (data is Map && data['results'] is List) ? data['results'] : [];
+        final List raw =
+            (data is Map && data['results'] is List) ? data['results'] : [];
         final List<Map<String, dynamic>> out = [];
         for (final r in raw) {
           if (r is! Map) continue;
@@ -3875,8 +3410,10 @@ class _SearchSheetState extends State<_SearchSheet> {
           if (mt != 'movie' && mt != 'tv' && mt != 'person') continue;
           final dynamic id = r['id'];
           if (id is! int) continue;
-          final String date = (r['release_date'] ?? r['first_air_date'] ?? '').toString();
-          final dynamic imgRaw = mt == 'person' ? r['profile_path'] : r['poster_path'];
+          final String date =
+              (r['release_date'] ?? r['first_air_date'] ?? '').toString();
+          final dynamic imgRaw =
+              mt == 'person' ? r['profile_path'] : r['poster_path'];
           final String img = imgRaw is String ? imgRaw : '';
           out.add({
             'id': id,
@@ -3923,9 +3460,13 @@ class _SearchSheetState extends State<_SearchSheet> {
         ? CircleAvatar(
             radius: 26,
             backgroundColor: Colors.grey[900],
-            backgroundImage:
-                img.isNotEmpty ? CachedNetworkImageProvider(proxyImg('https://image.tmdb.org/t/p/w185$img')) : null,
-            child: img.isEmpty ? const Icon(Icons.person, color: Colors.white38) : null,
+            backgroundImage: img.isNotEmpty
+                ? CachedNetworkImageProvider(
+                    proxyImg('https://image.tmdb.org/t/p/w185$img'))
+                : null,
+            child: img.isEmpty
+                ? const Icon(Icons.person, color: Colors.white38)
+                : null,
           )
         : ClipRRect(
             borderRadius: BorderRadius.circular(6),
@@ -3935,8 +3476,11 @@ class _SearchSheetState extends State<_SearchSheet> {
                     width: 46,
                     height: 68,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) =>
-                        Container(width: 46, height: 68, color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.white24)))
+                    errorWidget: (_, __, ___) => Container(
+                        width: 46,
+                        height: 68,
+                        color: Colors.grey[900],
+                        child: const Icon(Icons.movie, color: Colors.white24)))
                 : Container(
                     width: 46,
                     height: 68,
@@ -3950,9 +3494,13 @@ class _SearchSheetState extends State<_SearchSheet> {
       title: Text(m['title'] as String,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-      trailing: Icon(isPerson ? Icons.person_outline : Icons.play_circle_outline, color: Colors.white38),
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+      subtitle:
+          Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      trailing: Icon(
+          isPerson ? Icons.person_outline : Icons.play_circle_outline,
+          color: Colors.white38),
       onTap: () {
         if (isPerson) {
           widget.onOpenPerson(m['id'] as int, m['title'] as String);
@@ -3965,15 +3513,18 @@ class _SearchSheetState extends State<_SearchSheet> {
 
   Widget _buildResults() {
     if (_loading && _results.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: Colors.redAccent));
+      return const Center(
+          child: CircularProgressIndicator(color: Colors.redAccent));
     }
     if (_lastQuery.isEmpty) {
       return const Center(
-          child: Text("Type to search movies, shows or actors", style: TextStyle(color: Colors.grey, fontSize: 13)));
+          child: Text("Type to search movies, shows or actors",
+              style: TextStyle(color: Colors.grey, fontSize: 13)));
     }
     if (_results.isEmpty) {
       return Center(
-          child: Text("No results for \"$_lastQuery\"", style: const TextStyle(color: Colors.grey, fontSize: 13)));
+          child: Text("No results for \"$_lastQuery\"",
+              style: const TextStyle(color: Colors.grey, fontSize: 13)));
     }
     return ListView.builder(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -3995,7 +3546,9 @@ class _SearchSheetState extends State<_SearchSheet> {
             Container(
                 width: 44,
                 height: 4,
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2))),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
               child: TextField(
@@ -4015,7 +3568,8 @@ class _SearchSheetState extends State<_SearchSheet> {
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   suffixIcon: _ctrl.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                          icon: const Icon(Icons.close,
+                              color: Colors.grey, size: 20),
                           onPressed: () {
                             _ctrl.clear();
                             _onChanged('');
@@ -4024,9 +3578,11 @@ class _SearchSheetState extends State<_SearchSheet> {
                       : null,
                   filled: true,
                   fillColor: const Color(0xFF1E1E1E),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  border:
-                      OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none),
                 ),
               ),
             ),
@@ -4042,7 +3598,10 @@ class _ActorSheet extends StatefulWidget {
   final int personId;
   final String fallbackName;
   final void Function(Map<String, dynamic> item) onOpenTitle;
-  const _ActorSheet({required this.personId, required this.fallbackName, required this.onOpenTitle});
+  const _ActorSheet(
+      {required this.personId,
+      required this.fallbackName,
+      required this.onOpenTitle});
 
   @override
   State<_ActorSheet> createState() => _ActorSheetState();
@@ -4072,7 +3631,8 @@ class _ActorSheetState extends State<_ActorSheet> {
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic>) {
-          final List raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List)
+          final List raw = (data['combined_credits'] is Map &&
+                  data['combined_credits']['cast'] is List)
               ? data['combined_credits']['cast']
               : [];
           final Map<String, Map<String, dynamic>> uniq = {};
@@ -4084,7 +3644,8 @@ class _ActorSheetState extends State<_ActorSheet> {
             if (id is! int) continue;
             final String key = '$mt-$id';
             if (uniq.containsKey(key)) continue;
-            final String dateStr = (c['release_date'] ?? c['first_air_date'] ?? '').toString();
+            final String dateStr =
+                (c['release_date'] ?? c['first_air_date'] ?? '').toString();
             uniq[key] = {
               'id': id,
               'mediaType': mt,
@@ -4101,7 +3662,8 @@ class _ActorSheetState extends State<_ActorSheet> {
             final int ap = (a['poster'] as String).isNotEmpty ? 1 : 0;
             final int bp = (b['poster'] as String).isNotEmpty ? 1 : 0;
             if (ap != bp) return bp - ap;
-            return (b['popularity'] as double).compareTo(a['popularity'] as double);
+            return (b['popularity'] as double)
+                .compareTo(a['popularity'] as double);
           });
           setState(() {
             _person = data;
@@ -4121,13 +3683,18 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 
   List<Map<String, dynamic>> get _filtered {
-    if (_filter == 'movie') return _credits.where((e) => e['mediaType'] == 'movie').toList();
-    if (_filter == 'tv') return _credits.where((e) => e['mediaType'] == 'tv').toList();
+    if (_filter == 'movie') {
+      return _credits.where((e) => e['mediaType'] == 'movie').toList();
+    }
+    if (_filter == 'tv') {
+      return _credits.where((e) => e['mediaType'] == 'tv').toList();
+    }
     return _credits;
   }
 
   void _openExternal(String title, String url) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ExternalWebPage(title: title, url: url)));
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => _ExternalWebPage(title: title, url: url)));
   }
 
   Widget _linkChip(String label, IconData icon, String url) {
@@ -4145,7 +3712,11 @@ class _ActorSheetState extends State<_ActorSheet> {
           children: [
             Icon(icon, color: Colors.amber, size: 15),
             const SizedBox(width: 6),
-            Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -4162,10 +3733,13 @@ class _ActorSheetState extends State<_ActorSheet> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
-              color: selected ? Colors.white : Colors.grey[900], borderRadius: BorderRadius.circular(18)),
+              color: selected ? Colors.white : Colors.grey[900],
+              borderRadius: BorderRadius.circular(18)),
           child: Text(label,
               style: TextStyle(
-                  color: selected ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  color: selected ? Colors.black : Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold)),
         ),
       ),
     );
@@ -4173,7 +3747,9 @@ class _ActorSheetState extends State<_ActorSheet> {
 
   Widget _posterFallback() {
     return Container(
-        color: Colors.grey[900], child: const Center(child: Icon(Icons.movie, color: Colors.white24, size: 28)));
+        color: Colors.grey[900],
+        child: const Center(
+            child: Icon(Icons.movie, color: Colors.white24, size: 28)));
   }
 
   Widget _buildTitleTile(Map<String, dynamic> m) {
@@ -4195,7 +3771,8 @@ class _ActorSheetState extends State<_ActorSheet> {
                     borderRadius: BorderRadius.circular(8),
                     child: poster.isNotEmpty
                         ? CachedNetworkImage(
-                            imageUrl: proxyImg('https://image.tmdb.org/t/p/w342$poster'),
+                            imageUrl:
+                                proxyImg('https://image.tmdb.org/t/p/w342$poster'),
                             fit: BoxFit.cover,
                             errorWidget: (_, __, ___) => _posterFallback())
                         : _posterFallback(),
@@ -4205,10 +3782,16 @@ class _ActorSheetState extends State<_ActorSheet> {
                   top: 4,
                   left: 4,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(4)),
                     child: Text(isTv ? 'TV' : 'MOVIE',
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold)),
                   ),
                 ),
                 if (rating != '0.0')
@@ -4216,15 +3799,21 @@ class _ActorSheetState extends State<_ActorSheet> {
                     bottom: 4,
                     right: 4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(4)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(Icons.star, color: Colors.amber, size: 9),
                           const SizedBox(width: 2),
                           Text(rating,
-                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -4236,8 +3825,13 @@ class _ActorSheetState extends State<_ActorSheet> {
           Text(m['title'] as String,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-          Text(year.isEmpty ? ' ' : year, maxLines: 1, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold)),
+          Text(year.isEmpty ? ' ' : year,
+              maxLines: 1,
+              style: const TextStyle(color: Colors.grey, fontSize: 10)),
         ],
       ),
     );
@@ -4277,7 +3871,9 @@ class _ActorSheetState extends State<_ActorSheet> {
                     child: Container(
                         width: 44,
                         height: 4,
-                        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                        decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 16),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -4286,7 +3882,8 @@ class _ActorSheetState extends State<_ActorSheet> {
                       borderRadius: BorderRadius.circular(12),
                       child: profile.isNotEmpty
                           ? CachedNetworkImage(
-                              imageUrl: proxyImg('https://image.tmdb.org/t/p/w342$profile'),
+                              imageUrl: proxyImg(
+                                  'https://image.tmdb.org/t/p/w342$profile'),
                               width: 90,
                               height: 130,
                               fit: BoxFit.cover,
@@ -4299,13 +3896,18 @@ class _ActorSheetState extends State<_ActorSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(name,
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold)),
                           if (dept.isNotEmpty)
                             Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(dept,
                                     style: const TextStyle(
-                                        color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold))),
+                                        color: Colors.redAccent,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold))),
                           if (birthday.isNotEmpty)
                             Padding(
                                 padding: const EdgeInsets.only(top: 6),
@@ -4313,23 +3915,26 @@ class _ActorSheetState extends State<_ActorSheet> {
                                     deathday.isNotEmpty
                                         ? 'Born: $birthday  •  Died: $deathday'
                                         : 'Born: $birthday',
-                                    style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                                    style: const TextStyle(
+                                        color: Colors.grey, fontSize: 12))),
                           if (place.isNotEmpty)
                             Padding(
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Text(place,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                                    style: const TextStyle(
+                                        color: Colors.grey, fontSize: 12))),
                           const SizedBox(height: 10),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
                             children: [
-                              _linkChip(
-                                  'TMDB', Icons.movie_filter, 'https://www.themoviedb.org/person/${widget.personId}'),
+                              _linkChip('TMDB', Icons.movie_filter,
+                                  'https://www.themoviedb.org/person/${widget.personId}'),
                               if (imdbId.isNotEmpty)
-                                _linkChip('IMDb', Icons.star_rate_rounded, 'https://www.imdb.com/name/$imdbId/'),
+                                _linkChip('IMDb', Icons.star_rate_rounded,
+                                    'https://www.imdb.com/name/$imdbId/'),
                             ],
                           ),
                         ],
@@ -4344,20 +3949,29 @@ class _ActorSheetState extends State<_ActorSheet> {
                     child: Text(
                       bio,
                       maxLines: _bioExpanded ? null : 4,
-                      overflow: _bioExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.45),
+                      overflow: _bioExpanded
+                          ? TextOverflow.visible
+                          : TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12.5, height: 1.45),
                     ),
                   ),
                   const SizedBox(height: 4),
                   GestureDetector(
                     onTap: () => setState(() => _bioExpanded = !_bioExpanded),
                     child: Text(_bioExpanded ? 'Show less' : '...more',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
                   ),
                 ],
                 const SizedBox(height: 18),
                 Text('Filmography (${items.length})',
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
                 Row(children: [
                   _filterChip('all', 'All'),
@@ -4373,7 +3987,9 @@ class _ActorSheetState extends State<_ActorSheet> {
           const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.all(24),
-              child: Center(child: Text("No titles found", style: TextStyle(color: Colors.grey, fontSize: 13))),
+              child: Center(
+                  child: Text("No titles found",
+                      style: TextStyle(color: Colors.grey, fontSize: 13))),
             ),
           ),
         SliverPadding(
@@ -4409,7 +4025,8 @@ class _ActorSheetState extends State<_ActorSheet> {
             controller: scrollController,
             children: const [
               SizedBox(height: 160),
-              Center(child: CircularProgressIndicator(color: Colors.redAccent)),
+              Center(
+                  child: CircularProgressIndicator(color: Colors.redAccent)),
             ],
           );
         } else if (_failed || _person == null) {
@@ -4417,7 +4034,9 @@ class _ActorSheetState extends State<_ActorSheet> {
             controller: scrollController,
             children: const [
               SizedBox(height: 160),
-              Center(child: Text("Could not load actor details.", style: TextStyle(color: Colors.grey, fontSize: 13))),
+              Center(
+                  child: Text("Could not load actor details.",
+                      style: TextStyle(color: Colors.grey, fontSize: 13))),
             ],
           );
         } else {
@@ -4481,12 +4100,15 @@ class _PinchZoomState extends State<_PinchZoom> {
     if (!_pointers.containsKey(e.pointer)) return;
     _pointers[e.pointer] = e.position;
     if (_pointers.length == 2 && _startDist > 0) {
-      widget.zoom.value = (_startZoom * _dist() / _startDist).clamp(1.0, 2.2).toDouble();
+      widget.zoom.value =
+          (_startZoom * _dist() / _startDist).clamp(1.0, 2.2).toDouble();
     }
   }
 
   void _up(PointerEvent e) {
-    if (!_multiTouchSession && _pointers.length == 1 && _singleSwipeStart != null) {
+    if (!_multiTouchSession &&
+        _pointers.length == 1 &&
+        _singleSwipeStart != null) {
       final double dy = e.position.dy - _singleSwipeStart!.dy;
       final double dx = (e.position.dx - _singleSwipeStart!.dx).abs();
       if (dy < -40 && dx < 95) {
@@ -4530,7 +4152,10 @@ class _SuggestRow extends StatefulWidget {
   final int excludeId;
   final Future<List<TmdbItem>> Function() loader;
   final void Function(TmdbItem item) onOpen;
-  final Widget Function({required Widget child, required VoidCallback onTap, BorderRadius? borderRadius}) focusable;
+  final Widget Function(
+      {required Widget child,
+      required VoidCallback onTap,
+      BorderRadius? borderRadius}) focusable;
   const _SuggestRow({
     super.key,
     required this.title,
@@ -4559,7 +4184,8 @@ class _SuggestRowState extends State<_SuggestRow> {
       r = await widget.loader();
     } catch (_) {}
     if (!mounted) return;
-    setState(() => _items = r.where((TmdbItem e) => e.id != widget.excludeId).toList());
+    setState(
+        () => _items = r.where((TmdbItem e) => e.id != widget.excludeId).toList());
   }
 
   @override
@@ -4571,7 +4197,11 @@ class _SuggestRowState extends State<_SuggestRow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(widget.title,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           SizedBox(
             height: 175,
@@ -4582,7 +4212,9 @@ class _SuggestRowState extends State<_SuggestRow> {
                     itemBuilder: (context, index) => Container(
                       width: 110,
                       margin: const EdgeInsets.only(right: 10, bottom: 20),
-                      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(
+                          color: Colors.grey[900],
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   )
                 : ListView.builder(
@@ -4606,10 +4238,15 @@ class _SuggestRowState extends State<_SuggestRow> {
                                     imageUrl: it.posterUrl('w342'),
                                     width: double.infinity,
                                     fit: BoxFit.cover,
-                                    placeholder: (BuildContext _, String __) => Container(color: Colors.grey[900]),
-                                    errorWidget: (BuildContext _, String __, Object ___) => Container(
-                                        color: Colors.grey[900],
-                                        child: const Icon(Icons.movie, color: Colors.white24)),
+                                    placeholder:
+                                        (BuildContext _, String __) =>
+                                            Container(color: Colors.grey[900]),
+                                    errorWidget: (BuildContext _, String __,
+                                            Object ___) =>
+                                        Container(
+                                            color: Colors.grey[900],
+                                            child: const Icon(Icons.movie,
+                                                color: Colors.white24)),
                                   ),
                                 ),
                               ),
@@ -4617,7 +4254,8 @@ class _SuggestRowState extends State<_SuggestRow> {
                               Text(it.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 11)),
                             ],
                           ),
                         ),
