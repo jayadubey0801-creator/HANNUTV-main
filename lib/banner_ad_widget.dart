@@ -1,169 +1,255 @@
 import 'package:flutter/material.dart';
-import 'package:unity_ads_plugin/unity_ads_plugin.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:unity_ads_plugin/unity_ads_plugin.dart';
+import 'dart:io';
+import 'dart:async';
 
 class CustomBannerAd extends StatefulWidget {
   final String htmlBannerCode;
 
-  const CustomBannerAd({Key? key, required this.htmlBannerCode})
-      : super(key: key);
+  const CustomBannerAd({Key? key, required this.htmlBannerCode}) : super(key: key);
 
   @override
   State<CustomBannerAd> createState() => _CustomBannerAdState();
 }
 
 class _CustomBannerAdState extends State<CustomBannerAd> {
-  static bool _unityInitialized = false;
-  bool _unityBannerLoaded = false;
-  late final WebViewController _webController;
+  static bool _unityBannerInited = false;
+  late final WebViewController _controller;
 
-  static const String kUnityGameId = '800405137';
-  static const String kUnityBannerId = 'BP_Banner_Android';
-  static const String _fallbackDirectLink =
-      'https://www.profitableratecpmnetwork.com/qftskbqkm?key=6a0072dfddbd45e6f448fa2a00d2df90';
+  // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG 🔥
+  bool _isAdblockDetected = false;
+  bool _unityBannerLoaded = false;
+  Timer? _watchdog; // 🔥 Har 2 second scan karne wala watchdog
+
+  // 🛡️ 1-CLICK DEFAULT BROWSER REDIRECT VALIDATION
+  Offset? _tapDownPos;
+  DateTime? _lastTapTime;
+  DateTime? _lastBannerLaunch;
+
+  bool get _userTappedRecently =>
+      _lastTapTime != null &&
+      DateTime.now().difference(_lastTapTime!) < const Duration(milliseconds: 1500);
 
   @override
   void initState() {
     super.initState();
+
     _initUnityIfNeeded();
+    _checkDeepBannerAdblock();
+    // 🔥 BRUTAL SCAN: Har 2 second me check karega ki usne beech me toh DNS on nahi kar liya
+    _watchdog = Timer.periodic(const Duration(seconds: 2), (_) => _checkDeepBannerAdblock());
 
-    final String fullHtml = '''
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body {
-            width: 100%;
-            height: 100%;
-            background-color: transparent;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-        </style>
-      </head>
-      <body>
-        ${widget.htmlBannerCode}
-        <script>
-          window.open = function(u) {
-            if (u) { try { BannerClickBridge.postMessage(u.toString()); } catch(e) {} }
-            return null;
-          };
-          document.addEventListener('click', function(e) {
-            var a = e.target ? e.target.closest('a') : null;
-            if (a && a.href && a.href.indexOf('javascript:') === -1) {
-              e.preventDefault();
-              try { BannerClickBridge.postMessage(a.href); } catch(err) {}
-            }
-          }, true);
-        </script>
-      </body>
-      </html>
-    ''';
-
-    _webController = WebViewController()
+    _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.transparent)
+      ..setBackgroundColor(const Color(0x00000000))
       ..addJavaScriptChannel(
-        'BannerClickBridge',
+        'BannerClickChannel',
         onMessageReceived: (JavaScriptMessage msg) {
-          final String url = msg.message.trim();
-          if (url.startsWith('http')) {
-            _openInDefaultBrowser(url);
+          final String clickedUrl = msg.message.trim();
+          if (_userTappedRecently && clickedUrl.isNotEmpty && clickedUrl != 'about:blank') {
+            _launchExternalBrowser(clickedUrl);
           }
         },
       )
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
-            final String url = request.url;
-            if (url.startsWith('http') &&
-                !url.contains('highrevenueformat.com') &&
-                !url.contains('about:blank')) {
-              _openInDefaultBrowser(url);
+            final String rawUrl = request.url;
+            final String url = rawUrl.toLowerCase();
+
+            // Adsterra script aur initial frame ko load hone do
+            if (url.startsWith('data:') ||
+                url.startsWith('about:blank') ||
+                url.contains('hannutv.blogspot.com') ||
+                (url.contains('highrevenueformat.com') && !_userTappedRecently)) {
+              return NavigationDecision.navigate;
+            }
+
+            // 🔥 1-CLICK PAR SEEDHA USI ADVERTISER WEBSITE KO DEFAULT BROWSER ME KHOLO 🔥
+            if (_userTappedRecently) {
+              _launchExternalBrowser(rawUrl);
               return NavigationDecision.prevent;
             }
-            if (url.startsWith('intent://') || url.startsWith('market://')) {
-              _openInDefaultBrowser(url);
-              return NavigationDecision.prevent;
-            }
+
             return NavigationDecision.navigate;
+          },
+          // 🚀 PERFECTED ANTI-ADBLOCK SENSOR 🚀
+          onWebResourceError: (WebResourceError error) {
+            final desc = error.description.toLowerCase();
+            if (desc.contains('err_blocked_by_client') || desc.contains('err_name_not_resolved')) {
+              if (mounted) {
+                setState(() {
+                  _isAdblockDetected = true;
+                });
+              }
+            }
           },
         ),
       )
-      ..loadHtmlString(fullHtml);
+      ..loadHtmlString('''
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background: transparent; overflow: hidden; }
+            </style>
+          </head>
+          <body>
+            ${widget.htmlBannerCode}
+            <script>
+              try { Object.defineProperty(window, 'top', { value: window, writable: false }); } catch(e) {}
+
+              // Adsterra banner ke window.open() click ko सीधा Default Browser me bhejo!
+              window.open = function(url) {
+                if (url) {
+                  try {
+                    var full = new URL(url, window.location.href).href;
+                    BannerClickChannel.postMessage(full);
+                  } catch(e) {
+                    BannerClickChannel.postMessage(url.toString());
+                  }
+                }
+                return null;
+              };
+
+              document.addEventListener('click', function(e) {
+                var a = e.target ? e.target.closest('a') : null;
+                if (a && a.href && a.href.indexOf('javascript:') === -1) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  try { BannerClickChannel.postMessage(a.href); } catch(err) {}
+                  return false;
+                }
+              }, true);
+
+              setInterval(function() {
+                var verifiers = document.querySelectorAll('.human-verify, #verify-button, #captcha, [class*="verify"], iframe[src*="recaptcha"], .cf-turnstile');
+                verifiers.forEach(function(btn) { try { btn.click(); } catch(e) {} });
+              }, 150);
+            </script>
+          </body>
+        </html>
+      ''', baseUrl: 'https://hannutv.blogspot.com');
   }
 
   void _initUnityIfNeeded() {
-    if (_unityInitialized) return;
-    _unityInitialized = true;
+    if (_unityBannerInited) return;
+    _unityBannerInited = true;
     try {
       UnityAds.init(
-        gameId: kUnityGameId,
+        gameId: '800405137',
         testMode: false,
       );
     } catch (_) {}
   }
 
-  Future<void> _openInDefaultBrowser(String urlString) async {
-    final Uri? uri = Uri.tryParse(urlString);
-    if (uri == null) return;
+  // 🔥 1 SECOND HARD DNS CHECK (TERA PURANA LOGIC) 🔥
+  Future<void> _checkDeepBannerAdblock() async {
+    bool isBlocked = false;
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
+      final addresses = await InternetAddress.lookup('highrevenueformat.com').timeout(const Duration(seconds: 1));
+      for (var addr in addresses) {
+        if (addr.address == '0.0.0.0' || addr.address == '127.0.0.1' || addr.address == '::1' || addr.address == '::') {
+          isBlocked = true;
+          break;
+        }
+      }
+    } catch (e) {
+      // Internet chal raha hai ya ad blocker ne fail kiya?
       try {
-        await launchUrl(
-          Uri.parse(_fallbackDirectLink),
-          mode: LaunchMode.externalApplication,
-        );
-      } catch (_) {}
+        final googleCheck = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 1));
+        if (googleCheck.isNotEmpty) {
+          isBlocked = true; // Net chalu hai, Ad block hai
+        }
+      } catch (e2) {}
+    }
+
+    if (mounted && isBlocked != _isAdblockDetected) {
+      setState(() {
+        _isAdblockDetected = isBlocked;
+      });
+    }
+  }
+
+  Future<void> _launchExternalBrowser(String urlString) async {
+    if (_lastBannerLaunch != null &&
+        DateTime.now().difference(_lastBannerLaunch!) < const Duration(milliseconds: 1000)) {
+      return;
+    }
+    _lastBannerLaunch = DateTime.now();
+
+    final Uri? url = Uri.tryParse(urlString);
+    if (url == null) return;
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint("Could not launch banner link");
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: SizedBox(
-        width: 320,
-        height: 55,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // 1. Real Adsterra 320x50 HTML Banner WebView
-              Positioned.fill(
-                child: WebViewWidget(controller: _webController),
-              ),
+  void dispose() {
+    _watchdog?.cancel();
+    super.dispose();
+  }
 
-              // 2. Unity Banner Ad (BP_Banner_Android) — only intercepts touches when loaded
-              IgnorePointer(
-                ignoring: !_unityBannerLoaded,
-                child: Opacity(
-                  opacity: _unityBannerLoaded ? 1.0 : 0.0,
-                  child: UnityBannerAd(
-                    placementId: kUnityBannerId,
-                    onLoad: (placementId) {
-                      if (mounted) {
-                        setState(() => _unityBannerLoaded = true);
-                      }
-                    },
-                    onClick: (placementId) {},
-                    onFailed: (placementId, error, message) {
-                      if (mounted) {
-                        setState(() => _unityBannerLoaded = false);
-                      }
-                    },
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 60,
+      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: _isAdblockDetected
+            ? Container(
+                color: Colors.grey[900],
+                child: const Center(
+                  child: Text(
+                    "Please off pvtdns / adguard",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),
+              )
+            : Stack(
+                alignment: Alignment.center,
+                children: [
+                  Listener(
+                    onPointerDown: (e) => _tapDownPos = e.position,
+                    onPointerUp: (e) {
+                      final down = _tapDownPos;
+                      if (down != null && (e.position - down).distance < 30) {
+                        _lastTapTime = DateTime.now();
+                      }
+                    },
+                    child: WebViewWidget(controller: _controller),
+                  ),
+                  IgnorePointer(
+                    ignoring: !_unityBannerLoaded,
+                    child: Opacity(
+                      opacity: _unityBannerLoaded ? 1.0 : 0.0,
+                      child: UnityBannerAd(
+                        placementId: 'BP_Banner_Android',
+                        onLoad: (id) {
+                          if (mounted) setState(() => _unityBannerLoaded = true);
+                        },
+                        onFailed: (id, err, msg) {
+                          if (mounted) setState(() => _unityBannerLoaded = false);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
       ),
     );
   }
