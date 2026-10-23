@@ -63,14 +63,8 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
           placementId: UnityAdsService.interstitialPlacement,
           onStart: (id) => debugPrint('[UnityAds] Video started: $id'),
           onClick: (id) => debugPrint('[UnityAds] Video click: $id'),
-          onSkipped: (id) {
-            debugPrint('[UnityAds] Video skipped: $id');
-            _goNext();
-          },
-          onComplete: (id) {
-            debugPrint('[UnityAds] Video complete: $id');
-            _goNext();
-          },
+          onSkipped: (id) => _goNext(),
+          onComplete: (id) => _goNext(),
           onFailed: (id, error, message) {
             debugPrint('[UnityAds] Video failed: $error $message');
             _goNext();
@@ -107,7 +101,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     });
   }
 
-  // 🔥 MULTI-DOMAIN + DoH CROSS-CHECK DNS LOGIC (UPDATED FOR UNITY ADS) 🔥
+  // 🔥 MULTI-DOMAIN + DoH CROSS-CHECK DNS LOGIC (UNITY ADS DOMAINS) 🔥
   static const List<String> _probeHosts = [
     'unity3d.com',
     'unityads.unity3d.com',
