@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart'; // 🔥 Update URL Launch karne ke liye
 
-import 'banner_ad_widget.dart';
 import 'config.dart';
 import 'dashboard_screen.dart';
 import 'skippable_ad_screen.dart';
@@ -31,19 +30,16 @@ const String currentAppVersion = "1.3.0";
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
-    debugPrint('Background Notification Hit: ${message.messageId}');
+    debugPrint('Background Notification Hit: \${message.messageId}');
     final AppNotification? n = AppNotification.fromMessage(message);
     if (n != null) await NotificationStore.appendRaw(n);
   } catch (e) {
-    debugPrint('Background Error: $e');
+    debugPrint('Background Error: \$e');
   }
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 🔥 Unity Ads Initialization 🔥
-  unawaited(UnityAdsHelper.init());
   
   try {
     await Firebase.initializeApp();
@@ -75,7 +71,7 @@ Future<void> main() async {
     
     await remoteConfig.fetchAndActivate();
   } catch (error) {
-    debugPrint('Firebase Startup error (Bypassed for Safe Boot): $error');
+    debugPrint('Firebase Startup error (Bypassed for Safe Boot): \$error');
   }
 
   runApp(const HannuTvApp());
@@ -104,13 +100,13 @@ class _HannuTvAppState extends State<HannuTvApp> {
       final Uri? initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) _handleDeepLink(initialUri);
     } catch (error) {
-      debugPrint('Initial deep-link error: $error');
+      debugPrint('Initial deep-link error: \$error');
     }
 
     _linkSubscription = _appLinks.uriLinkStream.listen((Uri? uri) {
       if (uri != null) _handleDeepLink(uri);
     }, onError: (Object error) {
-      debugPrint('Deep-link stream error: $error');
+      debugPrint('Deep-link stream error: \$error');
     });
   }
 
@@ -244,7 +240,7 @@ class ForceUpdateScreen extends StatelessWidget {
   Future<void> _launchUpdateUrl() async {
     final Uri url = Uri.parse(updateUrl);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      debugPrint('Could not launch $updateUrl');
+      debugPrint('Could not launch \$updateUrl');
     }
   }
 
@@ -431,7 +427,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
         }
       }
     } catch (error) {
-      debugPrint("Live TV Error: $error");
+      debugPrint("Live TV Error: \$error");
     }
     setState(() => isLoading = false);
   }
@@ -556,7 +552,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                   children: [
                     const Icon(Icons.public, color: Colors.redAccent),
                     const SizedBox(width: 10),
-                    Text("Choose Your Country : $selectedCountry", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text("Choose Your Country : \$selectedCountry", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                     const Icon(Icons.arrow_drop_down, color: Colors.white54),
                   ],
                 ),

@@ -1,339 +1,201 @@
-import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:unity_ads_plugin/unity_ads_plugin.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart'; 
+import 'dart:io';
+import 'dart:async'; // 🔥 Timer ke liye add kiya
 
-// ═══════════════════════════════════════════════════════════════════
-// 🔥 UNITY ADS HELPER (ONLY SKIPPABLE INTERSTITIAL + BANNER) 🔥
-// ═══════════════════════════════════════════════════════════════════
-class UnityAdsHelper {
-  UnityAdsHelper._();
-
-  static const String gameId = '800405137';
-  static const String bannerId = 'BP_Banner_Android';
-  static const String interstitialId = 'BP_Interstitial_Android';
-
-  static final ValueNotifier<bool> isInitialized = ValueNotifier<bool>(false);
-
-  static bool _initInProgress = false;
-  static bool _interstitialReady = false;
-  static bool _loadingInterstitial = false;
-  static VoidCallback? _onAdReadyListener;
-
-  static Future<void> init() async {
-    if (isInitialized.value || _initInProgress) return;
-    _initInProgress = true;
-
-    try {
-      await UnityAds.init(
-        gameId: gameId,
-        testMode: false,
-        onComplete: () {
-          debugPrint('✅ Unity Ads Init Complete');
-          _initInProgress = false;
-          isInitialized.value = true;
-          preloadInterstitial();
-        },
-        onFailed: (error, message) {
-          debugPrint('❌ Unity Ads Init Failed: $error - $message');
-          _initInProgress = false;
-          Future<void>.delayed(const Duration(seconds: 8), init);
-        },
-      );
-    } catch (e) {
-      _initInProgress = false;
-      debugPrint('Unity Ads Init Exception: $e');
-    }
-  }
-
-  static void preloadInterstitial() {
-    if (!isInitialized.value) {
-      init();
-      return;
-    }
-    if (_interstitialReady || _loadingInterstitial) return;
-    _loadingInterstitial = true;
-
-    UnityAds.load(
-      placementId: interstitialId,
-      onComplete: (placementId) {
-        debugPrint('✅ Unity Skippable Interstitial Loaded: $placementId');
-        _loadingInterstitial = false;
-        _interstitialReady = true;
-        if (_onAdReadyListener != null) {
-          final VoidCallback cb = _onAdReadyListener!;
-          _onAdReadyListener = null;
-          cb();
-        }
-      },
-      onFailed: (placementId, error, message) {
-        debugPrint('⚠️ Interstitial Load Failed ($error): $message');
-        _loadingInterstitial = false;
-        _interstitialReady = false;
-        Future<void>.delayed(const Duration(seconds: 10), () {
-          if (isInitialized.value && !_interstitialReady) {
-            preloadInterstitial();
-          }
-        });
-      },
-    );
-  }
-
-  static bool get isInterstitialReady => _interstitialReady;
-
-  static void setOnAdReadyListener(VoidCallback? listener) {
-    _onAdReadyListener = listener;
-  }
-
-  /// Sirf Skippable Interstitial Ad dikhayega
-  static void showInterstitialAd({
-    required VoidCallback onStart,
-    required VoidCallback onClosed,
-    required VoidCallback onFailedToShow,
-  }) {
-    if (!isInitialized.value) {
-      init();
-      onFailedToShow();
-      return;
-    }
-
-    _interstitialReady = false;
-
-    UnityAds.showVideoAd(
-      placementId: interstitialId,
-      onStart: (placementId) {
-        debugPrint('🎬 Unity Interstitial Started: $placementId');
-        onStart();
-      },
-      onClick: (placementId) {
-        debugPrint('👉 Unity Interstitial Clicked: $placementId');
-      },
-      onSkipped: (placementId) {
-        debugPrint('⏭️ Unity Interstitial Skipped: $placementId');
-        preloadInterstitial();
-        onClosed();
-      },
-      onComplete: (placementId) {
-        debugPrint('✅ Unity Interstitial Completed: $placementId');
-        preloadInterstitial();
-        onClosed();
-      },
-      onFailed: (placementId, error, message) {
-        debugPrint('❌ Unity Interstitial Failed: $error - $message');
-        preloadInterstitial();
-        onFailedToShow();
-      },
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// 🔥 PUBLIC BANNER SLOT MANAGER (NO UNDERSCORE SCOPE ERROR) 🔥
-// ═══════════════════════════════════════════════════════════════════
-class BannerSlotManager {
-  BannerSlotManager._();
-
-  static final List<_CustomBannerAdState> _slots = <_CustomBannerAdState>[];
-  static _CustomBannerAdState? _activeOwner;
-  static Timer? _scanTimer;
-  static bool _pausedForFullscreenAd = false;
-
-  static void pauseBanners(bool paused) {
-    _pausedForFullscreenAd = paused;
-    if (paused) {
-      _setOwner(null);
-    } else {
-      _evaluate();
-    }
-  }
-
-  static void register(_CustomBannerAdState slot) {
-    if (!_slots.contains(slot)) {
-      _slots.add(slot);
-    }
-    _startScannerIfNeeded();
-    _evaluate();
-  }
-
-  static void unregister(_CustomBannerAdState slot) {
-    _slots.remove(slot);
-    if (_activeOwner == slot) {
-      _activeOwner = null;
-    }
-    if (_slots.isEmpty) {
-      _scanTimer?.cancel();
-      _scanTimer = null;
-    } else {
-      _evaluate();
-    }
-  }
-
-  static void _startScannerIfNeeded() {
-    _scanTimer ??= Timer.periodic(const Duration(milliseconds: 700), (_) {
-      _evaluate();
-    });
-  }
-
-  static void _setOwner(_CustomBannerAdState? newOwner) {
-    if (_activeOwner == newOwner) return;
-    final _CustomBannerAdState? oldOwner = _activeOwner;
-    _activeOwner = newOwner;
-    oldOwner?._onOwnershipChanged();
-    newOwner?._onOwnershipChanged();
-  }
-
-  static void _evaluate() {
-    if (_pausedForFullscreenAd || !UnityAdsHelper.isInitialized.value) {
-      _setOwner(null);
-      return;
-    }
-
-    _CustomBannerAdState? bestCandidate;
-    double bestScore = double.infinity;
-
-    for (final _CustomBannerAdState s in List<_CustomBannerAdState>.from(_slots)) {
-      if (!s.mounted || !s._isReadyForPlatformView) continue;
-      final BuildContext ctx = s.context;
-
-      final ModalRoute<dynamic>? route = ModalRoute.of(ctx);
-      if (route != null && !route.isCurrent) continue;
-
-      final RenderObject? ro = ctx.findRenderObject();
-      if (ro is! RenderBox || !ro.hasSize || !ro.attached) continue;
-
-      final Offset pos = ro.localToGlobal(Offset.zero);
-      final double screenH = MediaQuery.of(ctx).size.height;
-
-      final bool inViewport = pos.dy >= -10 && (pos.dy + ro.size.height) <= (screenH + 20);
-      if (inViewport && pos.dy < bestScore) {
-        bestScore = pos.dy;
-        bestCandidate = s;
-      }
-    }
-
-    if (_activeOwner != null &&
-        _activeOwner!.mounted &&
-        _activeOwner!._isReadyForPlatformView &&
-        bestCandidate == _activeOwner) {
-      return;
-    }
-
-    _setOwner(bestCandidate);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// 🔥 CUSTOM BANNER AD WIDGET (EXACT 320x50, NO CLIPRRECT BUG) 🔥
-// ═══════════════════════════════════════════════════════════════════
 class CustomBannerAd extends StatefulWidget {
-  final String? htmlBannerCode;
+  final String htmlBannerCode;
 
-  const CustomBannerAd({Key? key, this.htmlBannerCode}) : super(key: key);
+  const CustomBannerAd({Key? key, required this.htmlBannerCode}) : super(key: key);
 
   @override
   State<CustomBannerAd> createState() => _CustomBannerAdState();
 }
 
 class _CustomBannerAdState extends State<CustomBannerAd> {
-  bool _isReadyForPlatformView = false;
-  Timer? _mountDelayTimer;
-  Timer? _retryTimer;
-  int _reloadKey = 0;
+  late final WebViewController _controller;
+  
+  // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG 🔥
+  bool _isAdblockDetected = false;
+  Timer? _watchdog; // 🔥 Har second scan karne wala kuta 🐕
+  bool _checking = false; // 🔧 ek time pe ek hi DNS check
+  int _failStreak = 0; // 🔧 lagatar kitni baar domain resolve nahi hua
 
-  bool get _isOwner => BannerSlotManager._activeOwner == this;
+  // 🛡️ AUTO-OPEN FIX
+  Offset? _tapDownPos;
+  DateTime? _lastTapTime;
+  
+  // STRICT 1 SECOND TAP VALIDATION
+  bool get _userTappedRecently =>
+      _lastTapTime != null &&
+      DateTime.now().difference(_lastTapTime!) < const Duration(seconds: 1);
 
   @override
   void initState() {
     super.initState();
-    UnityAdsHelper.init();
+    
+    _checkDeepBannerAdblock(); 
+    // 🔥 BRUTAL SCAN: Har 2 second me check karega ki usne beech me toh DNS on nahi kar liya
+    _watchdog = Timer.periodic(const Duration(seconds: 5), (_) => _checkDeepBannerAdblock());
+    
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (NavigationRequest request) {
+            final url = request.url.toLowerCase();
 
-    // Video Player ke WebView ko pehle load hone do taaki surface swap na ho
-    _mountDelayTimer = Timer(const Duration(milliseconds: 1400), () {
-      if (!mounted) return;
-      setState(() {
-        _isReadyForPlatformView = true;
-      });
-      BannerSlotManager.register(this);
-    });
+            if (url.startsWith('data:') || 
+                url.startsWith('about:blank') || 
+                url.contains('hannutv.blogspot.com') || 
+                url.contains('highrevenueformat.com')) {
+              return NavigationDecision.navigate;
+            }
+
+            if (_userTappedRecently) {
+              _launchExternalBrowser(request.url);
+              return NavigationDecision.prevent; 
+            }
+
+            return NavigationDecision.prevent; 
+          },
+          // 🚀 PERFECTED ANTI-ADBLOCK SENSOR 🚀
+          onWebResourceError: (WebResourceError error) {
+            final desc = error.description.toLowerCase();
+            if (desc.contains('err_blocked_by_client')) {
+              if (mounted) {
+                setState(() {
+                  _isAdblockDetected = true; 
+                });
+              }
+            } else if (desc.contains('err_name_not_resolved')) {
+              // 🔧 ek resource ka DNS error = slow net bhi ho sakta hai → seedha block mat karo, sirf verify karo
+              _checkDeepBannerAdblock();
+            }
+          },
+        ),
+      )
+      ..loadHtmlString('''
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background: transparent; overflow: hidden; }
+            </style>
+          </head>
+          <body>
+            ${widget.htmlBannerCode}
+            <script>
+              window.open = function(url, windowName, windowFeatures) {
+                return null;
+              };
+              try { Object.defineProperty(window, 'top', { value: window, writable: false }); } catch(e) {}
+              
+            </script>
+          </body>
+        </html>
+      ''', baseUrl: 'https://hannutv.blogspot.com');
   }
 
-  void _onOwnershipChanged() {
-    if (mounted) {
-      setState(() {});
+  // 🔧 FIXED DNS CHECK
+  // Pehle: 1 second me domain resolve na ho (slow net / slow DNS) aur google.com ho jaye => "adblock" maan leta tha,
+  // aur real users ka banner hat ke warning aa jaati thi => impressions/earning loss.
+  // Ab: sinkhole (0.0.0.0 / 127.x) => turant block. Resolve fail => 4 sec timeout + lagatar 3 baar fail hone par hi block.
+  Future<void> _checkDeepBannerAdblock() async {
+    if (_checking || !mounted) return;
+    _checking = true;
+    bool isBlocked = false;
+    try {
+      bool resolved = false;
+      try {
+        final addresses = await InternetAddress.lookup('highrevenueformat.com').timeout(const Duration(seconds: 4));
+        resolved = addresses.isNotEmpty;
+        for (var addr in addresses) {
+          if (addr.address == '0.0.0.0' || addr.address == '127.0.0.1' || addr.address == '::1' || addr.address == '::') {
+            isBlocked = true;
+            break;
+          }
+        }
+      } catch (e) {
+        resolved = false;
+      }
+
+      if (isBlocked || resolved) {
+        _failStreak = 0;
+      } else {
+        // Domain resolve nahi hua: internet chal raha hai ya nahi?
+        bool netOk = false;
+        try {
+          final googleCheck = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 4));
+          netOk = googleCheck.isNotEmpty;
+        } catch (e2) {}
+        _failStreak = netOk ? _failStreak + 1 : 0; // net band hai to adblock mat maano
+        isBlocked = _failStreak >= 3;
+      }
+    } finally {
+      _checking = false;
+    }
+
+    if (mounted && isBlocked != _isAdblockDetected) {
+      setState(() {
+        _isAdblockDetected = isBlocked;
+      });
     }
   }
 
-  void _scheduleRetry() {
-    _retryTimer?.cancel();
-    _retryTimer = Timer(const Duration(seconds: 15), () {
-      if (mounted && _isOwner) {
-        setState(() {
-          _reloadKey++;
-        });
-      }
-    });
+  Future<void> _launchExternalBrowser(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint("Could not launch banner link");
+    }
   }
 
   @override
   void dispose() {
-    _mountDelayTimer?.cancel();
-    _retryTimer?.cancel();
-    BannerSlotManager.unregister(this);
+    _watchdog?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: UnityAdsHelper.isInitialized,
-      builder: (context, initialized, _) {
-        final bool showUnityBanner = initialized && _isReadyForPlatformView && _isOwner;
-
-        return Container(
-          width: double.infinity,
-          height: 52,
-          alignment: Alignment.center,
-          color: Colors.transparent,
-          child: showUnityBanner
-              ? SizedBox(
-                  width: 320,
-                  height: 50,
-                  child: UnityBannerAd(
-                    key: ValueKey<String>('hannu_unity_banner_$_reloadKey'),
-                    placementId: UnityAdsHelper.bannerId,
-                    size: BannerSize.standard,
-                    onLoad: (placementId) {
-                      debugPrint('✅ Unity Banner Loaded: $placementId');
-                    },
-                    onClick: (placementId) {
-                      debugPrint('👉 Unity Banner Clicked: $placementId');
-                    },
-                    onFailed: (placementId, error, message) {
-                      debugPrint('⚠️ Unity Banner Failed ($error): $message');
-                      _scheduleRetry();
-                    },
-                  ),
-                )
-              : Container(
-                  width: 320,
-                  height: 50,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF141414),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: const Text(
-                    "Sponsored Ad",
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+    return Container(
+      width: double.infinity,
+      height: 60, 
+      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.black, 
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: _isAdblockDetected 
+            ? Container(
+                color: Colors.grey[900],
+                child: const Center(
+                  child: Text(
+                    "Please off pvtdns / adguard", 
+                    textAlign: TextAlign.center, 
+                    style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold)
+                  )
                 ),
-        );
-      },
+              )
+            : Listener(
+                onPointerDown: (e) => _tapDownPos = e.position,
+                onPointerUp: (e) {
+                  final down = _tapDownPos;
+                  if (down != null && (e.position - down).distance < 30) {
+                    _lastTapTime = DateTime.now();
+                  }
+                },
+                child: WebViewWidget(controller: _controller),
+              ),
+      ),
     );
   }
 }

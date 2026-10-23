@@ -90,6 +90,7 @@ class PosterImage extends StatelessWidget {
   }
 }
 
+// 🔥 DEEP FIX: SMALLER & 100% TRANSPARENT NUMBER 🔥
 class RankNumber extends StatelessWidget {
   const RankNumber(this.n, {super.key, this.size = 56});
   final int n;
@@ -99,10 +100,11 @@ class RankNumber extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: <Widget>[
+        // Stroke (Bahar ki thin safed outline)
         Text(
           '$n',
           style: TextStyle(
-            fontSize: size * 0.85,
+            fontSize: size * 0.85, // Size chhota kar diya
             fontWeight: FontWeight.w900,
             fontStyle: FontStyle.italic,
             height: 1.0,
@@ -110,21 +112,23 @@ class RankNumber extends StatelessWidget {
             foreground: Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = 2.5
-              ..color = Colors.white.withOpacity(0.9),
+              ..color = Colors.white.withOpacity(0.9), 
             shadows: <Shadow>[
               Shadow(color: Colors.black.withOpacity(0.6), offset: const Offset(2, 2), blurRadius: 4),
             ],
           ),
         ),
+        // Ander ka fill ekdum transparent kar diya (0.05 opacity)
+        // isse poster ka apna asli color apne aap number me jhalakega!
         Text(
           '$n',
           style: TextStyle(
-            fontSize: size * 0.85,
+            fontSize: size * 0.85, // Same reduced size
             fontWeight: FontWeight.w900,
             fontStyle: FontStyle.italic,
             height: 1.0,
             letterSpacing: -3,
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withOpacity(0.05), // Extremely transparent
           ),
         ),
       ],
@@ -159,7 +163,7 @@ class PosterCard extends StatelessWidget {
       onTap: onTap ?? () => Hooks.open(context, item),
       onLongPress: onLongPress,
       child: SizedBox(
-        width: width + (rank != null ? 22 : 0),
+        width: width + (rank != null ? 22 : 0), 
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,7 +174,10 @@ class PosterCard extends StatelessWidget {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: <Widget>[
-                  Positioned(right: 0, child: PosterImage(item: item, width: width)),
+                  Positioned(
+                    right: 0,
+                    child: PosterImage(item: item, width: width),
+                  ),
                   if (rank != null)
                     Positioned(
                       right: 0,
@@ -188,8 +195,13 @@ class PosterCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  // 🔥 NUMBER AT BOTTOM LEFT OVERLAPPING THE POSTER 🔥
                   if (rank != null)
-                    Positioned(left: -8, bottom: -8, child: RankNumber(rank!, size: width * 0.8)),
+                    Positioned(
+                      left: -8,
+                      bottom: -8,
+                      child: RankNumber(rank!, size: width * 0.8)
+                    ),
                   if (badge != null)
                     Positioned(
                       top: 6,
@@ -289,7 +301,7 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-const double kRowExtra = 52;
+const double kRowExtra = 52; 
 
 class PosterRow extends StatefulWidget {
   const PosterRow({
@@ -496,7 +508,13 @@ class OttLogo extends StatelessWidget {
   }
 }
 
-// 🔥 UNITY BANNER SLOT ON DASHBOARD 🔥
+const String kDashAdsterraSnippet = '''
+<script type="text/javascript">
+  atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
+</script>
+<script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
+''';
+
 class AdSlot extends StatelessWidget {
   const AdSlot({super.key});
 
@@ -510,7 +528,7 @@ class AdSlot extends StatelessWidget {
       child: Center(
         child: Container(
           height: 62,
-          width: 330,
+          width: 330, 
           alignment: Alignment.center,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -518,7 +536,9 @@ class AdSlot extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.white10),
           ),
-          child: b != null ? b(context) : const CustomBannerAd(),
+          child: b != null
+              ? b(context)
+              : const CustomBannerAd(htmlBannerCode: kDashAdsterraSnippet),
         ),
       ),
     );
@@ -664,7 +684,7 @@ class _TitleSheet extends StatelessWidget {
                       Expanded(
                         child: GestureDetector(
                           onTap: () {
-                            Navigator.of(context).pop();
+                            Navigator.of(context).pop(); 
                             Navigator.push(
                               outer,
                               MaterialPageRoute(

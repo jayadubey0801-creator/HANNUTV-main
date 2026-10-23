@@ -426,6 +426,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _startControlsTimer();
   }
 
+  // 🔥 SWIPE GESTURE: video pe upar swipe = fullscreen (landscape), neeche swipe = wapas chhoti screen.
+  // Andar se wahi _toggleFullScreen() chalta hai jo logo / fullscreen button pe chalta hai.
+  void _onVideoSwipe({required bool up}) {
+    if (isTvDevice) return;
+    if (up && !isFullScreen) {
+      _toggleFullScreen();
+    } else if (!up && isFullScreen) {
+      _toggleFullScreen();
+    }
+  }
+
   void _switchEpisode(int ep) {
     Navigator.pushReplacement(
       context,
@@ -1259,7 +1270,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+            Positioned.fill(child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
             if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
             Positioned(top: 14, right: 20, child: SafeArea(child: IgnorePointer(child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
             if (showControls) ...[
@@ -1290,7 +1301,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               onTap: _startControlsTimer,
               child: Stack(
                 children: [
-                  Container(width: double.infinity, height: 230, color: Colors.black, child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+                  Container(width: double.infinity, height: 230, color: Colors.black, child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
                   Positioned(
                     top: 10, right: 14,
                     child: GestureDetector(
@@ -2464,6 +2475,75 @@ class _SuggestRowState extends State<_SuggestRow> {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+// Video ke upar swipe: UPAR swipe = fullscreen (landscape), NEECHE swipe = wapas chhoti screen (portrait).
+// Sirf Listener use hua hai (gesture arena me nahi ghusta) -> WebView ke taps aur _PinchZoom pe koi asar nahi.
+// Do ungli (pinch) ya zoom ho to swipe ignore hota hai.
+class _SwipeFullscreen extends StatefulWidget {
+  final ValueNotifier<double> zoom;
+  final VoidCallback onSwipeUp;
+  final VoidCallback onSwipeDown;
+  final Widget child;
+  const _SwipeFullscreen({
+    required this.zoom,
+    required this.onSwipeUp,
+    required this.onSwipeDown,
+    required this.child,
+  });
+
+  @override
+  State<_SwipeFullscreen> createState() => _SwipeFullscreenState();
+}
+
+class _SwipeFullscreenState extends State<_SwipeFullscreen> {
+  static const double _minDistance = 60; // itna swipe karna padega (logical px)
+  int _count = 0;
+  bool _multi = false;
+  Offset _start = Offset.zero;
+
+  void _down(PointerDownEvent e) {
+    _count++;
+    if (_count == 1) {
+      _start = e.position;
+      _multi = false;
+    } else {
+      _multi = true; // doosri ungli = pinch, swipe nahi
+    }
+  }
+
+  void _up(PointerUpEvent e) {
+    final bool single = !_multi && _count == 1;
+    final Offset d = e.position - _start;
+    _release();
+    if (!single) return;
+    if (widget.zoom.value > 1.05) return;
+    if (d.dy.abs() < _minDistance) return;
+    if (d.dy.abs() < d.dx.abs() * 1.5) return; // sidha vertical swipe hona chahiye
+    if (d.dy < 0) {
+      widget.onSwipeUp();
+    } else {
+      widget.onSwipeDown();
+    }
+  }
+
+  void _cancel(PointerCancelEvent e) => _release();
+
+  void _release() {
+    _count = _count > 0 ? _count - 1 : 0;
+    if (_count == 0) _multi = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: _down,
+      onPointerUp: _up,
+      onPointerCancel: _cancel,
+      child: widget.child,
     );
   }
 }
