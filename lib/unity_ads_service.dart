@@ -1,10 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
 
 class UnityAdsService {
   UnityAdsService._();
 
-  // Unity Dashboard > Monetization > Apps me jo Game ID dikhe wahi yahan daalna
   static const String gameId = '800405137';
   static const bool testMode = false;
 
@@ -24,12 +24,14 @@ class UnityAdsService {
       gameId: gameId,
       testMode: testMode,
       onComplete: () {
+        debugPrint('[UnityAds] Initialized successfully');
         if (!c.isCompleted) c.complete(true);
       },
       onFailed: (error, message) {
+        debugPrint('[UnityAds] Init failed: $error $message');
         if (!c.isCompleted) c.complete(false);
       },
     );
-    return c.future.timeout(const Duration(seconds: 15), onTimeout: () => false);
+    return c.future.timeout(const Duration(seconds: 10), onTimeout: () => false);
   }
 }
