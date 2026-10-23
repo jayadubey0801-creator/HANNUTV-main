@@ -6,7 +6,7 @@ class UnityAdsService {
   UnityAdsService._();
 
   static const String gameId = '800405137';
-  static const bool testMode = true; // 🔥 Banner test check karne ke liye true
+  static const bool testMode = true; // Testing ke time true, release ke waqt false
 
   static const String bannerPlacement = 'BP_Banner_Android';
   static const String interstitialPlacement = 'BP_Interstitial_Android';
@@ -31,12 +31,12 @@ class UnityAdsService {
         gameId: gameId,
         testMode: testMode,
         onComplete: () {
-          debugPrint('[UnityAds] Global Init Success ✅');
+          debugPrint('[UnityAds] Global Initialization Successful ✅');
           isInitialized = true;
           if (!c.isCompleted) c.complete(true);
         },
         onFailed: (error, message) {
-          debugPrint('[UnityAds] Global Init Failed ❌: $error | $message');
+          debugPrint('[UnityAds] Global Initialization Failed ❌: $error | $message');
           if (!c.isCompleted) c.complete(false);
         },
       );
