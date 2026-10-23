@@ -28,10 +28,9 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   void initState() {
     super.initState();
     _timeLeft = widget.adDuration;
-    _BannerSlotManager.pauseBanners(true);
+    BannerSlotManager.pauseBanners(true);
     _startCountdown();
 
-    // Screen transition pura hone ke baad Skippable Interstitial trigger karo
     Future<void>.delayed(const Duration(milliseconds: 350), () {
       if (mounted) _tryLaunchUnityInterstitial();
     });
@@ -60,14 +59,11 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     UnityAdsHelper.showInterstitialAd(
       onStart: () {},
       onClosed: () {
-        // 🔥 Unity Activity band hone ke 350ms baad player kholo taaki WebView surface clean mile 🔥
         Future<void>.delayed(const Duration(milliseconds: 350), () {
           _goToNextScreen();
         });
       },
-      onFailedToShow: () {
-        // Agar ad available nahi hai toh user timer ke baad ya turant skip kar sakega
-      },
+      onFailedToShow: () {},
     );
   }
 
@@ -92,7 +88,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     _isNavigating = true;
     _timer?.cancel();
     UnityAdsHelper.setOnAdReadyListener(null);
-    _BannerSlotManager.pauseBanners(false);
+    BannerSlotManager.pauseBanners(false);
 
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -105,7 +101,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   void dispose() {
     _timer?.cancel();
     UnityAdsHelper.setOnAdReadyListener(null);
-    _BannerSlotManager.pauseBanners(false);
+    BannerSlotManager.pauseBanners(false);
     super.dispose();
   }
 

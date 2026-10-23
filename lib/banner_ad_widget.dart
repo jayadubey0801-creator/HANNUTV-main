@@ -85,7 +85,7 @@ class UnityAdsHelper {
     _onAdReadyListener = listener;
   }
 
-  /// Sirf Skippable Interstitial Ad dikhayega (Rewarded Playable bilkul nahi)
+  /// Sirf Skippable Interstitial Ad dikhayega
   static void showInterstitialAd({
     required VoidCallback onStart,
     required VoidCallback onClosed,
@@ -128,9 +128,11 @@ class UnityAdsHelper {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 🔥 SINGLE ACTIVE BANNER MULTIPLEXER (NO DUPLICATE / WEBVIEW CLASH) 🔥
+// 🔥 PUBLIC BANNER SLOT MANAGER (NO UNDERSCORE SCOPE ERROR) 🔥
 // ═══════════════════════════════════════════════════════════════════
-class _BannerSlotManager {
+class BannerSlotManager {
+  BannerSlotManager._();
+
   static final List<_CustomBannerAdState> _slots = <_CustomBannerAdState>[];
   static _CustomBannerAdState? _activeOwner;
   static Timer? _scanTimer;
@@ -193,7 +195,6 @@ class _BannerSlotManager {
       if (!s.mounted || !s._isReadyForPlatformView) continue;
       final BuildContext ctx = s.context;
 
-      // Sirf active screen (top route) ke banner ko hi select karo
       final ModalRoute<dynamic>? route = ModalRoute.of(ctx);
       if (route != null && !route.isCurrent) continue;
 
@@ -203,17 +204,13 @@ class _BannerSlotManager {
       final Offset pos = ro.localToGlobal(Offset.zero);
       final double screenH = MediaQuery.of(ctx).size.height;
 
-      // Check karo ki banner abhi screen viewport ke andar dikh raha hai ya nahi
       final bool inViewport = pos.dy >= -10 && (pos.dy + ro.size.height) <= (screenH + 20);
-      if (inViewport) {
-        if (pos.dy < bestScore) {
-          bestScore = pos.dy;
-          bestCandidate = s;
-        }
+      if (inViewport && pos.dy < bestScore) {
+        bestScore = pos.dy;
+        bestCandidate = s;
       }
     }
 
-    // Agar current owner abhi bhi valid aur viewport me hai toh bar-bar reload mat karo
     if (_activeOwner != null &&
         _activeOwner!.mounted &&
         _activeOwner!._isReadyForPlatformView &&
@@ -243,20 +240,20 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
   Timer? _retryTimer;
   int _reloadKey = 0;
 
-  bool get _isOwner => _BannerSlotManager._activeOwner == this;
+  bool get _isOwner => BannerSlotManager._activeOwner == this;
 
   @override
   void initState() {
     super.initState();
     UnityAdsHelper.init();
 
-    // 🔥 WebViewWidget (Video Player) ko pehle load hone do taaki Surface kabhi swap na ho 🔥
+    // Video Player ke WebView ko pehle load hone do taaki surface swap na ho
     _mountDelayTimer = Timer(const Duration(milliseconds: 1400), () {
       if (!mounted) return;
       setState(() {
         _isReadyForPlatformView = true;
       });
-      _BannerSlotManager.register(this);
+      BannerSlotManager.register(this);
     });
   }
 
@@ -281,7 +278,7 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
   void dispose() {
     _mountDelayTimer?.cancel();
     _retryTimer?.cancel();
-    _BannerSlotManager.unregister(this);
+    BannerSlotManager.unregister(this);
     super.dispose();
   }
 
