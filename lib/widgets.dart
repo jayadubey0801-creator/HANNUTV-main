@@ -1373,9 +1373,15 @@ class AdSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: CustomBannerAd(htmlBannerCode: _kWidgetBannerSnippet),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: SizedBox(
+          width: 320,
+          height: 52,
+          child: const CustomBannerAd(htmlBannerCode: _kWidgetBannerSnippet),
+        ),
+      ),
     );
   }
 }
