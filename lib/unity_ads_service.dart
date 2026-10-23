@@ -6,7 +6,7 @@ class UnityAdsService {
   UnityAdsService._();
 
   static const String gameId = '800405137';
-  static const bool testMode = false;
+  static const bool testMode = true; // 🔥 Isko 'true' rakhein taaki test banner turant show ho
 
   static const String bannerPlacement = 'BP_Banner_Android';
   static const String interstitialPlacement = 'BP_Interstitial_Android';
