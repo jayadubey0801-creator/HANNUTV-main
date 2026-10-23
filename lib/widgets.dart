@@ -1,223 +1,134 @@
-import 'dart:async';
-import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'banner_ad_widget.dart';
 import 'config.dart';
-import 'skippable_ad_screen.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
-import 'video_player_page.dart';
 
-const String _kWidgetBannerSnippet = '''
-  <script type="text/javascript">
-    atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-  </script>
-  <script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
-''';
+import 'video_player_page.dart';
+import 'skippable_ad_screen.dart';
 
 class DashboardHooks {
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
-  // Exact match for lib/main.dart (lines 212, 216) & lib/dashboard_screen.dart (lines 88, 262)
-  final void Function(BuildContext context)? onOpenLiveTv;
-  final void Function(BuildContext context)? onOpenSearch;
-
-  const DashboardHooks({
-    this.onOpenTitle,
-    this.onOpenLiveTv,
-    this.onOpenSearch,
-  });
-
-  static DashboardHooks config = const DashboardHooks();
-
-  static void open(BuildContext context, TmdbItem item) =>
-      Hooks.open(context, item);
+  final VoidCallback? onOpenLiveTv;
+  final VoidCallback? onOpenSearch;
+  const DashboardHooks({this.onOpenTitle, this.onOpenLiveTv, this.onOpenSearch});
 }
 
 class Hooks {
   static DashboardHooks cfg = const DashboardHooks();
-
-  static void open(BuildContext context, TmdbItem item) {
-    ContinueStore.I.push(item, progress: 0.18);
-    HistoryStore.I.push(item);
-    final fn = cfg.onOpenTitle ?? DashboardHooks.config.onOpenTitle;
-    if (fn != null) {
-      fn(context, item);
-      return;
+  static void open(BuildContext c, TmdbItem i) {
+    final void Function(BuildContext, TmdbItem)? f = cfg.onOpenTitle;
+    if (f != null) {
+      f(c, i);
+    } else {
+      showTitleSheet(c, i);
     }
-
-    final DownloadTaskItem? existingTask = DownloadStore.I.findTaskForMedia(
-      tmdbId: item.id,
-      mediaType: item.isTv ? 'tv' : 'movie',
-    );
-
-    bool readyOffline = false;
-    if (existingTask != null &&
-        existingTask.status == 'completed' &&
-        existingTask.localFilePath != null &&
-        existingTask.localFilePath!.isNotEmpty) {
-      try {
-        final File f = File(existingTask.localFilePath!);
-        if (f.existsSync() && f.lengthSync() > 1024) {
-          readyOffline = true;
-        }
-      } catch (_) {}
-    }
-
-    final Widget playerPage = VideoPlayerPage(
-      tmdbId: item.id,
-      mediaType: item.isTv ? 'tv' : 'movie',
-      movieTitle: item.title,
-      overview: item.overview,
-      rating: item.rating.toStringAsFixed(1),
-      year: item.year,
-      isOfflineDownload: readyOffline,
-      offlineFilePath: readyOffline ? existingTask!.localFilePath : null,
-      offlineLanguage: readyOffline ? existingTask!.language : null,
-      offlineQuality: readyOffline ? existingTask!.quality : null,
-      offlineServerName: readyOffline ? existingTask!.serverName : null,
-    );
-
-    // 🔥 DASHBOARD SE KISI BHI POSTER / CONTINUE WATCHING PAR CLICK HOTE HI 15s AD AAYEGA 🔥
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => readyOffline
-            ? playerPage
-            : SkippableAdScreen(
-                adDuration: 15,
-                nextScreen: playerPage,
-              ),
-      ),
-    );
-  }
-
-  static void openLiveTv(BuildContext context) {
-    final fn = cfg.onOpenLiveTv ?? DashboardHooks.config.onOpenLiveTv;
-    if (fn != null) fn(context);
-  }
-
-  static void openSearch(BuildContext context) {
-    final fn = cfg.onOpenSearch ?? DashboardHooks.config.onOpenSearch;
-    if (fn != null) fn(context);
   }
 }
 
 Future<void> openUrl(String url) async {
-  final Uri? uri = Uri.tryParse(url);
-  if (uri == null) return;
+  final Uri? u = Uri.tryParse(url);
+  if (u == null) return;
   try {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await launchUrl(u, mode: LaunchMode.externalApplication);
   } catch (_) {}
 }
 
 class ShimmerBox extends StatelessWidget {
+  const ShimmerBox({super.key, this.w, this.h, this.r = 12});
   final double? w;
   final double? h;
   final double r;
 
-  const ShimmerBox({
-    super.key,
-    this.w,
-    this.h,
-    this.r = 12,
-  });
-
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: const Color(0xFF191924),
-      highlightColor: const Color(0xFF29293A),
+      baseColor: HC.card,
+      highlightColor: const Color(0xFF2B2752),
       child: Container(
         width: w,
         height: h,
-        decoration: BoxDecoration(
-          color: const Color(0xFF191924),
-          borderRadius: BorderRadius.circular(r),
-        ),
+        decoration: BoxDecoration(color: HC.card, borderRadius: BorderRadius.circular(r)),
       ),
     );
   }
 }
 
 class PosterImage extends StatelessWidget {
+  const PosterImage({super.key, required this.item, required this.width, this.size = 'w342'});
   final TmdbItem item;
   final double width;
   final String size;
 
-  const PosterImage({
-    super.key,
-    required this.item,
-    required this.width,
-    this.size = 'w342',
-  });
-
   @override
   Widget build(BuildContext context) {
-    final String url = item.posterUrl(size);
-    if (url.isEmpty) {
-      return Container(
-        color: const Color(0xFF181822),
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(8),
-        child: Text(
-          item.title,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
-    }
-    return CachedNetworkImage(
-      imageUrl: url,
+    final Widget empty = Container(
       width: width,
-      fit: BoxFit.cover,
-      placeholder: (BuildContext _, String __) => ShimmerBox(w: width, r: 12),
-      errorWidget: (BuildContext _, String __, Object ___) => Container(
-        color: const Color(0xFF181822),
-        alignment: Alignment.center,
-        child: const Icon(Icons.movie_outlined, color: Colors.white30, size: 28),
+      height: width * 1.5,
+      color: HC.card,
+      child: const Icon(Icons.movie_outlined, color: HC.dim),
+    );
+    if (item.poster == null) return ClipRRect(borderRadius: BorderRadius.circular(12), child: empty);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: CachedNetworkImage(
+        imageUrl: item.posterUrl(size),
+        width: width,
+        height: width * 1.5,
+        fit: BoxFit.cover,
+        memCacheWidth: (width * 3).round(),
+        fadeInDuration: const Duration(milliseconds: 180),
+        placeholder: (BuildContext _, String __) => ShimmerBox(w: width, h: width * 1.5),
+        errorWidget: (BuildContext _, String __, Object ___) => empty,
       ),
     );
   }
 }
 
+// 🔥 DEEP FIX: SMALLER & 100% TRANSPARENT NUMBER 🔥
 class RankNumber extends StatelessWidget {
+  const RankNumber(this.n, {super.key, this.size = 56});
   final int n;
   final double size;
-
-  const RankNumber(this.n, {super.key, this.size = 56});
 
   @override
   Widget build(BuildContext context) {
     return Stack(
-      children: [
+      children: <Widget>[
+        // Stroke (Bahar ki thin safed outline)
         Text(
           '$n',
           style: TextStyle(
-            fontSize: size,
+            fontSize: size * 0.85, // Size chhota kar diya
             fontWeight: FontWeight.w900,
-            height: 0.9,
+            fontStyle: FontStyle.italic,
+            height: 1.0,
+            letterSpacing: -3,
             foreground: Paint()
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 3.2
-              ..color = Colors.white,
+              ..strokeWidth = 2.5
+              ..color = Colors.white.withOpacity(0.9), 
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.6), offset: const Offset(2, 2), blurRadius: 4),
+            ],
           ),
         ),
+        // Ander ka fill ekdum transparent kar diya (0.05 opacity)
+        // isse poster ka apna asli color apne aap number me jhalakega!
         Text(
           '$n',
           style: TextStyle(
-            fontSize: size,
+            fontSize: size * 0.85, // Same reduced size
             fontWeight: FontWeight.w900,
-            height: 0.9,
-            color: const Color(0xFF0B0B12),
+            fontStyle: FontStyle.italic,
+            height: 1.0,
+            letterSpacing: -3,
+            color: Colors.white.withOpacity(0.05), // Extremely transparent
           ),
         ),
       ],
@@ -226,14 +137,6 @@ class RankNumber extends StatelessWidget {
 }
 
 class PosterCard extends StatelessWidget {
-  final TmdbItem item;
-  final double width;
-  final int? rank;
-  final double? progress;
-  final String? badge;
-  final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
-
   const PosterCard({
     super.key,
     required this.item,
@@ -245,112 +148,110 @@ class PosterCard extends StatelessWidget {
     this.onLongPress,
   });
 
+  final TmdbItem item;
+  final double width;
+  final int? rank;
+  final double? progress;
+  final String? badge;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
   @override
   Widget build(BuildContext context) {
-    final double cardHeight = width * 1.48;
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap ?? () => Hooks.open(context, item),
-      onLongPress: onLongPress ?? () => showTitleSheet(context, item),
+      onLongPress: onLongPress,
       child: SizedBox(
-        width: rank != null ? width + 24 : width,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Align(
-              alignment: rank != null ? Alignment.centerRight : Alignment.center,
-              child: Container(
-                width: width,
-                height: cardHeight,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.42),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      PosterImage(item: item, width: width),
-                      if (badge != null && badge!.isNotEmpty)
-                        Positioned(
-                          top: 6,
-                          left: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE50914),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              badge!,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (item.rating > 0)
-                        Positioned(
-                          top: 6,
-                          right: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.75),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.star_rounded,
-                                    color: Colors.amber, size: 11),
-                                const SizedBox(width: 2),
-                                Text(
-                                  item.rating.toStringAsFixed(1),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (progress != null && progress! > 0)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: LinearProgressIndicator(
-                            value: progress!.clamp(0.05, 1.0),
-                            minHeight: 3.5,
-                            backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                                Color(0xFFE50914)),
-                          ),
-                        ),
-                    ],
+        width: width + (rank != null ? 22 : 0), 
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SizedBox(
+              width: width + (rank != null ? 22 : 0),
+              height: width * 1.5,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  Positioned(
+                    right: 0,
+                    child: PosterImage(item: item, width: width),
                   ),
-                ),
+                  if (rank != null)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: width,
+                        height: width * 0.75,
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[Colors.transparent, Colors.black.withOpacity(0.8)],
+                          ),
+                        ),
+                      ),
+                    ),
+                  // 🔥 NUMBER AT BOTTOM LEFT OVERLAPPING THE POSTER 🔥
+                  if (rank != null)
+                    Positioned(
+                      left: -8,
+                      bottom: -8,
+                      child: RankNumber(rank!, size: width * 0.8)
+                    ),
+                  if (badge != null)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(badge!,
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ),
+                    ),
+                  if (progress != null)
+                    Positioned(
+                      left: (rank != null ? 30 : 8),
+                      right: 8,
+                      bottom: 8,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 4,
+                          backgroundColor: Colors.white24,
+                          valueColor: const AlwaysStoppedAnimation<Color>(HC.accent2),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (rank != null)
-              Positioned(
-                left: -2,
-                bottom: 2,
-                child: IgnorePointer(child: RankNumber(rank!, size: 64)),
+            Padding(
+              padding: EdgeInsets.only(top: 6, left: (rank != null ? 28 : 0)),
+              child: Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
               ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(left: (rank != null ? 28 : 0)),
+              child: Text(
+                item.rating > 0 ? '★ ${item.rating.toStringAsFixed(1)}   ${item.year}' : item.year,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: HC.dim),
+              ),
+            ),
           ],
         ),
       ),
@@ -359,59 +260,30 @@ class PosterCard extends StatelessWidget {
 }
 
 class SectionTitle extends StatelessWidget {
+  const SectionTitle(this.title, {super.key, this.subtitle, this.leading, this.onMore, this.size = 18});
   final String title;
   final String? subtitle;
   final Widget? leading;
   final VoidCallback? onMore;
   final double size;
 
-  const SectionTitle(
-    this.title, {
-    super.key,
-    this.subtitle,
-    this.leading,
-    this.onMore,
-    this.size = 18,
-  });
-
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 4, 12, 10),
       child: Row(
-        children: [
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: 8),
-          ],
+        children: <Widget>[
+          if (leading != null) ...<Widget>[leading!, const SizedBox(width: 10)],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: size,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                if (subtitle != null && subtitle!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ),
+              children: <Widget>[
+                Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Colors.white)),
+                if (subtitle != null)
+                  Text(subtitle!, style: const TextStyle(fontSize: 12, color: HC.dim)),
               ],
             ),
           ),
@@ -419,15 +291,8 @@ class SectionTitle extends StatelessWidget {
             GestureDetector(
               onTap: onMore,
               child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Text(
-                  'See all',
-                  style: TextStyle(
-                    color: Color(0xFFB388FF),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                padding: EdgeInsets.all(6),
+                child: Text('See all', style: TextStyle(color: HC.accent2, fontWeight: FontWeight.w700)),
               ),
             ),
         ],
@@ -436,17 +301,9 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-class PosterRow extends StatefulWidget {
-  final String title;
-  final String? subtitle;
-  final Widget? leading;
-  final Future<List<TmdbItem>> Function() loader;
-  final bool ranked;
-  final double width;
-  final bool hideIfEmpty;
-  final double titleSize;
-  final VoidCallback? onMore;
+const double kRowExtra = 52; 
 
+class PosterRow extends StatefulWidget {
   const PosterRow({
     super.key,
     required this.title,
@@ -457,103 +314,94 @@ class PosterRow extends StatefulWidget {
     this.width = 112,
     this.hideIfEmpty = true,
     this.titleSize = 18,
-    this.onMore,
   });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final Future<List<TmdbItem>> Function() loader;
+  final bool ranked;
+  final double width;
+  final bool hideIfEmpty;
+  final double titleSize;
 
   @override
   State<PosterRow> createState() => _PosterRowState();
 }
 
-class _PosterRowState extends State<PosterRow>
-    with AutomaticKeepAliveClientMixin {
-  List<TmdbItem>? _items;
-
-  @override
-  bool get wantKeepAlive => true;
+class _PosterRowState extends State<PosterRow> {
+  late Future<List<TmdbItem>> _f;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _f = widget.loader();
   }
 
-  Future<void> _load() async {
-    try {
-      final List<TmdbItem> res = await widget.loader();
-      if (mounted) setState(() => _items = res);
-    } catch (_) {
-      if (mounted) setState(() => _items = const <TmdbItem>[]);
-    }
-  }
+  void _retry() => setState(() => _f = widget.loader());
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-    final List<TmdbItem>? items = _items;
-    if (items != null && items.isEmpty && widget.hideIfEmpty) {
-      return const SizedBox.shrink();
-    }
-    final double rowH = widget.width * 1.48;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionTitle(
-          widget.title,
-          subtitle: widget.subtitle,
-          leading: widget.leading,
-          onMore: widget.onMore,
-          size: widget.titleSize,
-        ),
-        SizedBox(
-          height: rowH,
-          child: items == null
-              ? ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: 6,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, __) =>
-                      ShimmerBox(w: widget.width, h: rowH, r: 12),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (BuildContext context, int index) {
-                    final TmdbItem item = items[index];
-                    return PosterCard(
-                      item: item,
-                      width: widget.width,
-                      rank: widget.ranked ? index + 1 : null,
-                    );
-                  },
+    final double h = widget.width * 1.5 + kRowExtra;
+    return FutureBuilder<List<TmdbItem>>(
+      future: _f,
+      builder: (BuildContext ctx, AsyncSnapshot<List<TmdbItem>> snap) {
+        final bool loading = snap.connectionState != ConnectionState.done;
+        final List<TmdbItem> items = snap.data ?? const <TmdbItem>[];
+        if (!loading && items.isEmpty) {
+          if (widget.hideIfEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: GestureDetector(
+              onTap: _retry,
+              child: Container(
+                height: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: HC.surface, borderRadius: BorderRadius.circular(14)),
+                child: Text(
+                  tmdbKeyMissing
+                      ? 'TMDB API key paste karo (config.dart)'
+                      : '${widget.title} load nahi hua — tap karke retry karo',
+                  style: const TextStyle(color: HC.dim, fontSize: 13),
                 ),
-        ),
-      ],
-    );
-  }
-}
-
-class GenreBlock extends StatelessWidget {
-  final GenreDef g;
-  final VoidCallback? onSeeAll;
-
-  const GenreBlock({
-    super.key,
-    required this.g,
-    this.onSeeAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PosterRow(
-      title: g.label,
-      subtitle: 'Top trending in ${g.label}',
-      leading: Icon(g.icon, color: g.c1, size: 20),
-      width: 116,
-      onMore: onSeeAll,
-      loader: () => Tmdb.I.genreRow(g, RowKind.movie),
+              ),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SectionTitle(widget.title,
+                subtitle: widget.subtitle, leading: widget.leading, size: widget.titleSize),
+            SizedBox(
+              height: h,
+              child: loading
+                  ? ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: 6,
+                      separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
+                      itemBuilder: (BuildContext _, int __) =>
+                          ShimmerBox(w: widget.width, h: widget.width * 1.5),
+                    )
+                  : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: items.length,
+                      separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
+                      itemBuilder: (BuildContext _, int i) => PosterCard(
+                        item: items[i],
+                        width: widget.width,
+                        rank: widget.ranked ? i + 1 : null,
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 14),
+          ],
+        );
+      },
     );
   }
 }
@@ -564,55 +412,36 @@ class ContinueWatchingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: ContinueStore.I,
-      builder: (BuildContext context, _) {
-        final List<ContinueEntry> entries = ContinueStore.I.entries;
-        if (entries.isEmpty) return const SizedBox.shrink();
+      animation: ContinueWatchingStore.I,
+      builder: (BuildContext ctx, Widget? _) {
+        final List<CwEntry> list = ContinueWatchingStore.I.entries;
+        if (list.isEmpty) return const SizedBox.shrink();
+        const double w = 128;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SectionTitle(
-              'Continue Watching',
-              subtitle: 'Pick up right where you left off',
-              onMore: () => ContinueStore.I.clear(),
-            ),
+          children: <Widget>[
+            const SectionTitle('Continue Watching', subtitle: 'Long-press se hatao'),
             SizedBox(
-              height: 166,
+              height: w * 1.5 + kRowExtra,
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
-                itemCount: entries.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (BuildContext context, int i) {
-                  final ContinueEntry e = entries[i];
-                  return Stack(
-                    children: [
-                      PosterCard(
-                        item: e.item,
-                        width: 112,
-                        progress: e.progress,
-                      ),
-                      Positioned(
-                        top: 4,
-                        left: 4,
-                        child: GestureDetector(
-                          onTap: () => ContinueStore.I.remove(e.item.id),
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: const BoxDecoration(
-                              color: Colors.black87,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.close,
-                                color: Colors.white70, size: 13),
-                          ),
-                        ),
-                      ),
-                    ],
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: list.length,
+                separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
+                itemBuilder: (BuildContext _, int i) {
+                  final CwEntry e = list[i];
+                  return PosterCard(
+                    item: e.item,
+                    width: w,
+                    progress: e.progress,
+                    badge: e.label,
+                    onLongPress: () => ContinueWatchingStore.I.remove(e.item),
                   );
                 },
               ),
             ),
+            const SizedBox(height: 14),
           ],
         );
       },
@@ -620,933 +449,313 @@ class ContinueWatchingRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OFFLINE DOWNLOADS ROW, FULL PAGE & WHATSAPP-STYLE TOP BANNER
-// ─────────────────────────────────────────────────────────────────────────────
-
-void _openOfflinePlayer(BuildContext context, DownloadTaskItem t) {
-  Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => VideoPlayerPage(
-        tmdbId: t.tmdbId,
-        mediaType: t.mediaType,
-        season: t.season,
-        episode: t.episode,
-        movieTitle: t.title,
-        overview: t.overview,
-        rating: t.rating,
-        year: t.year,
-        isOfflineDownload: true,
-        offlineFilePath: t.localFilePath,
-        offlineLanguage: t.language,
-        offlineQuality: t.quality,
-        offlineServerName: t.serverName,
-      ),
-    ),
-  );
-}
-
-void openMyDownloads(BuildContext context) {
-  Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => const MyDownloadsPage()),
-  );
-}
-
-class MyDownloadsRow extends StatelessWidget {
-  const MyDownloadsRow({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: DownloadStore.I,
-      builder: (BuildContext context, _) {
-        final List<DownloadTaskItem> tasks = DownloadStore.I.tasks;
-        if (tasks.isEmpty) return const SizedBox.shrink();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SectionTitle(
-              'My Downloads',
-              subtitle: 'Real Multi-Audio Offline & Active Downloads',
-              onMore: () => openMyDownloads(context),
-            ),
-            SizedBox(
-              height: 118,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                itemCount: tasks.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (BuildContext context, int index) {
-                  final DownloadTaskItem t = tasks[index];
-                  final bool isDone = t.status == 'completed';
-                  final bool isPaused = t.status == 'paused';
-
-                  return GestureDetector(
-                    onTap: () {
-                      if (isDone) {
-                        _openOfflinePlayer(context, t);
-                      } else {
-                        openMyDownloads(context);
-                      }
-                    },
-                    child: Container(
-                      width: 285,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF151522),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isDone
-                              ? Colors.greenAccent.withOpacity(0.45)
-                              : (isPaused
-                                  ? Colors.amber.withOpacity(0.45)
-                                  : Colors.redAccent.withOpacity(0.45)),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: t.posterUrl.isNotEmpty
-                                ? CachedNetworkImage(
-                                    imageUrl: t.posterUrl,
-                                    width: 62,
-                                    height: 94,
-                                    fit: BoxFit.cover,
-                                    errorWidget: (BuildContext _, String __, Object ___) => Container(
-                                      width: 62,
-                                      height: 94,
-                                      color: Colors.grey[900],
-                                      child: const Icon(Icons.movie,
-                                          color: Colors.white30),
-                                    ),
-                                  )
-                                : Container(
-                                    width: 62,
-                                    height: 94,
-                                    color: Colors.grey[900],
-                                    child: const Icon(Icons.movie,
-                                        color: Colors.white30),
-                                  ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  t.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  '${t.language} • ${t.quality}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.amber,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  '${DownloadStore.formatBytes(t.downloadedBytes)} / ${DownloadStore.formatBytes(t.totalBytes)}',
-                                  style: const TextStyle(
-                                      color: Colors.white60, fontSize: 10.5),
-                                ),
-                                const SizedBox(height: 6),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: LinearProgressIndicator(
-                                    value: t.progress.clamp(0.0, 1.0),
-                                    minHeight: 5,
-                                    backgroundColor: Colors.white12,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      isDone
-                                          ? const Color(0xFF00E676)
-                                          : (isPaused
-                                              ? Colors.amber
-                                              : Colors.redAccent),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      isDone
-                                          ? '100% Ready (Play Now)'
-                                          : (isPaused
-                                              ? 'Paused (${t.percent}%)'
-                                              : 'Downloading ${t.percent}%'),
-                                      style: TextStyle(
-                                        color: isDone
-                                            ? const Color(0xFF00E676)
-                                            : (isPaused
-                                                ? Colors.amber
-                                                : Colors.white70),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    if (!isDone)
-                                      GestureDetector(
-                                        onTap: () {
-                                          if (isPaused) {
-                                            DownloadStore.I
-                                                .resumeDownload(t.id);
-                                          } else {
-                                            DownloadStore.I.pauseDownload(t.id);
-                                          }
-                                        },
-                                        child: Icon(
-                                          isPaused
-                                              ? Icons.play_circle_fill
-                                              : Icons.pause_circle_filled,
-                                          color: isPaused
-                                              ? Colors.amber
-                                              : Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class MyDownloadsPage extends StatelessWidget {
-  const MyDownloadsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B0B12),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF12121C),
-        foregroundColor: Colors.white,
-        title: const Text(
-          'My Downloads',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-      ),
-      body: Stack(
-        children: [
-          AnimatedBuilder(
-            animation: DownloadStore.I,
-            builder: (BuildContext context, _) {
-              final List<DownloadTaskItem> tasks = DownloadStore.I.tasks;
-              if (tasks.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.cloud_download_outlined,
-                          color: Colors.white24, size: 64),
-                      SizedBox(height: 12),
-                      Text(
-                        'No downloads yet',
-                        style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Download movies in your favorite audio & quality to watch offline!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white38, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 90),
-                itemCount: tasks.length,
-                itemBuilder: (BuildContext context, int index) {
-                  final DownloadTaskItem t = tasks[index];
-                  final bool isDone = t.status == 'completed';
-                  final bool isPaused = t.status == 'paused';
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF161624),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isDone
-                            ? Colors.greenAccent.withOpacity(0.4)
-                            : (isPaused
-                                ? Colors.amber.withOpacity(0.4)
-                                : Colors.white12),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: t.posterUrl.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: t.posterUrl,
-                                  width: 64,
-                                  height: 92,
-                                  fit: BoxFit.cover,
-                                  errorWidget: (BuildContext _, String __, Object ___) => Container(
-                                    width: 64,
-                                    height: 92,
-                                    color: Colors.grey[900],
-                                    child: const Icon(Icons.movie,
-                                        color: Colors.white30),
-                                  ),
-                                )
-                              : Container(
-                                  width: 64,
-                                  height: 92,
-                                  color: Colors.grey[900],
-                                  child: const Icon(Icons.movie,
-                                      color: Colors.white30),
-                                ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                t.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${t.language} • ${t.quality} • Server: ${t.serverName}',
-                                style: const TextStyle(
-                                  color: Colors.amber,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${DownloadStore.formatBytes(t.downloadedBytes)} of ${DownloadStore.formatBytes(t.totalBytes)} (${t.percent}%)${isPaused ? " • PAUSED" : ""}',
-                                style: TextStyle(
-                                  color:
-                                      isPaused ? Colors.amber : Colors.white70,
-                                  fontSize: 11.5,
-                                  fontWeight: isPaused
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: t.progress.clamp(0.0, 1.0),
-                                  minHeight: 6,
-                                  backgroundColor: Colors.white12,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    isDone
-                                        ? const Color(0xFF00E676)
-                                        : (isPaused
-                                            ? Colors.amber
-                                            : Colors.redAccent),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (!isDone)
-                          IconButton(
-                            tooltip:
-                                isPaused ? 'Resume Download' : 'Pause Download',
-                            onPressed: () {
-                              if (isPaused) {
-                                DownloadStore.I.resumeDownload(t.id);
-                              } else {
-                                DownloadStore.I.pauseDownload(t.id);
-                              }
-                            },
-                            icon: CircleAvatar(
-                              radius: 18,
-                              backgroundColor:
-                                  isPaused ? Colors.amber : Colors.redAccent,
-                              child: Icon(
-                                isPaused
-                                    ? Icons.play_arrow_rounded
-                                    : Icons.pause_rounded,
-                                color: Colors.black,
-                                size: 22,
-                              ),
-                            ),
-                          ),
-                        if (isDone)
-                          IconButton(
-                            tooltip: 'Play Offline (No Ads)',
-                            onPressed: () => _openOfflinePlayer(context, t),
-                            icon: const CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Color(0xFF00E676),
-                              child: Icon(Icons.play_arrow_rounded,
-                                  color: Colors.black, size: 22),
-                            ),
-                          ),
-                        IconButton(
-                          tooltip: 'Delete Download',
-                          onPressed: () => DownloadStore.I.removeDownload(t.id),
-                          icon: const Icon(Icons.delete_outline_rounded,
-                              color: Colors.redAccent, size: 22),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 8,
-            child: Center(
-              child: CustomBannerAd(htmlBannerCode: _kWidgetBannerSnippet),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class LiveDownloadNotificationBanner extends StatelessWidget {
-  const LiveDownloadNotificationBanner({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: DownloadStore.I,
-      builder: (BuildContext context, _) {
-        final DownloadTaskItem? t = DownloadStore.I.activeBannerTask;
-        if (t == null) return const SizedBox.shrink();
-
-        final bool isDone = t.status == 'completed';
-        final bool isPaused = t.status == 'paused';
-
-        return SafeArea(
-          bottom: false,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Material(
-                color: Colors.transparent,
-                elevation: 14,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF191929), Color(0xFF232338)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isDone
-                          ? const Color(0xFF00E676)
-                          : (isPaused ? Colors.amber : Colors.redAccent),
-                      width: 1.3,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.55),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(7),
-                            decoration: BoxDecoration(
-                              color: (isDone
-                                      ? const Color(0xFF00E676)
-                                      : (isPaused
-                                          ? Colors.amber
-                                          : Colors.redAccent))
-                                  .withOpacity(0.18),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isDone
-                                  ? Icons.download_done_rounded
-                                  : (isPaused
-                                      ? Icons.pause_circle_filled_rounded
-                                      : Icons.downloading_rounded),
-                              color: isDone
-                                  ? const Color(0xFF00E676)
-                                  : (isPaused
-                                      ? Colors.amber
-                                      : Colors.redAccent),
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'HANNUTV DOWNLOADER',
-                                      style: TextStyle(
-                                        color: Colors.amber,
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '• ${t.percent}%',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  t.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  '${t.language} • ${t.quality} • ${DownloadStore.formatBytes(t.downloadedBytes)} / ${DownloadStore.formatBytes(t.totalBytes)}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      color: Colors.white70, fontSize: 10.5),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (!isDone)
-                            TextButton.icon(
-                              style: TextButton.styleFrom(
-                                backgroundColor: isPaused
-                                    ? Colors.amber.withOpacity(0.2)
-                                    : Colors.white.withOpacity(0.1),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                              ),
-                              onPressed: () {
-                                if (isPaused) {
-                                  DownloadStore.I.resumeDownload(t.id);
-                                } else {
-                                  DownloadStore.I.pauseDownload(t.id);
-                                }
-                              },
-                              icon: Icon(
-                                isPaused
-                                    ? Icons.play_arrow_rounded
-                                    : Icons.pause_rounded,
-                                color: isPaused ? Colors.amber : Colors.white,
-                                size: 15,
-                              ),
-                              label: Text(
-                                isPaused ? 'Resume' : 'Pause',
-                                style: TextStyle(
-                                  color: isPaused ? Colors.amber : Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          if (isDone)
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                backgroundColor: const Color(0xFF00E676),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                              ),
-                              onPressed: () {
-                                DownloadStore.I.dismissBanner();
-                                _openOfflinePlayer(context, t);
-                              },
-                              child: const Text(
-                                'Play Offline',
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () => DownloadStore.I.dismissBanner(),
-                            child: const Padding(
-                              padding: EdgeInsets.all(4.0),
-                              child: Icon(Icons.close,
-                                  color: Colors.white54, size: 18),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: t.progress.clamp(0.0, 1.0),
-                          minHeight: 4.5,
-                          backgroundColor: Colors.white12,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            isDone
-                                ? const Color(0xFF00E676)
-                                : (isPaused ? Colors.amber : Colors.redAccent),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// 🔥 DEEP BLACK FIX FOR OTT LOGOS 🔥
 class OttLogo extends StatelessWidget {
+  const OttLogo(this.ott, {super.key, this.w = 84, this.h = 54, this.radius = 14});
   final Ott ott;
   final double w;
   final double h;
   final double radius;
 
-  const OttLogo(
-    this.ott, {
-    super.key,
-    this.w = 84,
-    this.h = 54,
-    this.radius = 14,
-  });
+  Widget _fallback() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Text(
+            ott.name,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: ott.tileBg == Colors.white ? Colors.black87 : Colors.white,
+            ),
+          ),
+        ),
+      );
 
-  String _resolveLogoUrl() {
-    if (ott.logoUrl.isNotEmpty) return ott.logoUrl;
-    try {
-      final dynamic d = ott;
-      final dynamic l = d.logo;
-      if (l is String && l.isNotEmpty) return l;
-    } catch (_) {}
-    try {
-      final dynamic d = ott;
-      final dynamic ls = d.logos;
-      if (ls is List && ls.isNotEmpty) return ls.first.toString();
-    } catch (_) {}
-    return '';
-  }
-
-  Color _resolveAccent() {
-    try {
-      final dynamic d = ott;
-      if (d.accent is Color) return d.accent as Color;
-    } catch (_) {}
-    return HC.accent;
-  }
-
-  Color _resolveBg() {
-    return const Color(0xFF000000);
-  }
+  Widget _spinner() => const Center(
+        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+      );
 
   @override
   Widget build(BuildContext context) {
-    final String logoUrl = _resolveLogoUrl();
-    final Color accent = _resolveAccent();
-    final Color bg = _resolveBg();
-
+    final bool isSvg = ott.logoUrl.toLowerCase().contains('.svg');
+    final Widget img = isSvg
+        ? SvgPicture.network(
+            ott.logoUrl,
+            fit: ott.fit,
+            placeholderBuilder: (BuildContext _) => _spinner(),
+          )
+        : CachedNetworkImage(
+            imageUrl: ott.logoUrl,
+            fit: ott.fit,
+            memCacheWidth: 420,
+            fadeInDuration: const Duration(milliseconds: 200),
+            placeholder: (BuildContext _, String __) => _spinner(),
+            errorWidget: (BuildContext _, String __, Object ___) => _fallback(),
+          );
     return Container(
       width: w,
       height: h,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      clipBehavior: Clip.antiAlias,
+      padding: ott.fit == BoxFit.contain ? const EdgeInsets.all(8) : EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: bg,
+        color: ott.tileBg,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: accent.withOpacity(0.45), width: 1.4),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withOpacity(0.22),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: Colors.white12),
       ),
+      child: img,
+    );
+  }
+}
+
+const String kDashAdsterraSnippet = '''
+<script type="text/javascript">
+  atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
+</script>
+<script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
+''';
+
+class AdSlot extends StatelessWidget {
+  const AdSlot({super.key});
+
+  static Widget Function(BuildContext)? builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget Function(BuildContext)? b = builder;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
       child: Center(
-        child: logoUrl.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: logoUrl,
-                fit: ott.fit,
-                errorWidget: (BuildContext _, String __, Object ___) => Text(
-                  ott.name,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 11,
-                  ),
-                ),
-              )
-            : Text(
-                ott.name,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 11,
-                ),
-              ),
+        child: Container(
+          height: 62,
+          width: 330, 
+          alignment: Alignment.center,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: HC.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: b != null
+              ? b(context)
+              : const CustomBannerAd(htmlBannerCode: kDashAdsterraSnippet),
+        ),
       ),
     );
   }
 }
 
-class AdSlot extends StatelessWidget {
-  final double height;
-  const AdSlot({super.key, this.height = 55});
+class GenreBlock extends StatelessWidget {
+  const GenreBlock({super.key, required this.g, this.onSeeAll});
+  final GenreDef g;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Center(
-        child: SizedBox(
-          width: 320,
-          height: 52,
-          child: const CustomBannerAd(htmlBannerCode: _kWidgetBannerSnippet),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+          child: GestureDetector(
+            onTap: onSeeAll,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(colors: <Color>[g.c1, g.c2]),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(g.icon, color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(g.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)),
+                  ),
+                  if (onSeeAll != null) const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
+        PosterRow(
+          title: 'Movies',
+          subtitle: 'Top 50 ${g.label} movies',
+          titleSize: 16,
+          loader: () => Tmdb.I.genreRow(g, RowKind.movie),
+        ),
+        PosterRow(
+          title: 'Web Series',
+          subtitle: 'Top 50 ${g.label} series',
+          titleSize: 16,
+          loader: () => Tmdb.I.genreRow(g, RowKind.series),
+        ),
+        PosterRow(
+          title: 'Anime',
+          subtitle: 'Top 50 ${g.label} anime',
+          titleSize: 16,
+          loader: () => Tmdb.I.genreRow(g, RowKind.anime),
+        ),
+        if (g.hasKdrama)
+          PosterRow(
+            title: 'K-Drama',
+            subtitle: 'Top 50 Korean dramas',
+            titleSize: 16,
+            loader: () => Tmdb.I.genreRow(g, RowKind.kdrama),
+          ),
+      ],
     );
   }
 }
 
 void showTitleSheet(BuildContext context, TmdbItem item) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
-    backgroundColor: const Color(0xFF14141F),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-    ),
-    builder: (BuildContext sheetCtx) {
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (BuildContext sheetCtx) => _TitleSheet(item: item, outer: context),
+  );
+}
+
+class _TitleSheet extends StatelessWidget {
+  const _TitleSheet({required this.item, required this.outer});
+  final TmdbItem item;
+  final BuildContext outer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      decoration: const BoxDecoration(
+        color: HC.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            if (item.backdrop != null)
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      CachedNetworkImage(imageUrl: item.backdropUrl('w780'), fit: BoxFit.cover),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[Colors.transparent, HC.surface],
+                            stops: const <double>[0.5, 1],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
-              Row(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(
-                      width: 84,
-                      height: 124,
-                      child: PosterImage(item: item, width: 84),
-                    ),
+                children: <Widget>[
+                  Text(item.title,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+                  const SizedBox(height: 6),
+                  Text(
+                    '★ ${item.rating.toStringAsFixed(1)}   ${item.year}   ${item.kind}',
+                    style: const TextStyle(color: HC.dim),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            if (item.year.isNotEmpty) ...[
-                              Text(
-                                item.year,
-                                style: const TextStyle(
-                                    color: Colors.white60, fontSize: 12),
-                              ),
-                              const SizedBox(width: 10),
-                            ],
-                            const Icon(Icons.star_rounded,
-                                color: Colors.amber, size: 15),
-                            const SizedBox(width: 3),
-                            Text(
-                              item.rating.toStringAsFixed(1),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.white12,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                item.isTv ? 'SERIES' : 'MOVIE',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                  const SizedBox(height: 12),
+                  Text(
+                    item.overview.isEmpty ? 'Description available nahi.' : item.overview,
+                    style: const TextStyle(color: Colors.white70, height: 1.4),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).pop(); 
+                            Navigator.push(
+                              outer,
+                              MaterialPageRoute(
+                                builder: (_) => SkippableAdScreen(
+                                  adDuration: 10,
+                                  nextScreen: VideoPlayerPage(
+                                    tmdbId: item.id,
+                                    mediaType: item.isTv ? 'tv' : 'movie',
+                                    movieTitle: item.title,
+                                    overview: item.overview,
+                                    rating: item.rating.toStringAsFixed(1),
+                                    year: item.year,
+                                  ),
                                 ),
                               ),
+                            );
+                          },
+                          child: Container(
+                            height: 48,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              gradient: HC.primary,
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                          ],
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                Icon(Icons.play_arrow_rounded, color: Colors.white),
+                                SizedBox(width: 6),
+                                Text('Watch Now',
+                                    style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+                              ],
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          item.overview.isEmpty
-                              ? 'Watch in Full HD on HANNUTV.'
-                              : item.overview,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 12, height: 1.35),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 12),
+                      AnimatedBuilder(
+                        animation: WatchlistStore.I,
+                        builder: (BuildContext _, Widget? __) {
+                          final bool on = WatchlistStore.I.contains(item);
+                          return GestureDetector(
+                            onTap: () => WatchlistStore.I.toggle(item),
+                            child: Container(
+                              height: 48,
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: on ? HC.accent2 : Colors.white24),
+                              ),
+                              child: Row(
+                                children: <Widget>[
+                                  Icon(on ? Icons.check_rounded : Icons.add_rounded, color: Colors.white),
+                                  const SizedBox(width: 6),
+                                  const Text('My List',
+                                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE50914),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(sheetCtx);
-                        Hooks.open(context, item);
-                      },
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text(
-                        'Watch Now',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  AnimatedBuilder(
-                    animation: WatchlistStore.I,
-                    builder: (BuildContext context, _) {
-                      final bool saved = WatchlistStore.I.contains(item);
-                      return OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white24),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: () => WatchlistStore.I.toggle(item),
-                        icon: Icon(
-                          saved ? Icons.check_rounded : Icons.add_rounded,
-                          color: saved ? Colors.amber : Colors.white,
-                        ),
-                        label: Text(saved ? 'Saved' : 'My List'),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }

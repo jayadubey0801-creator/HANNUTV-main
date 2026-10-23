@@ -7,6 +7,13 @@ import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
 
+/// HANNUTV main dashboard.
+///
+/// Use:
+///   HannuDashboard(hooks: DashboardHooks(
+///     onOpenTitle: (ctx, item) => Navigator.push(ctx, MaterialPageRoute(builder: (_) => YourPlayer(item))),
+///     onOpenLiveTv: () => Navigator.push(context, ...LiveTvScreen),   // Live TV bilkul untouched
+///   ))
 class HannuDashboard extends StatefulWidget {
   const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
   final DashboardHooks hooks;
@@ -37,7 +44,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     WatchlistStore.I.load();
     ContinueWatchingStore.I.load();
     NotificationStore.I.init();
-    DownloadStore.I.load();
     _hero = Tmdb.I.heroItems();
   }
 
@@ -84,10 +90,9 @@ class _HannuDashboardState extends State<HannuDashboard> {
         openCategory(context, CategoryKind.kids);
         break;
       case 5:
-        // FIX: BuildContext pass karna hoga kyunki ab Hook type void Function(BuildContext) hai
-        final void Function(BuildContext)? f = widget.hooks.onOpenLiveTv;
+        final VoidCallback? f = widget.hooks.onOpenLiveTv;
         if (f != null) {
-          f(context); 
+          f();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Live TV: DashboardHooks.onOpenLiveTv me apni Live TV screen do.')),
@@ -97,6 +102,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     }
   }
 
+  // ───────────────────────── build ─────────────────────────
   @override
   Widget build(BuildContext context) {
     return Theme(
@@ -132,7 +138,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
       const SizedBox(height: 8),
       _heroSection(),
       const ContinueWatchingRow(),
-      const MyDownloadsRow(),
       _ottSection(),
       PosterRow(
         key: ValueKey<String>('india$_epoch'),
@@ -157,22 +162,18 @@ class _HannuDashboardState extends State<HannuDashboard> {
     ];
     for (int i = 0; i < kDashGenres.length; i++) {
       final GenreDef g = kDashGenres[i];
-      // FIX: GenreBlock method not found error fixed by using PosterRow.
-      c.add(
-        PosterRow(
-          key: ValueKey<String>('${g.key}$_epoch'),
-          title: g.label,
-          subtitle: 'Best of ${g.label}',
-          loader: () => Tmdb.I.genreRow(g, RowKind.movie), // Ya teri zaroorat ke hisaab se RowKind de de
-          width: 112,
-        ),
-      );
+      c.add(GenreBlock(
+        key: ValueKey<String>('${g.key}$_epoch'),
+        g: g,
+        onSeeAll: () => openGenre(context, g),
+      ));
       if (i == 2) c.add(const AdSlot());
     }
     c.add(const SizedBox(height: 40));
     return c;
   }
 
+  // ───────────────────────── ambient background (poster ke hisaab se smooth color) ─────────────────────────
   Widget _ambientBackground() {
     return Positioned(
       top: 0,
@@ -207,6 +208,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
+  // ───────────────────────── header ─────────────────────────
   Widget _iconBtn(IconData icon, VoidCallback onTap, {int badge = 0}) {
     return Stack(
       clipBehavior: Clip.none,
@@ -258,22 +260,13 @@ class _HannuDashboardState extends State<HannuDashboard> {
               ),
             ),
             _iconBtn(Icons.search_rounded, () {
-              // FIX: BuildContext pass karna hoga
-              final void Function(BuildContext)? f = widget.hooks.onOpenSearch;
+              final VoidCallback? f = widget.hooks.onOpenSearch;
               if (f != null) {
-                f(context);
+                f();
               } else {
                 openSearch(context);
               }
             }),
-            AnimatedBuilder(
-              animation: DownloadStore.I,
-              builder: (BuildContext _, Widget? __) => _iconBtn(
-                Icons.download_done_rounded,
-                () => openMyDownloads(context),
-                badge: DownloadStore.I.length,
-              ),
-            ),
             AnimatedBuilder(
               animation: WatchlistStore.I,
               builder: (BuildContext _, Widget? __) => _iconBtn(
@@ -322,7 +315,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
         itemCount: _tabs.length,
         separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 10),
         itemBuilder: (BuildContext _, int i) {
-          final bool sel = i == 0;
+          final bool sel = i == 0; 
           return GestureDetector(
             onTap: () => _onTab(i),
             child: Container(
@@ -349,6 +342,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
+  // ───────────────────────── hero ─────────────────────────
   Widget _heroSection() {
     return FutureBuilder<List<TmdbItem>>(
       future: _hero,
@@ -386,6 +380,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
+  // ───────────────────────── OTT logos ─────────────────────────
   Widget _ottSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -410,6 +405,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
+  // ───────────────────────── genre chips ─────────────────────────
   Widget _genreChips() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

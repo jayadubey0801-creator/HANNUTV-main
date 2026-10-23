@@ -55,8 +55,10 @@ Color alpha(Color c, double o) {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  OTT PLATFORMS
+//  OTT PLATFORMS  (logo = tumhare diye hue links)
 //  providers = TMDB watch-provider ids ('|' = OR). regions = pehle IN, phir fallback.
+//  ⚠️ Provider ids TMDB kabhi kabhi badalta hai — verify:
+//     https://api.themoviedb.org/3/watch/providers/tv?api_key=KEY&watch_region=IN
 // ─────────────────────────────────────────────────────────────
 class Ott {
   final String id;
@@ -66,86 +68,72 @@ class Ott {
   final List<String> regions;
   final Color tileBg;
   final BoxFit fit;
-
   const Ott({
     required this.id,
     required this.name,
     required this.logoUrl,
     required this.providers,
     this.regions = const <String>['IN'],
-    this.tileBg = const Color(0xFF000000),
+    this.tileBg = Colors.white,
     this.fit = BoxFit.contain,
   });
-
-  // Deep compatibility getters for widgets.dart OttLogo
-  String get logo => logoUrl;
-  List<String> get logos => <String>[logoUrl];
-  Color get bg => tileBg;
-  Color get accent => HC.accent;
-  Color get fg => Colors.white;
-  Color get color => HC.accent;
 }
 
 const List<Ott> kOtts = <Ott>[
   Ott(
     id: 'netflix',
     name: 'Netflix',
-    logoUrl: 'https://assets.stickpng.com/images/580b57fcd9996e24bc43c529.png',
+    logoUrl:
+        'https://static.vecteezy.com/system/resources/previews/020/190/493/non_2x/netflix-logo-netflix-icon-free-free-vector.jpg',
     providers: '8',
-    tileBg: Color(0xFF000000),
-    fit: BoxFit.contain,
   ),
   Ott(
     id: 'prime',
     name: 'Amazon Prime Video',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png',
+    logoUrl:
+        'https://television-b26f.kxcdn.com/wp-content/uploads/2023/03/Amazon-Prime-Video-Logo-2023.png',
     providers: '119|9',
-    tileBg: Color(0xFF000000),
-    fit: BoxFit.contain,
   ),
   Ott(
     id: 'jio',
     name: 'JioCinema / JioHotstar',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/JioCinema_Logo.png',
+    logoUrl: 'https://miro.medium.com/v2/resize:fit:2000/1*Nehq1KYRgFWTanqsLwWeFQ.png',
     providers: '220|2336|122',
-    tileBg: Color(0xFF000000),
-    fit: BoxFit.contain,
   ),
   Ott(
     id: 'disney',
     name: 'Disney+',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/512px-Disney%2B_logo.svg.png',
+    logoUrl: 'https://logos-world.net/wp-content/uploads/2021/02/Disney-Symbol.png',
     providers: '337',
     regions: <String>['US', 'IN'],
-    tileBg: Color(0xFF000000),
-    fit: BoxFit.contain,
   ),
   Ott(
     id: 'hbo',
     name: 'HBO Max',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/512px-HBO_Max_Logo.svg.png',
+    logoUrl:
+        'https://sm.ign.com/ign_in/news/m/max-changi/max-changing-its-name-back-to-hbo-max-warner-bros-discovery_5g77.jpg',
     providers: '384|1899',
     regions: <String>['US'],
-    tileBg: Color(0xFF000000),
-    fit: BoxFit.contain,
+    tileBg: Colors.black,
+    fit: BoxFit.cover,
   ),
   Ott(
     id: 'apple',
     name: 'Apple TV+',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/512px-Apple_TV_Plus_Logo.svg.png',
+    logoUrl:
+        'https://www.apple.com/v/apple-tv/c/images/meta/apple-tv__ft1nltyknfmi_og.png?202609180346',
     providers: '350',
     regions: <String>['IN', 'US'],
-    tileBg: Color(0xFF000000),
-    fit: BoxFit.contain,
+    tileBg: Colors.black,
+    fit: BoxFit.cover,
   ),
   Ott(
     id: 'hulu',
     name: 'Hulu',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Hulu_Logo.svg/512px-Hulu_Logo.svg.png',
+    logoUrl: 'https://www.thisishulu.com/app/uploads/2023/10/logo-gradient-3up.svg',
     providers: '15',
     regions: <String>['US'],
-    tileBg: Color(0xFF000000),
-    fit: BoxFit.contain,
+    tileBg: Colors.black,
   ),
 ];
 

@@ -43,11 +43,6 @@ class VideoPlayerPage extends StatefulWidget {
   final String rating;
   final String year;
   final String? customUrl;
-  final bool isOfflineDownload;
-  final String? offlineFilePath;
-  final String? offlineLanguage;
-  final String? offlineQuality;
-  final String? offlineServerName;
 
   const VideoPlayerPage({
     super.key,
@@ -60,11 +55,6 @@ class VideoPlayerPage extends StatefulWidget {
     this.rating = '9.0',
     this.year = '2024',
     this.customUrl,
-    this.isOfflineDownload = false,
-    this.offlineFilePath,
-    this.offlineLanguage,
-    this.offlineQuality,
-    this.offlineServerName,
   });
 
   @override
@@ -1267,17 +1257,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (isFullScreen) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: GestureDetector(
-          onTap: _startControlsTimer,
-          onVerticalDragEnd: (details) {
-            // 🔥 YOUTUBE GESTURE: Downward Swipe se normal Portrait me wapas aayega 🔥
-            if (details.primaryVelocity != null && details.primaryVelocity! > 250) {
-              if (isFullScreen) _toggleFullScreen();
-            }
-          },
-          child: Stack(
-            children: [
-              Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+        body: Stack(
+          children: [
+            Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
             if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
             Positioned(top: 14, right: 20, child: SafeArea(child: IgnorePointer(child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
             if (showControls) ...[
@@ -1287,9 +1269,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             ],
           ],
         ),
-      ),
-    );
-  }
+      );
+    }
 
     bool isTvShow = widget.mediaType == 'tv' || widget.mediaType == 'series';
     String displayTitle = widget.movieTitle;
@@ -1307,19 +1288,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               zones: _ambientZones,
               child: GestureDetector(
               onTap: _startControlsTimer,
-              onVerticalDragEnd: (details) {
-                // 🔥 YOUTUBE GESTURE: Upward Swipe se screen Rotate (Landscape Fullscreen) hogi 🔥
-                if (details.primaryVelocity != null && details.primaryVelocity! < -250) {
-                  if (!isFullScreen) _toggleFullScreen();
-                }
-              },
               child: Stack(
                 children: [
                   Container(width: double.infinity, height: 230, color: Colors.black, child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
                   Positioned(
                     top: 10, right: 14,
                     child: GestureDetector(
-                      onTap: _toggleFullScreen, // HANNUTV LOGO TAP ROTATION
+                      onTap: _toggleFullScreen,
                       child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 34, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)))),
                     ),
                   ),
