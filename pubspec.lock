@@ -873,10 +873,10 @@ packages:
     dependency: "direct main"
     description:
       name: unity_ads_plugin
-      sha256: "850192b0a696efdc03e7edd907770fa3bb722fa0c3649f5ed1d6e500577e10a8"
+      sha256: "4ef07e4ccc0cd6a0b9291a5e1b98601931e8e5589abd97c9b1a602648ce0c79e"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0"
+    version: "0.3.30"
   url_launcher:
     dependency: "direct main"
     description:

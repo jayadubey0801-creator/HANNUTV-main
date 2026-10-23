@@ -1,44 +1,36 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
-import 'unity_ads_service.dart';
+import 'unity_ads_helper.dart';
 
 class CustomBannerAd extends StatefulWidget {
-  final String htmlBannerCode;
+  final String? htmlBannerCode; // Purane calls ko break hone se bachane ke liye rakha hai
 
-  const CustomBannerAd({Key? key, this.htmlBannerCode = ''}) : super(key: key);
+  const CustomBannerAd({Key? key, this.htmlBannerCode}) : super(key: key);
 
   @override
   State<CustomBannerAd> createState() => _CustomBannerAdState();
 }
 
 class _CustomBannerAdState extends State<CustomBannerAd> {
-  bool _ready = false;
-  int _reloadKey = 0;
   Timer? _retryTimer;
+  int _reloadAttempt = 0;
 
   @override
   void initState() {
     super.initState();
-    _startBanner();
-  }
-
-  Future<void> _startBanner() async {
-    final ok = await UnityAdsService.init();
-    if (!mounted) return;
-    if (ok) {
-      setState(() => _ready = true);
-    } else {
-      _retryTimer?.cancel();
-      _retryTimer = Timer(const Duration(seconds: 3), _startBanner);
+    if (!UnityAdsHelper.isInitialized.value) {
+      UnityAdsHelper.init();
     }
   }
 
-  void _onAdFailed() {
+  void _scheduleRetry() {
     _retryTimer?.cancel();
-    _retryTimer = Timer(const Duration(seconds: 5), () {
+    _retryTimer = Timer(const Duration(seconds: 15), () {
       if (mounted) {
-        setState(() => _reloadKey++);
+        setState(() {
+          _reloadAttempt++;
+        });
       }
     });
   }
@@ -51,34 +43,50 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {
-      return const SizedBox(
-        width: 320,
-        height: 50,
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 2),
-          ),
-        ),
-      );
-    }
+    return Container(
+      width: double.infinity,
+      height: 55,
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: UnityAdsHelper.isInitialized,
+          builder: (context, initialized, _) {
+            if (!initialized) {
+              return const SizedBox(
+                height: 50,
+                child: Center(
+                  child: Text(
+                    "Sponsored",
+                    style: TextStyle(color: Colors.white24, fontSize: 11),
+                  ),
+                ),
+              );
+            }
 
-    // 🔥 Exact Unity standard 320x50 size constraint with direct plugin widget
-    return SizedBox(
-      key: ValueKey(_reloadKey),
-      width: 320,
-      height: 50,
-      child: UnityBannerAd(
-        placementId: UnityAdsService.bannerPlacement,
-        onLoad: (id) => debugPrint('[UnityBanner] LOADED: $id ✅'),
-        onClick: (id) => debugPrint('[UnityBanner] CLICKED: $id'),
-        onShown: (id) => debugPrint('[UnityBanner] SHOWN: $id'),
-        onFailed: (id, error, message) {
-          debugPrint('[UnityBanner] FAILED: $id | $error | $message ❌');
-          _onAdFailed();
-        },
+            return UnityBannerAd(
+              key: ValueKey<String>('unity_banner_$_reloadAttempt'),
+              placementId: UnityAdsHelper.bannerId,
+              size: BannerSize.standard,
+              onLoad: (placementId) {
+                debugPrint('✅ Unity Banner Loaded: $placementId');
+              },
+              onClick: (placementId) {
+                debugPrint('👉 Unity Banner Clicked (External Redirect): $placementId');
+              },
+              onFailed: (placementId, error, message) {
+                debugPrint('⚠️ Unity Banner Failed ($error): $message');
+                _scheduleRetry();
+              },
+            );
+          },
+        ),
       ),
     );
   }
