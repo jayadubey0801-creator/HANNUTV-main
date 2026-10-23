@@ -9,7 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher.dart'; // 🔥 Update URL Launch karne ke liye
 
 import 'banner_ad_widget.dart';
 import 'config.dart';
@@ -25,7 +25,7 @@ import 'pages.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // 🔥 APP KA CURRENT VERSION (Tera naya update 1.3.0) 🔥
-const String currentAppVersion = "1.3.0";
+const String currentAppVersion = "1.3.0"; 
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -44,35 +44,35 @@ Future<void> main() async {
 
   // 🔥 Unity Ads Initialization 🔥
   unawaited(UnityAdsHelper.init());
-
+  
   try {
     await Firebase.initializeApp();
-
+    
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-
+    
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     final FirebaseRemoteConfig remoteConfig = FirebaseRemoteConfig.instance;
     await remoteConfig.setConfigSettings(
       RemoteConfigSettings(
         fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: const Duration(minutes: 1),
+        minimumFetchInterval: const Duration(minutes: 1), // Turant update catch karne ke liye
       ),
     );
-
+    
     // 🔥 DEFAULT SETTINGS JO FIREBASE SE MATCH KARENGI 🔥
     await remoteConfig.setDefaults(const {
-      'show_ads': true,
+      'show_ads': true, 
       'maintenance_mode': false,
       'latest_version': '1.3.0',
       'update_link': 'https://hannutv.blogspot.com'
     });
-
+    
     await remoteConfig.fetchAndActivate();
   } catch (error) {
     debugPrint('Firebase Startup error (Bypassed for Safe Boot): $error');
@@ -182,33 +182,31 @@ class _SplashScreenState extends State<SplashScreen> {
           for (int i = 0; i < len; i++) {
             int cVal = i < currentV.length ? currentV[i] : 0;
             int lVal = i < latestV.length ? latestV[i] : 0;
-            if (lVal > cVal) {
-              needsUpdate = true;
-              break;
-            }
+            if (lVal > cVal) { needsUpdate = true; break; }
             if (lVal < cVal) break;
           }
         } catch (_) {}
 
         if (maintenanceMode) {
+          // Maintenance mode ON
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MaintenanceScreen()));
         } else if (needsUpdate) {
+          // Naya Update aa gaya (Firebase wala version bada hai)
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ForceUpdateScreen(updateUrl: updateLink)));
         } else {
+          // Sab perfectly theek hai toh dashboard par jao
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => HannuDashboard(
-                hooks: DashboardHooks(
-                  onOpenLiveTv: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
-                  },
-                  onOpenSearch: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
-                  },
-                ),
+            MaterialPageRoute(builder: (context) => HannuDashboard(
+              hooks: DashboardHooks(
+                onOpenLiveTv: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const LiveTvScreen()));
+                },
+                onOpenSearch: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
+                }
               ),
-            ),
+            )),
           );
         }
       }
@@ -253,7 +251,7 @@ class ForceUpdateScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: false, // Back button daba ke bahar nahi aa payega
       child: Scaffold(
         backgroundColor: const Color(0xFF0F0F0F),
         body: Center(
@@ -269,8 +267,7 @@ class ForceUpdateScreen extends StatelessWidget {
                 const Text("Your current version is out of date. Please update to the latest version of HANNUTV to continue watching seamlessly.", style: TextStyle(color: Colors.grey, fontSize: 14), textAlign: TextAlign.center),
                 const SizedBox(height: 40),
                 SizedBox(
-                  width: double.infinity,
-                  height: 55,
+                  width: double.infinity, height: 55,
                   child: ElevatedButton(
                     onPressed: _launchUpdateUrl,
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
@@ -327,13 +324,13 @@ class LiveTvScreen extends StatefulWidget {
 class _LiveTvScreenState extends State<LiveTvScreen> {
   List<Map<String, String>> allChannels = [];
   List<Map<String, String>> displayedChannels = [];
-
+  
   List<String> availableCountries = [];
-  String selectedCountry = 'IN';
+  String selectedCountry = 'IN'; 
 
   List<String> categories = ['All'];
   String selectedCategory = 'All';
-
+  
   bool isLoading = true;
   bool isSearching = false;
   TextEditingController searchController = TextEditingController();
@@ -358,7 +355,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
       if (response.statusCode == 200) {
         final List<String> lines = response.body.split('\n');
         List<Map<String, String>> tempChannels = [];
-
+        
         String currentName = '';
         String currentLogo = '';
         String currentGroup = 'Uncategorized';
@@ -441,7 +438,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
 
   void _applyFilters() {
     List<Map<String, String>> filtered = allChannels.where((c) => c['country'] == selectedCountry).toList();
-
+    
     Set<String> cats = {'All'};
     for (var c in filtered) {
       cats.add(c['group']!);
@@ -489,18 +486,18 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                     onTap: () {
                       setState(() {
                         selectedCountry = c;
-                        selectedCategory = 'All';
+                        selectedCategory = 'All'; 
                       });
                       _applyFilters();
                       Navigator.pop(context);
-                    },
+                    }
                   );
-                },
-              ),
-            ),
-          ],
+                }
+              )
+            )
+          ]
         );
-      },
+      }
     );
   }
 
@@ -552,7 +549,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white24),
+                  border: Border.all(color: Colors.white24)
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -597,57 +594,38 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
             ),
           const SizedBox(height: 10),
           Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
-                : displayedChannels.isEmpty
-                    ? const Center(child: Text('No Live Channels Available', style: TextStyle(color: Colors.white)))
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(12),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.85),
-                        itemCount: displayedChannels.length,
-                        itemBuilder: (_, int index) {
-                          final Map<String, String> channel = displayedChannels[index];
-                          final String name = channel['name'] ?? 'Live TV';
-                          final String logo = channel['logo'] ?? '';
-                          final String url = channel['url'] ?? '';
+            child: isLoading 
+              ? const Center(child: CircularProgressIndicator(color: Colors.redAccent)) 
+              : displayedChannels.isEmpty 
+                ? const Center(child: Text('No Live Channels Available', style: TextStyle(color: Colors.white))) 
+                : GridView.builder(
+                    padding: const EdgeInsets.all(12), 
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.85), 
+                    itemCount: displayedChannels.length,
+                    itemBuilder: (_, int index) {
+                      final Map<String, String> channel = displayedChannels[index];
+                      final String name = channel['name'] ?? 'Live TV';
+                      final String logo = channel['logo'] ?? '';
+                      final String url = channel['url'] ?? '';
 
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: url.isEmpty
-                                ? null
-                                : () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => SkippableAdScreen(
-                                          adDuration: 30,
-                                          nextScreen: VideoPlayerPage(
-                                            tmdbId: 0,
-                                            mediaType: 'tv',
-                                            season: 1,
-                                            episode: 1,
-                                            movieTitle: name,
-                                            overview: 'Live TV Broadcast',
-                                            rating: 'Live',
-                                            year: 'Now',
-                                            customUrl: url,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                            child: Container(
-                              decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: <Widget>[
-                                  Expanded(child: Padding(padding: const EdgeInsets.all(8), child: logo.isNotEmpty ? CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_, __, ___) => const Icon(Icons.tv, color: Colors.white54, size: 40)) : const Icon(Icons.tv, color: Colors.white54, size: 40))),
-                                  Container(width: double.infinity, padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.vertical(bottom: Radius.circular(12))), child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
-                                ],
-                              ),
-                            ),
-                          );
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: url.isEmpty ? null : () {
+                          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SkippableAdScreen(adDuration: 30, nextScreen: VideoPlayerPage(tmdbId: 0, mediaType: 'tv', season: 1, episode: 1, movieTitle: name, overview: 'Live TV Broadcast', rating: 'Live', year: 'Now', customUrl: url))));
                         },
-                      ),
+                        child: Container(
+                          decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Expanded(child: Padding(padding: const EdgeInsets.all(8), child: logo.isNotEmpty ? CachedNetworkImage(imageUrl: logo, fit: BoxFit.contain, errorWidget: (_, __, ___) => const Icon(Icons.tv, color: Colors.white54, size: 40)) : const Icon(Icons.tv, color: Colors.white54, size: 40))),
+                              Container(width: double.infinity, padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.vertical(bottom: Radius.circular(12))), child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

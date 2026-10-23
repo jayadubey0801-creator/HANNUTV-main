@@ -23,53 +23,50 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
 
   bool _isNavigating = false;
   bool _videoAdTriggered = false;
-  bool _isNativeAdShowing = false;
 
   @override
   void initState() {
     super.initState();
     _timeLeft = widget.adDuration;
+    _BannerSlotManager.pauseBanners(true);
     _startCountdown();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _tryLaunchUnityVideoAd();
+    // Screen transition pura hone ke baad Skippable Interstitial trigger karo
+    Future<void>.delayed(const Duration(milliseconds: 350), () {
+      if (mounted) _tryLaunchUnityInterstitial();
     });
   }
 
-  void _tryLaunchUnityVideoAd() {
+  void _tryLaunchUnityInterstitial() {
     if (!mounted || _isNavigating || _videoAdTriggered) return;
 
-    if (UnityAdsHelper.hasAnyVideoAdReady) {
-      _launchVideoAdNow();
+    if (UnityAdsHelper.isInterstitialReady) {
+      _launchInterstitialNow();
     } else {
       UnityAdsHelper.setOnAdReadyListener(() {
         if (mounted && !_isNavigating && !_videoAdTriggered) {
-          _launchVideoAdNow();
+          _launchInterstitialNow();
         }
       });
-      UnityAdsHelper.preloadAds();
+      UnityAdsHelper.preloadInterstitial();
     }
   }
 
-  void _launchVideoAdNow() {
+  void _launchInterstitialNow() {
     if (!mounted || _isNavigating || _videoAdTriggered) return;
     _videoAdTriggered = true;
     UnityAdsHelper.setOnAdReadyListener(null);
 
-    UnityAdsHelper.showFullScreenAd(
-      onStart: () {
-        if (mounted) {
-          setState(() => _isNativeAdShowing = true);
-        }
-      },
+    UnityAdsHelper.showInterstitialAd(
+      onStart: () {},
       onClosed: () {
-        _isNativeAdShowing = false;
-        _goToNextScreen();
+        // 🔥 Unity Activity band hone ke 350ms baad player kholo taaki WebView surface clean mile 🔥
+        Future<void>.delayed(const Duration(milliseconds: 350), () {
+          _goToNextScreen();
+        });
       },
       onFailedToShow: () {
-        if (mounted) {
-          setState(() => _isNativeAdShowing = false);
-        }
+        // Agar ad available nahi hai toh user timer ke baad ya turant skip kar sakega
       },
     );
   }
@@ -95,6 +92,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     _isNavigating = true;
     _timer?.cancel();
     UnityAdsHelper.setOnAdReadyListener(null);
+    _BannerSlotManager.pauseBanners(false);
 
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -107,6 +105,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   void dispose() {
     _timer?.cancel();
     UnityAdsHelper.setOnAdReadyListener(null);
+    _BannerSlotManager.pauseBanners(false);
     super.dispose();
   }
 
@@ -119,46 +118,31 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         body: SafeArea(
           child: Stack(
             children: [
-              // 🔥 Center Unity Ads Area 🔥
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.ondemand_video_rounded,
+              const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
                         color: Colors.redAccent,
-                        size: 54,
+                        strokeWidth: 2.5,
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _isNativeAdShowing
-                            ? "Playing Sponsored Video Ad..."
-                            : (_canSkip
-                                ? "Ad Ready to Skip"
-                                : "Loading Sponsored Ad... ($_timeLeft s)"),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      "Loading Advertisement...",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        "Click on the ad to open in Play Store / Browser",
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
-                      ),
-                      const SizedBox(height: 30),
-                      const CustomBannerAd(),
-                      const SizedBox(height: 12),
-                      const CustomBannerAd(),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
 
-              // 🔥 Top-Right Skip Timer / Button 🔥
               Positioned(
                 top: 15,
                 right: 15,
@@ -194,7 +178,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                 ),
               ),
 
-              // 🔥 Bottom-Left Ad Badge 🔥
               Positioned(
                 bottom: 20,
                 left: 20,
