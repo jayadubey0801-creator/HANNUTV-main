@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
+
 import 'unity_ads_service.dart';
 
 class SkippableAdScreen extends StatefulWidget {
@@ -25,13 +27,15 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   bool _canSkip = false;
   bool _isAdLoading = true;
   bool _countdownStarted = false;
-  Timer? _timer;
+  bool _adShown = false;
+  bool _navigated = false;
 
-  // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG 🔥
+  Timer? _timer;
+  Timer? _watchdog;
+
+  // 🔥 DEEP LOGIC: ANTI-ADBLOCK / PRIVATE DNS FLAG (ONLY FOR UNITY ADS) 🔥
   bool _isAdblockDetected = false;
   bool _checking = false;
-  Timer? _watchdog;
-  bool _adShown = false;
 
   @override
   void initState() {
@@ -45,13 +49,19 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   }
 
   Future<void> _initAndLoadUnityAd() async {
-    final ok = await UnityAdsService.init();
+    final bool ok = await UnityAdsService.init();
     if (!mounted || _isAdblockDetected) return;
 
     if (!ok) {
       _startCountdownIfNeeded();
       return;
     }
+
+    _loadInterstitialUnityAd();
+  }
+
+  void _loadInterstitialUnityAd() {
+    if (!mounted || _isAdblockDetected || _adShown) return;
 
     UnityAds.load(
       placementId: UnityAdsService.interstitialPlacement,
@@ -61,18 +71,65 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         _startCountdownIfNeeded();
         UnityAds.showVideoAd(
           placementId: UnityAdsService.interstitialPlacement,
-          onStart: (id) => debugPrint('[UnityAds] Video started: $id'),
-          onClick: (id) => debugPrint('[UnityAds] Video click: $id'),
-          onSkipped: (id) => _goNext(),
-          onComplete: (id) => _goNext(),
-          onFailed: (id, error, message) {
-            debugPrint('[UnityAds] Video failed: $error $message');
+          onStart: (id) {
+            debugPrint('[UnityAds] Interstitial started: $id');
+            _startCountdownIfNeeded();
+          },
+          onClick: (id) => debugPrint('[UnityAds] Interstitial clicked: $id'),
+          onSkipped: (id) {
+            debugPrint('[UnityAds] Interstitial skipped: $id');
             _goNext();
+          },
+          onComplete: (id) {
+            debugPrint('[UnityAds] Interstitial completed: $id');
+            _goNext();
+          },
+          onFailed: (id, error, message) {
+            debugPrint('[UnityAds] Interstitial show failed: $error $message');
+            _adShown = false;
+            _loadRewardedUnityAdFallback();
           },
         );
       },
       onFailed: (placementId, error, message) {
-        debugPrint('[UnityAds] Load failed: $placementId $error $message');
+        debugPrint('[UnityAds] Interstitial load failed: $placementId $error $message');
+        _loadRewardedUnityAdFallback();
+      },
+    );
+  }
+
+  void _loadRewardedUnityAdFallback() {
+    if (!mounted || _isAdblockDetected || _adShown) return;
+
+    UnityAds.load(
+      placementId: UnityAdsService.rewardedPlacement,
+      onComplete: (placementId) {
+        if (!mounted || _isAdblockDetected || _adShown) return;
+        _adShown = true;
+        _startCountdownIfNeeded();
+        UnityAds.showVideoAd(
+          placementId: UnityAdsService.rewardedPlacement,
+          onStart: (id) {
+            debugPrint('[UnityAds] Rewarded started: $id');
+            _startCountdownIfNeeded();
+          },
+          onClick: (id) => debugPrint('[UnityAds] Rewarded clicked: $id'),
+          onSkipped: (id) {
+            debugPrint('[UnityAds] Rewarded skipped: $id');
+            _goNext();
+          },
+          onComplete: (id) {
+            debugPrint('[UnityAds] Rewarded completed: $id');
+            _goNext();
+          },
+          onFailed: (id, error, message) {
+            debugPrint('[UnityAds] Rewarded show failed: $error $message');
+            _startCountdownIfNeeded();
+          },
+        );
+      },
+      onFailed: (placementId, error, message) {
+        debugPrint('[UnityAds] Rewarded load failed: $placementId $error $message');
         _startCountdownIfNeeded();
       },
     );
@@ -101,7 +158,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     });
   }
 
-  // 🔥 MULTI-DOMAIN + DoH CROSS-CHECK DNS LOGIC (UNITY ADS DOMAINS) 🔥
+  // 🔥 MULTI-DOMAIN + DoH CROSS-CHECK DNS LOGIC (ONLY UNITY ADS DOMAINS) 🔥
   static const List<String> _probeHosts = [
     'unity3d.com',
     'unityads.unity3d.com',
@@ -206,7 +263,8 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   }
 
   void _goNext() {
-    if (!mounted) return;
+    if (!mounted || _navigated || _isAdblockDetected) return;
+    _navigated = true;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => widget.nextScreen),
@@ -229,18 +287,22 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         body: SafeArea(
           child: Stack(
             children: [
-              if (_isAdLoading && !_isAdblockDetected)
+              if (!_isAdblockDetected)
                 Positioned.fill(
                   child: Container(
-                    color: Colors.black.withOpacity(0.90),
+                    color: Colors.black,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
-                        SizedBox(height: 16),
+                      children: [
+                        const CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
+                        const SizedBox(height: 16),
                         Text(
-                          "Loading Ad...",
-                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          _isAdLoading ? "Loading Unity Ad..." : "Unity Advertisement Playing...",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
