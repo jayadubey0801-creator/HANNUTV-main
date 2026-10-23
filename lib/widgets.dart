@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'banner_ad_widget.dart';
 import 'config.dart';
+import 'skippable_ad_screen.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 import 'video_player_page.dart';
@@ -66,21 +67,29 @@ class Hooks {
       } catch (_) {}
     }
 
+    final Widget playerPage = VideoPlayerPage(
+      tmdbId: item.id,
+      mediaType: item.isTv ? 'tv' : 'movie',
+      movieTitle: item.title,
+      overview: item.overview,
+      rating: item.rating.toStringAsFixed(1),
+      year: item.year,
+      isOfflineDownload: readyOffline,
+      offlineFilePath: readyOffline ? existingTask!.localFilePath : null,
+      offlineLanguage: readyOffline ? existingTask!.language : null,
+      offlineQuality: readyOffline ? existingTask!.quality : null,
+      offlineServerName: readyOffline ? existingTask!.serverName : null,
+    );
+
+    // 🔥 DASHBOARD SE KISI BHI POSTER / CONTINUE WATCHING PAR CLICK HOTE HI 15s AD AAYEGA 🔥
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => VideoPlayerPage(
-          tmdbId: item.id,
-          mediaType: item.isTv ? 'tv' : 'movie',
-          movieTitle: item.title,
-          overview: item.overview,
-          rating: item.rating.toStringAsFixed(1),
-          year: item.year,
-          isOfflineDownload: readyOffline,
-          offlineFilePath: readyOffline ? existingTask!.localFilePath : null,
-          offlineLanguage: readyOffline ? existingTask!.language : null,
-          offlineQuality: readyOffline ? existingTask!.quality : null,
-          offlineServerName: readyOffline ? existingTask!.serverName : null,
-        ),
+        builder: (_) => readyOffline
+            ? playerPage
+            : SkippableAdScreen(
+                adDuration: 15,
+                nextScreen: playerPage,
+              ),
       ),
     );
   }

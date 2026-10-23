@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:unity_ads_plugin/unity_ads_plugin.dart';
 
 class SkippableAdScreen extends StatefulWidget {
   final Widget nextScreen;
@@ -16,7 +15,7 @@ class SkippableAdScreen extends StatefulWidget {
   const SkippableAdScreen({
     Key? key,
     required this.nextScreen,
-    this.adDuration = 15, // 🚀 FIXED TO 15 SECONDS FOR MOVIES (Live TV dynamically overrides this)
+    this.adDuration = 15, // 🚀 FIXED TO 15 SECONDS FOR MOVIES
   }) : super(key: key);
 
   @override
@@ -24,17 +23,12 @@ class SkippableAdScreen extends StatefulWidget {
 }
 
 class _SkippableAdScreenState extends State<SkippableAdScreen> {
-  static bool _unityInitialized = false;
-
   late final WebViewController _controller;
   late int _timeLeft;
   bool _canSkip = false;
-  bool _isAdLoading = true; // Jab tak ad load na ho tab tak loading rahega
+  bool _isAdLoading = true; // Jab tak ad load na ho tab tak Loading Ad... rahega
   bool _countdownStarted = false;
-  bool _unityAdShowing = false;
-  bool _unityRequested = false;
   Timer? _timer;
-  Timer? _unityFallbackTimer;
 
   // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG (TERA PURANA LOGIC) 🔥
   bool _isAdblockDetected = false;
@@ -42,21 +36,16 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   bool _checking = false;
   Timer? _watchdog;
   late String _selectedAd;
-  late String _currentAdvertiserUrl; // Jis ad par hai usi website ka live URL
+  late String _currentLandedAdUrl; // Jis ad par redirect hokar ruka hai uska exact URL
 
-  // 🛡️ STRICT TAP VALIDATION FOR 1-CLICK DEFAULT BROWSER REDIRECT
+  // 🛡️ STRICT 1-CLICK VALIDATION FOR DEFAULT BROWSER REDIRECT
   Offset? _tapDownPos;
   DateTime? _lastTapTime;
-  DateTime? _lastExternalLaunch;
+  DateTime? _lastBrowserOpenTime;
 
   bool get _userTappedRecently =>
       _lastTapTime != null &&
-      DateTime.now().difference(_lastTapTime!) < const Duration(milliseconds: 1800);
-
-  // 🎯 UNITY ADS PLACEMENTS
-  static const String kUnityGameId = '800405137';
-  static const String kInterstitialId = 'BP_Interstitial_Android';
-  static const String kRewardedId = 'BP_Rewarded_Android';
+      DateTime.now().difference(_lastTapTime!) < const Duration(milliseconds: 1500);
 
   final List<String> _fullScreenAdLinks = [
     "https://omg10.com/4/11914244",
@@ -71,7 +60,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
 
     final _random = Random();
     _selectedAd = _fullScreenAdLinks[_random.nextInt(_fullScreenAdLinks.length)];
-    _currentAdvertiserUrl = _selectedAd;
+    _currentLandedAdUrl = _selectedAd;
     final String selectedAd = _selectedAd;
 
     // 🚀 TRAP: turant check + har 4 sec watchdog (AdGuard/PvtDNS beech me on ho to bhi pakdega,
@@ -79,35 +68,29 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     _runBlockCheck();
     _watchdog = Timer.periodic(const Duration(seconds: 4), (_) => _runBlockCheck());
 
-    // 🚀 UNITY ADS INIT + LOAD & SHOW 🚀
-    _initAndShowUnityAd();
-
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF000000))
-      ..setUserAgent(
-        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-      )
       ..addJavaScriptChannel(
-        'AdClickChannel',
-        onMessageReceived: (JavaScriptMessage msg) {
-          final String data = msg.message.trim();
-          if (data.startsWith('CURRENT_URL:')) {
-            final String u = data.substring(12).trim();
-            if (u.startsWith('http')) {
-              _currentAdvertiserUrl = u;
+        'AdClickBridge',
+        onMessageReceived: (JavaScriptMessage message) {
+          final String msg = message.message.trim();
+          if (msg.startsWith('LANDED:')) {
+            final String u = msg.substring(7).trim();
+            if (u.startsWith('http') && !u.contains('google.com')) {
+              _currentLandedAdUrl = u;
             }
             return;
           }
-          if (data.startsWith('CLICK_URL:')) {
-            final String clickedUrl = data.substring(10).trim();
+          if (msg.startsWith('OPEN:')) {
+            final String targetUrl = msg.substring(5).trim();
             if (_userTappedRecently) {
-              if (clickedUrl.startsWith('http') ||
-                  clickedUrl.startsWith('intent://') ||
-                  clickedUrl.startsWith('market://')) {
-                _launchExternalBrowser(clickedUrl);
+              if (targetUrl.startsWith('http') ||
+                  targetUrl.startsWith('intent://') ||
+                  targetUrl.startsWith('market://')) {
+                _launchExternalBrowser(targetUrl);
               } else {
-                _launchExternalBrowser(_currentAdvertiserUrl);
+                _launchExternalBrowser(_currentLandedAdUrl);
               }
             }
           }
@@ -116,40 +99,48 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-            if (url.startsWith('http')) {
-              _currentAdvertiserUrl = url;
+            if (url.startsWith('http') && !url.contains('google.com')) {
+              _currentLandedAdUrl = url;
             }
           },
           onPageFinished: (String url) {
             if (!mounted || _isAdblockDetected) return;
-            if (url.startsWith('http')) {
-              _currentAdvertiserUrl = url;
+
+            // Agar Monetag/Adsterra galti se google.com fallback de de, toh turant doosra ad link load karo!
+            if (url.toLowerCase().contains('www.google.com') ||
+                url.toLowerCase().contains('google.co.in')) {
+              _controller.loadRequest(
+                Uri.parse("https://www.profitableratecpmnetwork.com/qftskbqkm?key=6a0072dfddbd45e6f448fa2a00d2df90"),
+              );
+              return;
             }
 
-            // Ad load ho gaya -> Ab 15s countdown chalu karo
+            if (url.startsWith('http')) {
+              _currentLandedAdUrl = url;
+            }
+
+            // 🔥 Ad page load ho gaya -> Ab 15 second ka timer chalu karo 🔥
             _startCountdownIfNeeded();
 
-            // 🔥 JS INJECTION: CAPTCHA KILLER + 1-CLICK EXACT ADVERTISER URL EXTRACTOR 🔥
+            // 🔥 JS INJECTION: CAPTCHA KILLER & 1-CLICK EXACT ADVERTISER WEBSITE REDIRECT 🔥
             _controller.runJavaScript('''
-              try { Object.defineProperty(window, 'top', { value: window, writable: false }); } catch(e) {}
-
               try {
                 if (window.location && window.location.href && window.location.href.startsWith('http')) {
-                  AdClickChannel.postMessage('CURRENT_URL:' + window.location.href);
+                  AdClickBridge.postMessage('LANDED:' + window.location.href);
                 }
               } catch(e) {}
 
-              // Jab ad window.open() se apni website kholne ki koshish kare, toh use Default Browser me bhejo!
-              window.open = function(openUrl) {
-                if (openUrl) {
+              // Jab ad click hone par window.open() call kare, toh use block karne ke bajaye Default Browser me kholo!
+              window.open = function(url) {
+                if (url) {
                   try {
-                    var full = new URL(openUrl, window.location.href).href;
-                    AdClickChannel.postMessage('CLICK_URL:' + full);
+                    var fullUrl = new URL(url, window.location.href).href;
+                    AdClickBridge.postMessage('OPEN:' + fullUrl);
                   } catch(e) {
-                    AdClickChannel.postMessage('CLICK_URL:' + openUrl);
+                    AdClickBridge.postMessage('OPEN:' + url.toString());
                   }
                 } else {
-                  AdClickChannel.postMessage('CLICK_URL:' + window.location.href);
+                  AdClickBridge.postMessage('OPEN:' + window.location.href);
                 }
                 return null;
               };
@@ -157,28 +148,17 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
               setInterval(function() {
                 var verifiers = document.querySelectorAll('.human-verify, #verify-button, #captcha, [class*="verify"], iframe[src*="recaptcha"], .cf-turnstile');
                 verifiers.forEach(function(btn) { try { btn.click(); } catch(e) {} });
+              }, 150);
 
-                if (window.location && window.location.href && window.location.href.startsWith('http')) {
-                  try { AdClickChannel.postMessage('CURRENT_URL:' + window.location.href); } catch(e) {}
-                }
-              }, 200);
-
-              // 1-Click par exact<a> link ya button ka target URL pakad kar Default Browser me bhejo
+              // User jab kisi <a> link ya button par 1 click kare, toh seedha wohi link Default Browser me bhejo
               document.addEventListener('click', function(e) {
                 var el = e.target;
                 var a = el ? el.closest('a') : null;
                 if (a && a.href && a.href.indexOf('javascript:') === -1) {
                   e.preventDefault();
                   e.stopPropagation();
-                  try { AdClickChannel.postMessage('CLICK_URL:' + a.href); } catch(err) {}
+                  try { AdClickBridge.postMessage('OPEN:' + a.href); } catch(err) {}
                   return false;
-                }
-                var dataUrl = el ? (el.getAttribute('data-url') || el.getAttribute('data-href')) : null;
-                if (dataUrl) {
-                  try {
-                    var resolved = new URL(dataUrl, window.location.href).href;
-                    AdClickChannel.postMessage('CLICK_URL:' + resolved);
-                  } catch(err) {}
                 }
               }, true);
             ''');
@@ -187,7 +167,12 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
             final String rawUrl = request.url;
             final String url = rawUrl.toLowerCase();
 
-            // 🔥 1. PLAY STORE AUR INTENTS KO SEEDHA DEFAULT BROWSER / APP ME KHOLO 🔥
+            // Google fallback ko block karke asli ad par rakho
+            if (url.contains('www.google.com') || url.contains('google.co.in')) {
+              return NavigationDecision.prevent;
+            }
+
+            // 🔥 1. AGGRESSIVE ANTI-REDIRECT: PLAY STORE AUR INTENTS KO PAKDEGA 🔥
             if (url.startsWith('intent://') ||
                 url.startsWith('market://') ||
                 url.contains('play.google.com') ||
@@ -198,15 +183,14 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
               return NavigationDecision.prevent;
             }
 
-            // 🔥 2. SINGLE CLICK REDIRECT: USER NE CLICK KIYA TOH USI WEBSITE KO DEFAULT BROWSER ME KHOLO 🔥
+            // 🔥 2. SINGLE CLICK PAR USI ADVERTISER KI WEBSITE DEFAULT BROWSER MEIN KHOLO 🔥
             if (_userTappedRecently && rawUrl.startsWith('http')) {
               _launchExternalBrowser(rawUrl);
               return NavigationDecision.prevent;
             }
 
-            // Automatic ad-network redirect ke dauran current advertiser URL update rakho
             if (rawUrl.startsWith('http') && request.isMainFrame) {
-              _currentAdvertiserUrl = rawUrl;
+              _currentLandedAdUrl = rawUrl;
             }
             return NavigationDecision.navigate;
           },
@@ -232,89 +216,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     if (platform is AndroidWebViewController) {
       platform.setMediaPlaybackRequiresUserGesture(false);
     }
-  }
-
-  // 🔥 UNITY ADS INTEGRATION (INTERSTITIAL + REWARDED FALLBACK) 🔥
-  void _initAndShowUnityAd() {
-    try {
-      if (_unityInitialized) {
-        _loadAndShowInterstitial();
-      } else {
-        UnityAds.init(
-          gameId: kUnityGameId,
-          testMode: false,
-          onComplete: () {
-            _unityInitialized = true;
-            _loadAndShowInterstitial();
-          },
-          onFailed: (error, message) {
-            _loadAndShowInterstitial();
-          },
-        );
-        _unityFallbackTimer = Timer(const Duration(milliseconds: 1200), () {
-          if (mounted && !_unityRequested && !_isAdblockDetected) {
-            _unityInitialized = true;
-            _loadAndShowInterstitial();
-          }
-        });
-      }
-    } catch (_) {}
-  }
-
-  void _loadAndShowInterstitial() {
-    if (!mounted || _isAdblockDetected || _unityAdShowing || _unityRequested) return;
-    _unityRequested = true;
-    try {
-      UnityAds.load(
-        placementId: kInterstitialId,
-        onComplete: (placementId) {
-          if (!mounted || _isAdblockDetected || _unityAdShowing) return;
-          _unityAdShowing = true;
-          _startCountdownIfNeeded();
-          UnityAds.showVideoAd(
-            placementId: kInterstitialId,
-            onStart: (id) => _startCountdownIfNeeded(),
-            onClick: (id) {},
-            onComplete: (id) => _unityAdShowing = false,
-            onSkipped: (id) => _unityAdShowing = false,
-            onFailed: (id, error, message) {
-              _unityAdShowing = false;
-              _loadAndShowRewarded();
-            },
-          );
-        },
-        onFailed: (placementId, error, message) {
-          _loadAndShowRewarded();
-        },
-      );
-    } catch (_) {
-      _loadAndShowRewarded();
-    }
-  }
-
-  void _loadAndShowRewarded() {
-    if (!mounted || _isAdblockDetected || _unityAdShowing) return;
-    try {
-      UnityAds.load(
-        placementId: kRewardedId,
-        onComplete: (placementId) {
-          if (!mounted || _isAdblockDetected || _unityAdShowing) return;
-          _unityAdShowing = true;
-          _startCountdownIfNeeded();
-          UnityAds.showVideoAd(
-            placementId: kRewardedId,
-            onStart: (id) => _startCountdownIfNeeded(),
-            onClick: (id) {},
-            onComplete: (id) => _unityAdShowing = false,
-            onSkipped: (id) => _unityAdShowing = false,
-            onFailed: (id, error, message) {
-              _unityAdShowing = false;
-            },
-          );
-        },
-        onFailed: (placementId, error, message) {},
-      );
-    } catch (_) {}
   }
 
   void _startCountdownIfNeeded() {
@@ -429,12 +330,10 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
       _isAdblockDetected = false;
       _isAdLoading = true;
       _countdownStarted = false;
-      _unityRequested = false;
       _timeLeft = widget.adDuration < 15 ? 15 : widget.adDuration;
       _canSkip = false;
     });
     _controller.loadRequest(Uri.parse(_selectedAd));
-    _initAndShowUnityAd();
   }
 
   void _triggerBlock() {
@@ -448,18 +347,17 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     }
   }
 
-  // 🔥 DEEP 1-CLICK DEFAULT BROWSER OPENER (OPENS EXACT ADVERTISER SITE) 🔥
+  // 🔥 1-CLICK DEFAULT BROWSER OPENER (OPENS EXACT ADVERTISER WEBSITE) 🔥
   Future<void> _launchExternalBrowser(String urlString) async {
     if (_isAdblockDetected) return;
-    if (_lastExternalLaunch != null &&
-        DateTime.now().difference(_lastExternalLaunch!) < const Duration(milliseconds: 1000)) {
+    if (_lastBrowserOpenTime != null &&
+        DateTime.now().difference(_lastBrowserOpenTime!) < const Duration(milliseconds: 1000)) {
       return;
     }
-    _lastExternalLaunch = DateTime.now();
+    _lastBrowserOpenTime = DateTime.now();
 
     String target = urlString.trim();
 
-    // Handle Android intent:// urls seamlessly
     if (target.startsWith('intent://')) {
       final int fbIdx = target.indexOf('S.browser_fallback_url=');
       if (fbIdx != -1) {
@@ -473,14 +371,14 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         if (m != null && m.group(1) != null) {
           target = 'https://play.google.com/store/apps/details?id=${m.group(1)}';
         } else {
-          target = _currentAdvertiserUrl;
+          target = _currentLandedAdUrl;
         }
       }
     } else if (target.startsWith('market://details?id=')) {
       final String pkg = target.substring('market://details?id='.length);
       target = 'https://play.google.com/store/apps/details?id=$pkg';
     } else if (!target.startsWith('http')) {
-      target = _currentAdvertiserUrl;
+      target = _currentLandedAdUrl;
     }
 
     final Uri? url = Uri.tryParse(target);
@@ -489,7 +387,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
       try {
-        await launchUrl(Uri.parse(_currentAdvertiserUrl), mode: LaunchMode.externalApplication);
+        await launchUrl(Uri.parse(_currentLandedAdUrl), mode: LaunchMode.externalApplication);
       } catch (_) {}
     }
   }
@@ -498,7 +396,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   void dispose() {
     _timer?.cancel();
     _watchdog?.cancel();
-    _unityFallbackTimer?.cancel();
     super.dispose();
   }
 
@@ -525,22 +422,43 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                   final down = _tapDownPos;
                   if (down != null && (e.position - down).distance < 30) {
                     _lastTapTime = DateTime.now();
-                    final DateTime tapTime = _lastTapTime!;
-                    // Agar ad full-screen landing page hai ya canvas/image ad hai jisme <a href> nahi hai,
-                    // toh 1-click par 350ms me seedha usi advertiser website (_currentAdvertiserUrl) ko Default Browser me khol dega!
+                    final DateTime tapMoment = _lastTapTime!;
+                    // Agar ad landing page par koi button/image hai jo direct <a href> nahi hai,
+                    // toh 1-click par 350ms baad usi advertiser ki website (_currentLandedAdUrl) Default Browser me khol dega!
                     Future.delayed(const Duration(milliseconds: 350), () {
                       if (mounted &&
                           !_isAdblockDetected &&
                           !_isAdLoading &&
-                          _lastTapTime == tapTime &&
-                          (_lastExternalLaunch == null || _lastExternalLaunch!.isBefore(tapTime))) {
-                        _launchExternalBrowser(_currentAdvertiserUrl);
+                          _lastTapTime == tapMoment &&
+                          (_lastBrowserOpenTime == null ||
+                              _lastBrowserOpenTime!.isBefore(tapMoment))) {
+                        _launchExternalBrowser(_currentLandedAdUrl);
                       }
                     });
                   }
                 },
                 child: WebViewWidget(controller: _controller),
               ),
+
+              if (_isAdLoading && !_isAdblockDetected)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.90),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          CircularProgressIndicator(color: Colors.amber, strokeWidth: 3),
+                          SizedBox(height: 16),
+                          Text(
+                            "Loading Ad...",
+                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
 
               if (_isAdblockDetected)
                 Positioned.fill(
