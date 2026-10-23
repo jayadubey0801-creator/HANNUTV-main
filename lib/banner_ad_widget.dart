@@ -14,31 +14,40 @@ class CustomBannerAd extends StatefulWidget {
 
 class _CustomBannerAdState extends State<CustomBannerAd> {
   bool _isInit = false;
+  bool _hasError = false;
   int _reloadKey = 0;
   Timer? _retryTimer;
 
   @override
   void initState() {
     super.initState();
-    _setupUnityBanner();
+    _initAndLoad();
   }
 
-  Future<void> _setupUnityBanner() async {
+  Future<void> _initAndLoad() async {
+    if (UnityAdsService.isInitialized) {
+      if (mounted) setState(() => _isInit = true);
+      return;
+    }
+
     final bool ok = await UnityAdsService.init();
     if (!mounted) return;
     if (ok) {
       setState(() => _isInit = true);
     } else {
       _retryTimer?.cancel();
-      _retryTimer = Timer(const Duration(seconds: 3), _setupUnityBanner);
+      _retryTimer = Timer(const Duration(seconds: 4), _initAndLoad);
     }
   }
 
-  void _scheduleBannerRetry() {
+  void _scheduleRetry() {
     _retryTimer?.cancel();
     _retryTimer = Timer(const Duration(seconds: 8), () {
       if (mounted) {
-        setState(() => _reloadKey++);
+        setState(() {
+          _hasError = false;
+          _reloadKey++;
+        });
       }
     });
   }
@@ -51,46 +60,36 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 320,
-        height: 52,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: const Color(0xFF14141F),
-          borderRadius: BorderRadius.circular(8),
+    if (!_isInit) {
+      return const SizedBox(
+        height: 50,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 2),
+          ),
         ),
-        child: _isInit
-            ? SizedBox(
-                width: 320,
-                height: 50,
-                child: UnityBannerAd(
-                  key: ValueKey(_reloadKey),
-                  placementId: UnityAdsService.bannerPlacement,
-                  size: BannerSize.standard,
-                  onLoad: (id) {
-                    debugPrint('[UnityBanner] Loaded: $id');
-                  },
-                  onClick: (id) {
-                    debugPrint('[UnityBanner] Clicked: $id');
-                  },
-                  onShown: (id) {
-                    debugPrint('[UnityBanner] Shown: $id');
-                  },
-                  onFailed: (id, error, message) {
-                    debugPrint('[UnityBanner] Failed: $id | Error: $error | Msg: $message');
-                    _scheduleBannerRetry();
-                  },
-                ),
-              )
-            : const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  color: Colors.amber,
-                  strokeWidth: 2,
-                ),
-              ),
+      );
+    }
+
+    return SizedBox(
+      width: 320,
+      height: 50,
+      child: UnityBannerAd(
+        key: ValueKey(_reloadKey),
+        placementId: UnityAdsService.bannerPlacement,
+        onLoad: (id) {
+          debugPrint('[UnityBanner] LOAD SUCCESS: $id ✅');
+          if (mounted && _hasError) setState(() => _hasError = false);
+        },
+        onClick: (id) => debugPrint('[UnityBanner] CLICKED: $id'),
+        onShown: (id) => debugPrint('[UnityBanner] SHOWN ON SCREEN: $id'),
+        onFailed: (id, error, message) {
+          debugPrint('[UnityBanner] LOAD FAILED: $id | Error: $error | Msg: $message ❌');
+          if (mounted) setState(() => _hasError = true);
+          _scheduleRetry();
+        },
       ),
     );
   }
