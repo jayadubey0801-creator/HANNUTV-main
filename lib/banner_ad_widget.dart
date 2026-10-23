@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:unity_ads_plugin/unity_ads_plugin.dart';
 
 // ═══════════════════════════════════════════════════════════════════
-// 🔥 DEEP UNITY ADS HELPER (NO EXTRA FILE NEEDED) 🔥
+// 🔥 DEEP UNITY ADS HELPER (AUTO-INIT + WATERFALL LOGIC) 🔥
 // ═══════════════════════════════════════════════════════════════════
 class UnityAdsHelper {
   UnityAdsHelper._();
 
-  // Teri Unity Dashboard ki Exact IDs
+  // Teri Unity Dashboard ki Exact Placement IDs
   static const String gameId = '800405137';
   static const String bannerId = 'BP_Banner_Android';
   static const String interstitialId = 'BP_Interstitial_Android';
@@ -25,7 +25,7 @@ class UnityAdsHelper {
 
   static VoidCallback? _onAdReadyListener;
 
-  /// App start hote hi Unity Ads ko initialize aur preload karega
+  /// Unity Ads ko initialize aur preload karega
   static Future<void> init() async {
     if (isInitialized.value || _initInProgress) return;
     _initInProgress = true;

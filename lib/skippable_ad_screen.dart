@@ -42,12 +42,12 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     if (UnityAdsHelper.hasAnyVideoAdReady) {
       _launchVideoAdNow();
     } else {
-      UnityAdsHelper.preloadAds();
       UnityAdsHelper.setOnAdReadyListener(() {
         if (mounted && !_isNavigating && !_videoAdTriggered) {
           _launchVideoAdNow();
         }
       });
+      UnityAdsHelper.preloadAds();
     }
   }
 

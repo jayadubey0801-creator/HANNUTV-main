@@ -14,7 +14,7 @@ dependencies:
   webview_flutter: ^4.10.0
   webview_flutter_android: ^4.7.0
   app_links: ^6.1.1
-  unity_ads_plugin: ^0.3.12
+  unity_ads_plugin: ^0.5.0
   
   # 🔥 DEEP UI PACKAGES FOR PREMIUM DASHBOARD & AMBIENT COLOR 🔥
   cached_network_image: ^3.3.1
