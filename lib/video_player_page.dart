@@ -43,6 +43,11 @@ class VideoPlayerPage extends StatefulWidget {
   final String rating;
   final String year;
   final String? customUrl;
+  final bool isOfflineDownload;
+  final String? offlineFilePath;
+  final String? offlineLanguage;
+  final String? offlineQuality;
+  final String? offlineServerName;
 
   const VideoPlayerPage({
     super.key,
@@ -55,6 +60,11 @@ class VideoPlayerPage extends StatefulWidget {
     this.rating = '9.0',
     this.year = '2024',
     this.customUrl,
+    this.isOfflineDownload = false,
+    this.offlineFilePath,
+    this.offlineLanguage,
+    this.offlineQuality,
+    this.offlineServerName,
   });
 
   @override
