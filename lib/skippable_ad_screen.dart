@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'banner_ad_widget.dart';
-import 'unity_ads_helper.dart';
 
 class SkippableAdScreen extends StatefulWidget {
   final Widget nextScreen;
@@ -32,7 +31,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     _timeLeft = widget.adDuration;
     _startCountdown();
 
-    // 🔥 First frame ke baad safely Unity Video Ad trigger karo (No Build Crash) 🔥
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _tryLaunchUnityVideoAd();
     });
@@ -44,7 +42,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     if (UnityAdsHelper.hasAnyVideoAdReady) {
       _launchVideoAdNow();
     } else {
-      // Agar abhi load ho raha hai, toh load complete hote hi turant dikhao
       UnityAdsHelper.preloadAds();
       UnityAdsHelper.setOnAdReadyListener(() {
         if (mounted && !_isNavigating && !_videoAdTriggered) {
@@ -61,16 +58,18 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
 
     UnityAdsHelper.showFullScreenAd(
       onStart: () {
-        _isNativeAdShowing = true;
+        if (mounted) {
+          setState(() => _isNativeAdShowing = true);
+        }
       },
       onClosed: () {
         _isNativeAdShowing = false;
-        // Native Unity Ad skip ya complete hote hi sidha movie/nextScreen chalu karo
         _goToNextScreen();
       },
       onFailedToShow: () {
-        _isNativeAdShowing = false;
-        // Agar video ad fail ho jaye, toh fallback timer aur banner chalte rahenge
+        if (mounted) {
+          setState(() => _isNativeAdShowing = false);
+        }
       },
     );
   }
@@ -120,7 +119,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
         body: SafeArea(
           child: Stack(
             children: [
-              // 🔥 Center Unity Ad Area (Koi WebView nahi, sirf Native Unity Ads) 🔥
+              // 🔥 Center Unity Ads Area 🔥
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -147,7 +146,7 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        "Click on the ad to visit Play Store / Browser",
+                        "Click on the ad to open in Play Store / Browser",
                         style: TextStyle(color: Colors.white54, fontSize: 12),
                       ),
                       const SizedBox(height: 30),

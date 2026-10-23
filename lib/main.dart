@@ -11,11 +11,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import 'banner_ad_widget.dart';
 import 'config.dart';
 import 'dashboard_screen.dart';
 import 'skippable_ad_screen.dart';
 import 'tmdb_service.dart';
-import 'unity_ads_helper.dart';
 import 'video_player_page.dart';
 import 'widgets.dart';
 
@@ -42,7 +42,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🔥 Unity Ads Initialization (Non-blocking safe boot) 🔥
+  // 🔥 Unity Ads Initialization 🔥
   unawaited(UnityAdsHelper.init());
 
   try {
