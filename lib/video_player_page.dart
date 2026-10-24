@@ -245,13 +245,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
-      ..setUserAgent(
-        isTvDevice ? "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1"
-                   : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      )
+      ..setBackgroundColor(Colors.black);
+
+    // 🔥 THE BOT BYPASS FIX: Sirf TV ke liye Custom UA set hoga. 
+    // Mobile par default Android UA jayega, isliye Server isko "Bot" nahi manega aur "I'm not a robot" trap nahi aayega! 🔥
+    if (isTvDevice) {
+      _controller.setUserAgent("Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1");
+    }
+
+    _controller
       ..setOnJavaScriptAlertDialog((JavaScriptAlertDialogRequest request) async {})
       ..setOnJavaScriptConfirmDialog((JavaScriptConfirmDialogRequest request) async => true)
+      ..setOnJavaScriptTextInputDialog((JavaScriptTextInputDialogRequest request) async => '')
       ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { 
         if (message.message == 'playing' && mounted) _triggerCinematicPlayAnimation(); 
       })
@@ -265,7 +270,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 TERA EXACT PURANA CSS & JS LOGIC 🔥
+            // 🔥 INTEGRATED AI SCANNER: STICKER & ADS BYPASS 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
@@ -289,6 +294,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     padding: 0 !important; 
                 }
                 
+                /* EXCLUDE BAD IFRAMES FROM FULLSCREEN */
                 iframe:not([src*="ads"]):not([src*="leela"]):not([src*="pop"]):not([src*="track"]):not([src*="bet"]) {
                     position: fixed !important;
                     top: 0 !important;
@@ -314,9 +320,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
               }, true);
 
-              // 🔥 DEEP SILENT FIX FOR ROBOT & POPUPS 🔥
+              // 🔥 DEEP SILENT AUTO-CLICKER & STICKER NUKER 🔥
               setInterval(function() {
                 try {
+                  // 1. Auto Click Verifications (If any still bypass Cloudflare)
                   var btns = document.querySelectorAll('button, a, div[role="button"], span');
                   for(var i=0; i<btns.length; i++) {
                       var txt = (btns[i].innerText || btns[i].textContent || '').toLowerCase().trim();
@@ -325,17 +332,30 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       }
                   }
                   
+                  // 2. Kill Spam Modals
                   var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
-                  for(var j=0; j<spamEls.length; j++) {
-                    spamEls[j].click(); 
-                  }
+                  for(var j=0; j<spamEls.length; j++) { spamEls[j].click(); }
                   
+                  // 3. Kill Close buttons of Floating Popups
                   var closes = document.querySelectorAll('[class*="close"], [id*="close"], [class*="dismiss"]');
-                  for(var k=0; k<closes.length; k++) {
-                      closes[k].click();
+                  for(var k=0; k<closes.length; k++) { closes[k].click(); }
+
+                  // 4. 🔥 THE STICKER NUKER (Kills Floating Images/Gifs like Tennis Racket) 🔥
+                  var allElems = document.querySelectorAll('div, a, span, img');
+                  for(var x=0; x<allElems.length; x++) {
+                      var el = allElems[x];
+                      var style = window.getComputedStyle(el);
+                      if ((style.position === 'absolute' || style.position === 'fixed') && parseInt(style.zIndex) > 100) {
+                          if (el.tagName === 'IMG' || el.innerHTML.indexOf('<img') !== -1 || style.backgroundImage !== 'none') {
+                              if (el.clientWidth > 10 && el.clientWidth < 350) {
+                                  el.remove(); // Burn the sticker
+                              }
+                          }
+                      }
                   }
                 } catch(e) {}
 
+                // Make Sure Video Plays
                 var vids = document.getElementsByTagName('video');
                 if (vids.length > 0) {
                   var v = vids[0];
@@ -357,14 +377,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 if (playBtns.length > 0) {
                     try { playBtns[0].click(); } catch(e) {}
                 }
-              }, 500);
+              }, 300);
             ''';
             _controller.runJavaScript(jsCode);
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
             
-            // 🔥 ULTIMATE FIREWALL: Koi bhi Leela Palace / Thufd redirect yahin kill ho jayega 🔥
+            // 🔥 ULTIMATE FIREWALL: Koi bhi Leela Palace / Thufd / Spam link yahin block ho jayega 🔥
             if (url.contains('thufd.com') ||
                 url.contains('google.com') || 
                 url.contains('doubleclick') || 
@@ -398,6 +418,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         ),
       );
 
+    final platform = _controller.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setMediaPlaybackRequiresUserGesture(false);
+    }
+
     if (widget.customUrl != null && widget.customUrl!.isNotEmpty) {
       if (widget.customUrl!.contains('.m3u8')) {
         String hlsHtml = '''
@@ -405,7 +430,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
           <style>body, html { margin: 0; padding: 0; background: black; height: 100%; width: 100%; overflow: hidden; } video { width: 100%; height: 100%; object-fit: contain; }</style>
           </head><body>
-          <video id="video" autoplay controls></video>
+          <video id="video" autoplay controls playsinline></video>
           <script>
             var video = document.getElementById('video');
             if (Hls.isSupported()) {
@@ -462,7 +487,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _startControlsTimer();
   }
 
-  // 🔥 YOUTUBE-STYLE SWIPE UP/DOWN & LOGO TAP FOR FULLSCREEN ROTATION 🔥
+  // 🔥 YOUTUBE SWIPE GESTURE 🔥
   void _onVideoSwipe({required bool up}) {
     if (isTvDevice) return;
     if (up && !isFullScreen) {
