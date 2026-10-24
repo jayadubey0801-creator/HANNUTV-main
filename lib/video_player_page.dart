@@ -294,83 +294,84 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
-              // 🔥 POPUP / OVERLAY REMOVER: player ke upar aane wala koi bhi ad popup hata deta hai 🔥
+              // 🔥 STICKER REMOVER: circle / image wala adult sticker hatata hai. Iframe, video, player ko kabhi nahi chhuta 🔥
               (function() {
-                if (window.__hannuClean) return;
-                window.__hannuClean = true;
+                if (window.__hannuSticker) return;
+                window.__hannuSticker = true;
 
-                function pickPlayer() {
-                  var fr = document.getElementsByTagName('iframe');
-                  var first = null;
-                  for (var i = 0; i < fr.length; i++) {
-                    var f = fr[i];
-                    var al = (f.getAttribute('allow') || '').toLowerCase();
-                    if (f.hasAttribute('allowfullscreen') || al.indexOf('fullscreen') !== -1) {
-                      return { el: f, sure: true };
-                    }
-                    if (!first) first = f;
-                  }
-                  return { el: first, sure: false };
-                }
+                var SKIP = ['play', 'vjs', 'jw-', 'plyr', 'control', 'poster', 'loader', 'spinner', 'logo'];
 
-                function adLikeSrc(s) {
-                  s = (s || '').toLowerCase();
-                  var keys = ['ads', 'adsterra', 'monetag', 'propeller', 'exoclick', 'popads', 'doubleclick', 'banner', 'popup', 'onclick', '1xbet', 'bet365'];
-                  for (var k = 0; k < keys.length; k++) {
-                    if (s.indexOf(keys[k]) !== -1) return true;
+                function guarded(el) {
+                  var nm = ((el.getAttribute && el.getAttribute('class')) || '') + ' ' + (el.id || '');
+                  nm = nm.toLowerCase();
+                  for (var s = 0; s < SKIP.length; s++) {
+                    if (nm.indexOf(SKIP[s]) !== -1) return true;
                   }
                   return false;
                 }
 
-                function clean() {
+                function isFloating(cs) {
+                  return cs.position === 'fixed' || cs.position === 'sticky' || cs.position === 'absolute';
+                }
+
+                function isSticker(el, cs) {
+                  var br = cs.borderRadius || '';
+                  var circle = br.indexOf('50%') !== -1 || parseFloat(br) >= 40;
+                  var hasImg = el.tagName === 'IMG' || !!el.querySelector('img');
+                  var hasBg = !!cs.backgroundImage && cs.backgroundImage !== 'none';
+                  if (circle && (hasImg || hasBg)) return true;
+                  if (isFloating(cs) && hasImg) return true;
+                  return false;
+                }
+
+                function cleanDoc(doc, depth) {
                   try {
-                    if (!document.body) return;
-                    var pl = pickPlayer();
-                    var p = pl.el;
-                    var vids = document.getElementsByTagName('video');
-                    if (!p && vids.length === 0) return;
-
-                    var vroot = null;
-                    if (vids.length > 0) {
-                      vroot = vids[0].parentElement;
-                      if (vroot === document.body || vroot === document.documentElement) vroot = null;
-                    }
-
-                    var all = document.body.getElementsByTagName('*');
+                    if (!doc || !doc.body || depth > 3) return;
+                    var win = doc.defaultView;
+                    if (!win) return;
+                    var all = Array.prototype.slice.call(doc.body.getElementsByTagName('*'));
                     for (var i = all.length - 1; i >= 0; i--) {
                       var el = all[i];
+                      if (!el.isConnected) continue;
                       var t = el.tagName;
-                      if (t === 'SCRIPT' || t === 'STYLE' || t === 'LINK' || t === 'META' || t === 'NOSCRIPT' || t === 'VIDEO' || t === 'SOURCE' || t === 'TRACK') continue;
-                      if (el === p) continue;
-                      if (p && el.contains(p)) continue;
-                      if (el.querySelector('video')) continue;
-                      if (vroot && vroot.contains(el)) continue;
-
                       if (t === 'IFRAME') {
-                        if (pl.sure || adLikeSrc(el.getAttribute('src'))) el.remove();
+                        try { if (el.contentDocument) cleanDoc(el.contentDocument, depth + 1); } catch (e1) {}
                         continue;
                       }
+                      if (t === 'SCRIPT' || t === 'STYLE' || t === 'LINK' || t === 'META' || t === 'NOSCRIPT' || t === 'VIDEO' || t === 'SOURCE' || t === 'TRACK') continue;
+                      if (el.querySelector('video') || el.querySelector('iframe')) continue;
+                      if (el.closest('video')) continue;
+                      if (guarded(el)) continue;
+                      var cs = win.getComputedStyle(el);
+                      if (!isSticker(el, cs)) continue;
 
-                      var cs = window.getComputedStyle(el);
-                      var z = parseInt(cs.zIndex, 10);
-                      if (cs.position === 'fixed' || cs.position === 'sticky' || (cs.position === 'absolute' && z > 100)) {
-                        el.remove();
+                      var target = el;
+                      var par = el.parentElement;
+                      for (var up = 0; up < 4 && par && par !== doc.body && par !== doc.documentElement; up++) {
+                        if (par.querySelector('video') || par.querySelector('iframe')) break;
+                        if (guarded(par)) break;
+                        if (!isFloating(win.getComputedStyle(par))) break;
+                        target = par;
+                        par = par.parentElement;
                       }
+                      target.remove();
                     }
-                  } catch (err) {}
+                  } catch (e2) {}
                 }
+
+                function run() { cleanDoc(document, 0); }
 
                 var busy = false;
                 try {
                   new MutationObserver(function() {
                     if (busy) return;
                     busy = true;
-                    setTimeout(function() { busy = false; clean(); }, 150);
+                    setTimeout(function() { busy = false; run(); }, 120);
                   }).observe(document.documentElement, { childList: true, subtree: true });
-                } catch (err) {}
+                } catch (e3) {}
 
-                setInterval(clean, 600);
-                clean();
+                setInterval(run, 400);
+                run();
               })();
 
               // 🔥 JS TOUCH AD BLOCKER 🔥
