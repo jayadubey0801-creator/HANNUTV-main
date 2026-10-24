@@ -14,7 +14,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
-import 'stores.dart';
+import 'stores.dart'; 
 import 'tmdb_service.dart';
 import 'config.dart' show kAllGenres, GenreDef;
 
@@ -68,8 +68,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool isVideoPlaying = false;
   bool isFullScreen = false;
   bool isPageLoading = true;
-
-  String activeServer = 'vidrift';
+  
+  String activeServer = 'vidrift'; 
   String currentAspectRatio = 'contain';
 
   late int currentSeason;
@@ -78,7 +78,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   bool showControls = true;
   Timer? _hideControlsTimer;
-  Timer? _liveTvAdTimer;
+  Timer? _liveTvAdTimer; 
 
   bool showIntroAnimation = false;
   late AnimationController _introAnimController;
@@ -100,18 +100,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
   final List<Map<String, String>> servers = const [
-    {'key': 'vidrift', 'name': 'Rift'},
-    {'key': 'bingr', 'name': 'Fast'},
-    {'key': 'vidcore', 'name': 'Fast (Ads)'},
-    {'key': 'vidbolt', 'name': 'Bolt'},
-    {'key': 'cinezo', 'name': 'Cinezo'},
-    {'key': 'peachify', 'name': 'Peach'},
-    {'key': 'vidlink', 'name': 'Mega'},
-    {'key': 'vidfast', 'name': 'Alpha'},
-    {'key': 'vidrock', 'name': 'Orion'},
-    {'key': 'hindi-new', 'name': 'Hindi New'},
-    {'key': 'screenscape', 'name': 'Hindi'},
-    {'key': 'zxcstream', 'name': 'Vidgod'},
+    {'key': 'vidrift', 'name': 'Rift'},          
+    {'key': 'bingr', 'name': 'Fast'},           
+    {'key': 'vidcore', 'name': 'Fast (Ads)'},   
+    {'key': 'vidbolt', 'name': 'Bolt'},           
+    {'key': 'cinezo', 'name': 'Cinezo'},          
+    {'key': 'peachify', 'name': 'Peach'},       
+    {'key': 'vidlink', 'name': 'Mega'},           
+    {'key': 'vidfast', 'name': 'Alpha'},          
+    {'key': 'vidrock', 'name': 'Orion'},         
+    {'key': 'hindi-new', 'name': 'Hindi New'},   
+    {'key': 'screenscape', 'name': 'Hindi'},      
+    {'key': 'zxcstream', 'name': 'Vidgod'},      
     {'key': 'cinesrc', 'name': 'CineSrc'},
   ];
 
@@ -135,26 +135,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (widget.customUrl == null) {
       _fetchSimilarMovies();
       _fetchTvDetails();
-      _fetchDetails();
+      _fetchDetails(); 
     } else {
-      // 🔥 LIVE TV HAR 10 MINUTE PAR UNITY AD TRIGGER KAREGA 🔥
-      _liveTvAdTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
+      _liveTvAdTimer = Timer.periodic(const Duration(minutes: 8), (timer) {
         if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (context) => SkippableAdScreen(
-                adDuration: 15,
+                adDuration: 60, 
                 nextScreen: VideoPlayerPage(
-                  tmdbId: widget.tmdbId,
-                  mediaType: widget.mediaType,
-                  season: widget.season,
-                  episode: widget.episode,
-                  movieTitle: widget.movieTitle,
-                  overview: widget.overview,
-                  rating: widget.rating,
-                  year: widget.year,
-                  customUrl: widget.customUrl,
+                  tmdbId: widget.tmdbId, mediaType: widget.mediaType,
+                  season: widget.season, episode: widget.episode,
+                  movieTitle: widget.movieTitle, overview: widget.overview,
+                  rating: widget.rating, year: widget.year, customUrl: widget.customUrl,
                 ),
               ),
             ),
@@ -165,7 +159,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
     _checkDeviceType();
     WatchlistStore.I.load();
-    _startAmbientCycle();
+    _startAmbientCycle(); 
   }
 
   Future<void> _fetchTvDetails() async {
@@ -195,8 +189,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final size = MediaQuery.of(context).size;
       setState(() {
-        isTvDevice = size.width > size.height && size.width > 600;
-        if (isTvDevice) isFullScreen = true;
+        isTvDevice = size.width > size.height && size.width > 600; 
+        if (isTvDevice) isFullScreen = true; 
         else { SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); }
       });
       _startControlsTimer();
@@ -252,23 +246,19 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         isTvDevice ? "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1"
                    : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       )
-      ..setOnJavaScriptAlertDialog((JavaScriptAlertDialogRequest request) async {})
-      ..setOnJavaScriptConfirmDialog((JavaScriptConfirmDialogRequest request) async => false)
-      ..setOnJavaScriptTextInputDialog((JavaScriptTextInputDialogRequest request) async => '')
-      ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) {
-        if (message.message == 'playing' && mounted) _triggerCinematicPlayAnimation();
+      ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { 
+        if (message.message == 'playing' && mounted) _triggerCinematicPlayAnimation(); 
       })
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) {
-            if (mounted) setState(() => isPageLoading = true);
+          onPageStarted: (String url) { 
+            if (mounted) setState(() => isPageLoading = true); 
           },
           onPageFinished: (String url) {
             Future.delayed(const Duration(milliseconds: 600), () {
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 TERA EXACT PURANA WORKING CSS AUR IFRAME LOGIC (UNTOUCHED!) 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
@@ -304,91 +294,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
-              // 🔥 STICKER REMOVER: circle / image wala adult sticker hatata hai. Iframe, video, player ko kabhi nahi chhuta 🔥
-              (function() {
-                if (window.__hannuSticker) return;
-                window.__hannuSticker = true;
-
-                var SKIP = ['play', 'vjs', 'jw-', 'plyr', 'control', 'poster', 'loader', 'spinner', 'logo'];
-
-                function guarded(el) {
-                  var nm = ((el.getAttribute && el.getAttribute('class')) || '') + ' ' + (el.id || '');
-                  nm = nm.toLowerCase();
-                  for (var s = 0; s < SKIP.length; s++) {
-                    if (nm.indexOf(SKIP[s]) !== -1) return true;
-                  }
-                  return false;
-                }
-
-                function isFloating(cs) {
-                  return cs.position === 'fixed' || cs.position === 'sticky' || cs.position === 'absolute';
-                }
-
-                function isSticker(el, cs) {
-                  var br = cs.borderRadius || '';
-                  var circle = br.indexOf('50%') !== -1 || parseFloat(br) >= 40;
-                  var hasImg = el.tagName === 'IMG' || !!el.querySelector('img');
-                  var hasBg = !!cs.backgroundImage && cs.backgroundImage !== 'none';
-                  if (circle && (hasImg || hasBg)) return true;
-                  if (isFloating(cs) && hasImg) return true;
-                  return false;
-                }
-
-                function cleanDoc(doc, depth) {
-                  try {
-                    if (!doc || !doc.body || depth > 3) return;
-                    var win = doc.defaultView;
-                    if (!win) return;
-                    var all = Array.prototype.slice.call(doc.body.getElementsByTagName('*'));
-                    for (var i = all.length - 1; i >= 0; i--) {
-                      var el = all[i];
-                      if (!el.isConnected) continue;
-                      var t = el.tagName;
-                      if (t === 'IFRAME') {
-                        try { if (el.contentDocument) cleanDoc(el.contentDocument, depth + 1); } catch (e1) {}
-                        continue;
-                      }
-                      if (t === 'SCRIPT' || t === 'STYLE' || t === 'LINK' || t === 'META' || t === 'NOSCRIPT' || t === 'VIDEO' || t === 'SOURCE' || t === 'TRACK') continue;
-                      if (el.querySelector('video') || el.querySelector('iframe')) continue;
-                      if (el.closest('video')) continue;
-                      if (guarded(el)) continue;
-                      var cs = win.getComputedStyle(el);
-                      if (!isSticker(el, cs)) continue;
-
-                      var target = el;
-                      var par = el.parentElement;
-                      for (var up = 0; up < 4 && par && par !== doc.body && par !== doc.documentElement; up++) {
-                        if (par.querySelector('video') || par.querySelector('iframe')) break;
-                        if (guarded(par)) break;
-                        if (!isFloating(win.getComputedStyle(par))) break;
-                        target = par;
-                        par = par.parentElement;
-                      }
-                      target.remove();
-                    }
-                  } catch (e2) {}
-                }
-
-                function run() { cleanDoc(document, 0); }
-
-                var busy = false;
-                try {
-                  new MutationObserver(function() {
-                    if (busy) return;
-                    busy = true;
-                    setTimeout(function() { busy = false; run(); }, 120);
-                  }).observe(document.documentElement, { childList: true, subtree: true });
-                } catch (e3) {}
-
-                setInterval(run, 400);
-                run();
-              })();
-
               // 🔥 JS TOUCH AD BLOCKER 🔥
               window.open = function() { return null; };
               window.alert = function() { return null; };
-              window.confirm = function() { return false; };
-              window.prompt = function() { return null; };
               
               document.addEventListener('click', function(e) {
                   var target = e.target;
@@ -426,13 +334,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
-
+            
             // 🔥 DEEP AD-BLOCKER: Koi bhi Ad ya Google ka link khulne nahi dega 🔥
-            if (url.contains('google.com') ||
-                url.contains('doubleclick') ||
-                url.contains('popads') ||
-                url.contains('1xbet') ||
-                url.contains('bet365') ||
+            if (url.contains('google.com') || 
+                url.contains('doubleclick') || 
+                url.contains('popads') || 
+                url.contains('1xbet') || 
+                url.contains('bet365') || 
                 url.contains('adsterra') ||
                 url.contains('redirect') ||
                 url.contains('onclick') ||
@@ -440,7 +348,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 url.startsWith('market://') ||
                 url.startsWith('whatsapp://') ||
                 url.contains('about:blank')) {
-              return NavigationDecision.prevent;
+                return NavigationDecision.prevent;
             }
 
             // 🔥 SCREEN TOUCH SHIELD: Agar ad click se main page Google pe redirect hone ki koshish kare toh block karo 🔥
@@ -483,14 +391,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } else {
       final id = widget.tmdbId;
       final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
-
-      String originalTargetUrl = isTv
-          ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer'
+      
+      String originalTargetUrl = isTv 
+          ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
           : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer';
-
+      
       String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
       String safeFinalUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
-
+      
       _controller.loadRequest(Uri.parse(safeFinalUrl));
     }
   }
@@ -506,7 +414,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   void _toggleFullScreen() {
-    if (isTvDevice) return;
+    if (isTvDevice) return; 
     setState(() { isFullScreen = !isFullScreen; });
     if (isFullScreen) {
       SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
@@ -516,16 +424,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     _startControlsTimer();
-  }
-
-  // 🔥 SWIPE GESTURE: video pe upar swipe = fullscreen (landscape), neeche swipe = wapas chhoti screen.
-  void _onVideoSwipe({required bool up}) {
-    if (isTvDevice) return;
-    if (up && !isFullScreen) {
-      _toggleFullScreen();
-    } else if (!up && isFullScreen) {
-      _toggleFullScreen();
-    }
   }
 
   void _switchEpisode(int ep) {
@@ -548,7 +446,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       )
     );
   }
-
+  
   void _switchSeason(int seasonNum) {
     setState(() { currentSeason = seasonNum; currentEpisode = 1; episodesList.clear(); });
     _fetchEpisodes(seasonNum);
@@ -568,7 +466,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               const SizedBox(height: 16),
               Expanded(
                 child: ListView.builder(
-                  itemCount: totalSeasons,
+                  itemCount: totalSeasons, 
                   itemBuilder: (context, index) {
                     int seasonNum = index + 1;
                     return ListTile(
@@ -606,10 +504,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       itemCount: servers.length,
                       itemBuilder: (context, index) {
                         final srv = servers[index];
-                        int mockPing = Random().nextInt(250) + 15;
+                        int mockPing = Random().nextInt(250) + 15; 
                         Color pingColor = mockPing < 80 ? Colors.greenAccent : (mockPing < 150 ? Colors.orangeAccent : Colors.redAccent);
                         IconData towerIcon = mockPing < 80 ? Icons.signal_cellular_alt : (mockPing < 150 ? Icons.signal_cellular_alt_2_bar : Icons.signal_cellular_alt_1_bar);
-
+                        
                         List<String> langs = ['English'];
                         if (srv['name']!.toLowerCase().contains('hindi') || srv['key'] == 'cinezo') langs.addAll(['Hindi', 'Tamil', 'Telugu']);
                         if (srv['key'] == 'vidrift' || srv['key'] == 'bingr' || srv['key'] == 'vidbolt') langs.addAll(['Hindi', 'Spanish']);
@@ -813,7 +711,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final String posterPath = await _posterUrlForWatchlist();
     final Map<String, dynamic> tmdbData = {
       'id': widget.tmdbId,
-      'is_tv': _tmdbType == 'tv',
+      'is_tv': _tmdbType == 'tv', 
       'title': widget.movieTitle,
       'name': widget.movieTitle,
       'release_date': widget.year,
@@ -1250,9 +1148,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please login from Dashboard to comment!'), backgroundColor: Colors.redAccent));
         return;
       }
-
+      
       String movieId = widget.customUrl == null ? widget.tmdbId.toString() : 'live_${widget.movieTitle.replaceAll(" ", "_")}';
-
+      
       await FirebaseFirestore.instance.collection('movies').doc(movieId).collection('comments').add({
         'name': user.displayName ?? 'HANNUTV User',
         'text': text,
@@ -1260,7 +1158,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         'timestamp': FieldValue.serverTimestamp(),
         'avatar': (user.displayName != null && user.displayName!.isNotEmpty) ? user.displayName![0].toUpperCase() : 'H',
       });
-
+      
       commentInputController.clear();
       FocusScope.of(context).unfocus();
     }
@@ -1268,9 +1166,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   @override
   void dispose() {
-    _hideControlsTimer?.cancel();
-    _liveTvAdTimer?.cancel();
-    _introAnimController.dispose();
+    _hideControlsTimer?.cancel(); 
+    _liveTvAdTimer?.cancel(); 
+    _introAnimController.dispose(); 
     commentInputController.dispose();
     _ambientTimer?.cancel();
     _ambientColor.dispose();
@@ -1354,28 +1252,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   @override
   Widget build(BuildContext context) {
-    if (isTvDevice) return _buildTVLayout();
+    if (isTvDevice) return _buildTVLayout(); 
 
     if (isFullScreen) {
-      return WillPopScope(
-        onWillPop: () async {
-          _toggleFullScreen();
-          return false;
-        },
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            children: [
-              Positioned.fill(child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
-              if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
-              Positioned(top: 14, right: 20, child: SafeArea(child: GestureDetector(onTap: _toggleFullScreen, child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
-              if (showControls) ...[
-                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
-                Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
-                Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
-              ],
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+            if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
+            Positioned(top: 14, right: 20, child: SafeArea(child: IgnorePointer(child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
+            if (showControls) ...[
+              Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
+              Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: () { SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); Navigator.pop(context); }, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
+              Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
             ],
-          ),
+          ],
         ),
       );
     }
@@ -1398,7 +1290,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               onTap: _startControlsTimer,
               child: Stack(
                 children: [
-                  Container(width: double.infinity, height: 230, color: Colors.black, child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
+                  Container(width: double.infinity, height: 230, color: Colors.black, child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
                   Positioned(
                     top: 10, right: 14,
                     child: GestureDetector(
@@ -1596,9 +1488,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: const [
-                              Text("Public Comments", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                              Icon(Icons.comment, color: Colors.grey, size: 16),
+                            children: [
+                              Text("Public Comments", style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                              const Icon(Icons.comment, color: Colors.grey, size: 16),
                             ],
                           ),
                           const SizedBox(height: 10),
@@ -1680,14 +1572,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           itemBuilder: (context, index) {
                             final m = similarMovies[index];
                             return _buildFocusableItem(
-                              onTap: () {
+                              onTap: () { 
                                 Navigator.pushReplacement(
-                                  context,
+                                  context, 
                                   MaterialPageRoute(builder: (context) => SkippableAdScreen(
                                     adDuration: 10,
                                     nextScreen: VideoPlayerPage(tmdbId: m['id'], mediaType: m['mediaType'], movieTitle: m['title'], rating: m['rating'], year: m['year'])
                                   ))
-                                );
+                                ); 
                               },
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
@@ -1795,7 +1687,7 @@ class _GlowPainter extends CustomPainter {
     final double w = size.width;
     final double h = size.height;
     final List<Offset> pts = <Offset>[
-      const Offset(0, 0), Offset(w / 2, 0), Offset(w, 0), Offset(w, h / 2),
+      Offset(0, 0), Offset(w / 2, 0), Offset(w, 0), Offset(w, h / 2),
       Offset(w, h), Offset(w / 2, h), Offset(0, h), Offset(0, h / 2),
     ];
     final double radius = h * 0.40;
@@ -2412,6 +2304,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
+
 // Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
@@ -2571,72 +2464,6 @@ class _SuggestRowState extends State<_SuggestRow> {
           ),
         ],
       ),
-    );
-  }
-}
-
-// Video ke upar swipe: UPAR swipe = fullscreen (landscape), NEECHE swipe = wapas chhoti screen (portrait).
-class _SwipeFullscreen extends StatefulWidget {
-  final ValueNotifier<double> zoom;
-  final VoidCallback onSwipeUp;
-  final VoidCallback onSwipeDown;
-  final Widget child;
-  const _SwipeFullscreen({
-    required this.zoom,
-    required this.onSwipeUp,
-    required this.onSwipeDown,
-    required this.child,
-  });
-
-  @override
-  State<_SwipeFullscreen> createState() => _SwipeFullscreenState();
-}
-
-class _SwipeFullscreenState extends State<_SwipeFullscreen> {
-  static const double _minDistance = 60;
-  int _count = 0;
-  bool _multi = false;
-  Offset _start = Offset.zero;
-
-  void _down(PointerDownEvent e) {
-    _count++;
-    if (_count == 1) {
-      _start = e.position;
-      _multi = false;
-    } else {
-      _multi = true;
-    }
-  }
-
-  void _up(PointerUpEvent e) {
-    final bool single = !_multi && _count == 1;
-    final Offset d = e.position - _start;
-    _release();
-    if (!single) return;
-    if (widget.zoom.value > 1.05) return;
-    if (d.dy.abs() < _minDistance) return;
-    if (d.dy.abs() < d.dx.abs() * 1.5) return;
-    if (d.dy < 0) {
-      widget.onSwipeUp();
-    } else {
-      widget.onSwipeDown();
-    }
-  }
-
-  void _cancel(PointerCancelEvent e) => _release();
-
-  void _release() {
-    _count = _count > 0 ? _count - 1 : 0;
-    if (_count == 0) _multi = false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: _down,
-      onPointerUp: _up,
-      onPointerCancel: _cancel,
-      child: widget.child,
     );
   }
 }
