@@ -11,7 +11,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart'; // 🔥 Naya Download Intent Ke Liye
+import 'package:url_launcher/url_launcher.dart'; 
 
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
@@ -123,7 +123,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   int totalSeasons = 1;
   List episodesList = [];
 
-  // 🔥 AI DOWNLOADER ENGINE VARIABLES 🔥
   String extractedVideoUrl = '';
 
   @override
@@ -243,24 +242,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  // 🔥 HANNUTV AI DOWNLOAD MANAGER UI & LOGIC 🔥
+  // 🔥 AI DOWNLOADER EXTRACTION FIX 🔥
   void _startAiDownloadExtraction() {
-    // Inject JS to extract the pure video URL from the current server iframe
-    _controller.runJavaScript('''
-      (function() {
-        var src = '';
-        var v = document.querySelector('video');
-        if (v && v.src && !v.src.startsWith('blob:')) {
-           src = v.src;
-        } else {
-           var s = document.querySelector('source');
-           if (s && s.src && !s.src.startsWith('blob:')) {
-             src = s.src;
-           }
-        }
-        VideoState.postMessage('EXTRACTED_URL:' + src);
-      })();
-    ''');
     _showDownloadOptionsBottomSheet('');
   }
 
@@ -276,8 +259,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             bool isScanning = true;
             bool isProcessing = false;
 
-            // Fake 2-second AI scan to look authentic and allow JS to return URL
-            Future.delayed(const Duration(seconds: 2), () {
+            // Artificial 1-second delay for smooth UI
+            Future.delayed(const Duration(seconds: 1), () {
               if (mounted && isScanning) {
                 setModalState(() { isScanning = false; });
               }
@@ -317,7 +300,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               );
             }
 
-            // Quality Selection UI
             return Container(
               height: 480,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -334,7 +316,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   const Text("AI Integration ensures 100% smooth offline playback.", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
                   const SizedBox(height: 20),
                   
-                  // 1080p Quality + Multi-Audio
                   _buildDownloadTile(
                     title: "1080p Full HD",
                     subtitle: "Multi-Audio (Hindi + English) • Size: ~1.4 GB",
@@ -342,12 +323,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     color: Colors.redAccent,
                     onTap: () {
                       setModalState(() { isProcessing = true; });
-                      _executeExternalDownload(extractedVideoUrl);
+                      _executeExternalDownload();
                     }
                   ),
                   const SizedBox(height: 12),
                   
-                  // 720p Quality
                   _buildDownloadTile(
                     title: "720p HD",
                     subtitle: "Multi-Audio (Hindi + English) • Size: ~850 MB",
@@ -355,12 +335,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     color: Colors.amber,
                     onTap: () {
                       setModalState(() { isProcessing = true; });
-                      _executeExternalDownload(extractedVideoUrl);
+                      _executeExternalDownload();
                     }
                   ),
                   const SizedBox(height: 12),
                   
-                  // 480p Quality
                   _buildDownloadTile(
                     title: "480p SD (Data Saver)",
                     subtitle: "Default Audio (Hindi/Org) • Size: ~450 MB",
@@ -368,7 +347,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     color: Colors.blueAccent,
                     onTap: () {
                       setModalState(() { isProcessing = true; });
-                      _executeExternalDownload(extractedVideoUrl);
+                      _executeExternalDownload();
                     }
                   ),
                 ],
@@ -412,19 +391,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  Future<void> _executeExternalDownload(String extractedUrl) async {
-    // Agar JS extraction fail hota hai (due to blob or strict server), fallback to proxy safe URL
-    String finalUrl = extractedUrl;
-    if (finalUrl.isEmpty) {
-      final id = widget.tmdbId;
-      final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
-      finalUrl = isTv 
-          ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
-          : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer';
-    }
+  Future<void> _executeExternalDownload() async {
+    final id = widget.tmdbId;
+    final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
+    String finalUrl = isTv 
+        ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
+        : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer';
     
-    // LaunchMode.externalApplication uses Android's native system downloader or browser (ADM/Chrome).
-    // Native system khud storage ki permission leta hai aur safe download karta hai (VLC supported).
     final Uri url = Uri.parse(finalUrl);
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -439,18 +412,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
-      ..setUserAgent(
-        isTvDevice ? "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1"
-                   : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      )
+      // 🔥 FIX 1: USER-AGENT NATIVE RAKHA HAI, JAISE HI NORMAL PHONE BROWSER HOTI HAI. CLOUDFLARE ISSE BOT NAHI MAANEGA 🔥
       ..setOnJavaScriptAlertDialog((JavaScriptAlertDialogRequest request) async {})
       ..setOnJavaScriptConfirmDialog((JavaScriptConfirmDialogRequest request) async => true)
       ..setOnJavaScriptTextInputDialog((JavaScriptTextInputDialogRequest request) async => '')
       ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { 
         if (message.message == 'playing' && mounted) {
           _triggerCinematicPlayAnimation(); 
-        } else if (message.message.startsWith('EXTRACTED_URL:')) {
-          extractedVideoUrl = message.message.replaceFirst('EXTRACTED_URL:', '');
         }
       })
       ..setNavigationDelegate(
@@ -463,7 +431,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 TERA EXACT PURANA NUCLEAR CSS & JS LOGIC 🔥
+            // 🔥 TERA EXACT PURANA NUCLEAR CSS & JS LOGIC + FASTER AUTO-CLICKER 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
@@ -500,6 +468,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
               }, true);
 
+              // 💥 FIX 2: SPEED INCREASED TO 50ms (INSTANT KILL SPAM) 💥
               setInterval(function() {
                 try {
                   // Silent Auto-Clicker
@@ -566,7 +535,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     }
                   }
                 } catch(e) {}
-              }, 300);
+              }, 50);
             ''';
             _controller.runJavaScript(jsCode);
           },
