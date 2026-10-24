@@ -250,6 +250,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         isTvDevice ? "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1"
                    : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       )
+      ..setOnJavaScriptAlertDialog((JavaScriptAlertDialogRequest request) async {})
+      ..setOnJavaScriptConfirmDialog((JavaScriptConfirmDialogRequest request) async => true)
       ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { 
         if (message.message == 'playing' && mounted) _triggerCinematicPlayAnimation(); 
       })
@@ -269,11 +271,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               document.documentElement.style.backgroundColor = '#000000';
               
               var style = document.createElement('style');
-              // Maine yahan sirf "leela" aur "pop" add kiya hai taaki wo hide ho jaye aur video chhupe nahi
               style.innerHTML = `
                 header, nav, footer, .navbar, .logo, .search, form, 
                 h1, h2, h3, p, span, .menu,
-                .ad-container, .ads, [class*="ad-"], a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"], iframe[src*="leela"], iframe[src*="pop"] { 
+                .ad-container, .ads, [class*="ad-"], a[target="_blank"], 
+                iframe[src*="ads"], iframe[src*="bet"], iframe[src*="leela"], iframe[src*="pop"], iframe[src*="track"] { 
                     display: none !important; 
                     opacity: 0 !important; 
                     visibility: hidden !important; 
@@ -287,7 +289,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     padding: 0 !important; 
                 }
                 
-                iframe:not([src*="ads"]):not([src*="leela"]):not([src*="pop"]) {
+                iframe:not([src*="ads"]):not([src*="leela"]):not([src*="pop"]):not([src*="track"]):not([src*="bet"]) {
                     position: fixed !important;
                     top: 0 !important;
                     left: 0 !important;
@@ -302,6 +304,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
               window.open = function() { return null; };
               window.alert = function() { return null; };
+              window.confirm = function() { return true; };
               
               document.addEventListener('click', function(e) {
                   var target = e.target;
@@ -311,7 +314,28 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
               }, true);
 
+              // 🔥 DEEP SILENT FIX FOR ROBOT & POPUPS 🔥
               setInterval(function() {
+                try {
+                  var btns = document.querySelectorAll('button, a, div[role="button"], span');
+                  for(var i=0; i<btns.length; i++) {
+                      var txt = (btns[i].innerText || btns[i].textContent || '').toLowerCase().trim();
+                      if(txt === "i'm not a robot" || txt === "im not a robot" || txt === "continue" || txt.indexOf("verify") !== -1) {
+                          btns[i].click();
+                      }
+                  }
+                  
+                  var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
+                  for(var j=0; j<spamEls.length; j++) {
+                    spamEls[j].click(); 
+                  }
+                  
+                  var closes = document.querySelectorAll('[class*="close"], [id*="close"], [class*="dismiss"]');
+                  for(var k=0; k<closes.length; k++) {
+                      closes[k].click();
+                  }
+                } catch(e) {}
+
                 var vids = document.getElementsByTagName('video');
                 if (vids.length > 0) {
                   var v = vids[0];
@@ -333,19 +357,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 if (playBtns.length > 0) {
                     try { playBtns[0].click(); } catch(e) {}
                 }
-
-                // 🔥 DEEP SILENT FIX FOR ROBOT & POPUPS (NO CSS CHANGES) 🔥
-                try {
-                  var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
-                  for(var i=0; i<spamEls.length; i++) {
-                    spamEls[i].click(); // Auto click robot verify
-                  }
-                  var badIframes = document.querySelectorAll('iframe[src*="leela"], iframe[src*="pop"], iframe[src*="track"], iframe[src*="bet"]');
-                  for(var j=0; j<badIframes.length; j++) {
-                    badIframes[j].remove(); // Remove bad overlays
-                  }
-                } catch(e) {}
-
               }, 500);
             ''';
             _controller.runJavaScript(jsCode);
@@ -353,19 +364,25 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
             
-            // 🔥 DEEP AD-BLOCKER: Koi bhi Ad ya Spam link khulne nahi dega 🔥
-            if (url.contains('google.com') || 
+            // 🔥 ULTIMATE FIREWALL: Koi bhi Leela Palace / Thufd redirect yahin kill ho jayega 🔥
+            if (url.contains('thufd.com') ||
+                url.contains('google.com') || 
                 url.contains('doubleclick') || 
                 url.contains('popads') || 
                 url.contains('1xbet') || 
                 url.contains('bet365') || 
                 url.contains('adsterra') ||
+                url.contains('highrevenue') ||
+                url.contains('profitablerate') ||
+                url.contains('omg10') ||
                 url.contains('redirect') ||
                 url.contains('onclick') ||
                 url.contains('leela') ||
+                url.contains('track') ||
                 url.startsWith('intent://') ||
                 url.startsWith('market://') ||
                 url.startsWith('whatsapp://') ||
+                url.startsWith('tg://') ||
                 url.contains('about:blank')) {
                 return NavigationDecision.prevent;
             }
@@ -1295,7 +1312,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             children: [
               Positioned.fill(child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
               if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
-              // 🔥 HANNUTV LOGO TAP PAR BHI ROTATE HOGA 🔥
               Positioned(top: 14, right: 20, child: SafeArea(child: GestureDetector(onTap: _toggleFullScreen, child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
               if (showControls) ...[
                 Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
