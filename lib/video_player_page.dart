@@ -137,13 +137,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _fetchTvDetails();
       _fetchDetails(); 
     } else {
-      _liveTvAdTimer = Timer.periodic(const Duration(minutes: 8), (timer) {
+      // 🔥 LIVE TV: EXACT 10 MINUTE UNITY AD TIMER 🔥
+      _liveTvAdTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
         if (mounted) {
+          try { _controller.loadRequest(Uri.parse('about:blank')); } catch(_) {}
+          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (context) => SkippableAdScreen(
-                adDuration: 60, 
+                adDuration: 15, 
                 nextScreen: VideoPlayerPage(
                   tmdbId: widget.tmdbId, mediaType: widget.mediaType,
                   season: widget.season, episode: widget.episode,
@@ -259,15 +263,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (mounted) setState(() => isPageLoading = false);
             });
 
+            // 🔥 TERA EXACT PURANA CSS & JS LOGIC 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
               
               var style = document.createElement('style');
+              // Maine yahan sirf "leela" aur "pop" add kiya hai taaki wo hide ho jaye aur video chhupe nahi
               style.innerHTML = `
                 header, nav, footer, .navbar, .logo, .search, form, 
                 h1, h2, h3, p, span, .menu,
-                .ad-container, .ads, [class*="ad-"], a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"] { 
+                .ad-container, .ads, [class*="ad-"], a[target="_blank"], iframe[src*="ads"], iframe[src*="bet"], iframe[src*="leela"], iframe[src*="pop"] { 
                     display: none !important; 
                     opacity: 0 !important; 
                     visibility: hidden !important; 
@@ -281,7 +287,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     padding: 0 !important; 
                 }
                 
-                iframe:not([src*="ads"]) {
+                iframe:not([src*="ads"]):not([src*="leela"]):not([src*="pop"]) {
                     position: fixed !important;
                     top: 0 !important;
                     left: 0 !important;
@@ -294,7 +300,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
-              // 🔥 JS TOUCH AD BLOCKER 🔥
               window.open = function() { return null; };
               window.alert = function() { return null; };
               
@@ -320,14 +325,27 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   v.style.zIndex = '999999';
                   
                   if (v.currentTime > 0.5 && !v.paused) {
-                    VideoState.postMessage('playing');
+                    try { VideoState.postMessage('playing'); } catch(e) {}
                   }
                 }
                 
                 var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, .play-icon, #play-button');
                 if (playBtns.length > 0) {
-                    playBtns[0].click();
+                    try { playBtns[0].click(); } catch(e) {}
                 }
+
+                // 🔥 DEEP SILENT FIX FOR ROBOT & POPUPS (NO CSS CHANGES) 🔥
+                try {
+                  var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
+                  for(var i=0; i<spamEls.length; i++) {
+                    spamEls[i].click(); // Auto click robot verify
+                  }
+                  var badIframes = document.querySelectorAll('iframe[src*="leela"], iframe[src*="pop"], iframe[src*="track"], iframe[src*="bet"]');
+                  for(var j=0; j<badIframes.length; j++) {
+                    badIframes[j].remove(); // Remove bad overlays
+                  }
+                } catch(e) {}
+
               }, 500);
             ''';
             _controller.runJavaScript(jsCode);
@@ -335,7 +353,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
             
-            // 🔥 DEEP AD-BLOCKER: Koi bhi Ad ya Google ka link khulne nahi dega 🔥
+            // 🔥 DEEP AD-BLOCKER: Koi bhi Ad ya Spam link khulne nahi dega 🔥
             if (url.contains('google.com') || 
                 url.contains('doubleclick') || 
                 url.contains('popads') || 
@@ -344,6 +362,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 url.contains('adsterra') ||
                 url.contains('redirect') ||
                 url.contains('onclick') ||
+                url.contains('leela') ||
                 url.startsWith('intent://') ||
                 url.startsWith('market://') ||
                 url.startsWith('whatsapp://') ||
@@ -351,8 +370,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 return NavigationDecision.prevent;
             }
 
-            // 🔥 SCREEN TOUCH SHIELD: Agar ad click se main page Google pe redirect hone ki koshish kare toh block karo 🔥
-            if (request.isMainFrame) {
+            if (request.isMainFrame && widget.customUrl == null) {
               if (!url.contains('pantyflix') && !url.contains('vercel.app')) {
                 return NavigationDecision.prevent;
               }
@@ -396,6 +414,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
           : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer';
       
+      // 🔥 PROXY BILKUL UNTOUCHED HAI 🔥
       String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
       String safeFinalUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
       
@@ -424,6 +443,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     _startControlsTimer();
+  }
+
+  // 🔥 YOUTUBE-STYLE SWIPE UP/DOWN & LOGO TAP FOR FULLSCREEN ROTATION 🔥
+  void _onVideoSwipe({required bool up}) {
+    if (isTvDevice) return;
+    if (up && !isFullScreen) {
+      _toggleFullScreen();
+    } else if (!up && isFullScreen) {
+      _toggleFullScreen();
+    }
   }
 
   void _switchEpisode(int ep) {
@@ -1255,19 +1284,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (isTvDevice) return _buildTVLayout(); 
 
     if (isFullScreen) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
-            if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
-            Positioned(top: 14, right: 20, child: SafeArea(child: IgnorePointer(child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
-            if (showControls) ...[
-              Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
-              Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: () { SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); Navigator.pop(context); }, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
-              Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
+      return WillPopScope(
+        onWillPop: () async {
+          _toggleFullScreen();
+          return false;
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              Positioned.fill(child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
+              if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
+              // 🔥 HANNUTV LOGO TAP PAR BHI ROTATE HOGA 🔥
+              Positioned(top: 14, right: 20, child: SafeArea(child: GestureDetector(onTap: _toggleFullScreen, child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
+              if (showControls) ...[
+                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
+                Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
+                Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
+              ],
             ],
-          ],
+          ),
         ),
       );
     }
@@ -1290,7 +1326,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               onTap: _startControlsTimer,
               child: Stack(
                 children: [
-                  Container(width: double.infinity, height: 230, color: Colors.black, child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+                  Container(width: double.infinity, height: 230, color: Colors.black, child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
                   Positioned(
                     top: 10, right: 14,
                     child: GestureDetector(
@@ -1301,7 +1337,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   if (showIntroAnimation) Positioned.fill(child: IgnorePointer(child: Center(child: AnimatedBuilder(animation: _introAnimController, builder: (context, child) { return Opacity(opacity: _introOpacityAnimation.value, child: Transform.scale(scale: _introScaleAnimation.value, child: Image.asset('assets/logo.png', height: 60, errorBuilder: (_, __, ___) => const Icon(Icons.play_circle_fill, color: Colors.red, size: 60)))); })))),
                   if (showControls) ...[
                     Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
-                    Positioned(top: 10, right: 10, child: _buildFocusableItem(onTap: () => Navigator.pop(context), borderRadius: BorderRadius.circular(18), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 18, child: Icon(Icons.chevron_left, color: Colors.white, size: 28)))),
+                    Positioned(top: 10, left: 10, child: _buildFocusableItem(onTap: () => Navigator.pop(context), borderRadius: BorderRadius.circular(18), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 18, child: Icon(Icons.chevron_left, color: Colors.white, size: 28)))),
                     Positioned(bottom: 8, right: 48, child: _buildFocusableItem(onTap: _cycleAspectRatio, borderRadius: BorderRadius.circular(16), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 16, child: Icon(Icons.aspect_ratio, color: Colors.white, size: 18)))),
                     Positioned(bottom: 8, right: 8, child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(16), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 16, child: Icon(Icons.fullscreen, color: Colors.white, size: 22)))),
                   ],
@@ -2304,8 +2340,6 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 }
 
-
-// Do ungli se zoom: movie ko box/screen me bhar deta hai (kali patti hat jaati hai). Pinch-in se wapas normal.
 class _PinchZoom extends StatefulWidget {
   final ValueNotifier<double> zoom;
   final Widget child;
@@ -2464,6 +2498,71 @@ class _SuggestRowState extends State<_SuggestRow> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SwipeFullscreen extends StatefulWidget {
+  final ValueNotifier<double> zoom;
+  final VoidCallback onSwipeUp;
+  final VoidCallback onSwipeDown;
+  final Widget child;
+  const _SwipeFullscreen({
+    required this.zoom,
+    required this.onSwipeUp,
+    required this.onSwipeDown,
+    required this.child,
+  });
+
+  @override
+  State<_SwipeFullscreen> createState() => _SwipeFullscreenState();
+}
+
+class _SwipeFullscreenState extends State<_SwipeFullscreen> {
+  static const double _minDistance = 60;
+  int _count = 0;
+  bool _multi = false;
+  Offset _start = Offset.zero;
+
+  void _down(PointerDownEvent e) {
+    _count++;
+    if (_count == 1) {
+      _start = e.position;
+      _multi = false;
+    } else {
+      _multi = true;
+    }
+  }
+
+  void _up(PointerUpEvent e) {
+    final bool single = !_multi && _count == 1;
+    final Offset d = e.position - _start;
+    _release();
+    if (!single) return;
+    if (widget.zoom.value > 1.05) return;
+    if (d.dy.abs() < _minDistance) return;
+    if (d.dy.abs() < d.dx.abs() * 1.5) return;
+    if (d.dy < 0) {
+      widget.onSwipeUp();
+    } else {
+      widget.onSwipeDown();
+    }
+  }
+
+  void _cancel(PointerCancelEvent e) => _release();
+
+  void _release() {
+    _count = _count > 0 ? _count - 1 : 0;
+    if (_count == 0) _multi = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: _down,
+      onPointerUp: _up,
+      onPointerCancel: _cancel,
+      child: widget.child,
     );
   }
 }
