@@ -29,7 +29,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
   bool _countdownStarted = false;
   Timer? _timer;
 
-  // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG 🔥
   bool _isAdblockDetected = false;
   bool _checking = false;
   Timer? _watchdog;
@@ -133,7 +132,6 @@ class _SkippableAdScreenState extends State<SkippableAdScreen> {
     });
   }
 
-  // 🔥 MULTI-DOMAIN + DoH CROSS-CHECK DNS LOGIC 🔥
   static const List<String> _probeHosts = <String>[
     'unity3d.com',
     'unityads.unity3d.com',

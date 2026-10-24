@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class CustomBannerAd extends StatefulWidget {
   final String htmlBannerCode;
@@ -16,50 +17,56 @@ class CustomBannerAd extends StatefulWidget {
 class _CustomBannerAdState extends State<CustomBannerAd> {
   late final WebViewController _controller;
 
-  // 🔥 DEEP LOGIC: ANTI-ADBLOCK FLAG 🔥
   bool _isAdblockDetected = false;
   Timer? _watchdog;
 
-  // 🛡️ AUTO-OPEN FIX
   Offset? _tapDownPos;
   DateTime? _lastTapTime;
+  DateTime? _lastBannerOpenTime;
 
-  // STRICT 1 SECOND TAP VALIDATION
   bool get _userTappedRecently =>
       _lastTapTime != null &&
-      DateTime.now().difference(_lastTapTime!) < const Duration(seconds: 1);
+      DateTime.now().difference(_lastTapTime!) < const Duration(milliseconds: 1500);
 
   @override
   void initState() {
     super.initState();
 
     _checkDeepBannerAdblock();
-    // 🔥 BRUTAL SCAN: Har 2 second me check karega ki usne beech me toh DNS on nahi kar liya
     _watchdog = Timer.periodic(const Duration(seconds: 2), (_) => _checkDeepBannerAdblock());
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
+      ..addJavaScriptChannel(
+        'BannerBridge',
+        onMessageReceived: (JavaScriptMessage msg) {
+          final String url = msg.message.trim();
+          if (_userTappedRecently && url.isNotEmpty && url != 'about:blank') {
+            _launchExternalBrowser(url);
+          }
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
-            final url = request.url.toLowerCase();
+            final String rawUrl = request.url;
+            final String url = rawUrl.toLowerCase();
 
             if (url.startsWith('data:') ||
                 url.startsWith('about:blank') ||
                 url.contains('hannutv.blogspot.com') ||
-                url.contains('highrevenueformat.com')) {
+                (url.contains('highrevenueformat.com') && !_userTappedRecently)) {
               return NavigationDecision.navigate;
             }
 
             if (_userTappedRecently) {
-              _launchExternalBrowser(request.url);
+              _launchExternalBrowser(rawUrl);
               return NavigationDecision.prevent;
             }
 
-            return NavigationDecision.prevent;
+            return NavigationDecision.navigate;
           },
-          // 🚀 PERFECTED ANTI-ADBLOCK SENSOR 🚀
           onWebResourceError: (WebResourceError error) {
             final desc = error.description.toLowerCase();
             if (desc.contains('err_blocked_by_client') || desc.contains('err_name_not_resolved')) {
@@ -75,31 +82,29 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
       ..loadHtmlString('''
         <!DOCTYPE html>
         <html>
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background: transparent; overflow: hidden; }
-            </style>
-          </head>
-          <body>
-            ${widget.htmlBannerCode}
-            <script>
-              window.open = function(url, windowName, windowFeatures) {
-                return null;
-              };
-              try { Object.defineProperty(window, 'top', { value: window, writable: false }); } catch(e) {}
-              
-              setInterval(function() {
-                var verifiers = document.querySelectorAll('.human-verify, #verify-button, #captcha, [class*="verify"], iframe[src*="recaptcha"], .cf-turnstile');
-                verifiers.forEach(function(btn) { try { btn.click(); } catch(e) {} });
-              }, 150);
-            </script>
-          </body>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+          <style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body, html { width:100%; height:100%; background:transparent; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+            iframe, div { max-width:100% !important; margin:0 auto !important; }
+          </style>
+        </head>
+        <body>
+          ${widget.htmlBannerCode}
+          <script>
+            document.addEventListener('click', function(e) {
+              var a = e.target.closest('a');
+              if (a && a.href && a.href.indexOf('javascript:') === -1) {
+                try { BannerBridge.postMessage(a.href); } catch(err) {}
+              }
+            }, true);
+          </script>
+        </body>
         </html>
       ''', baseUrl: 'https://hannutv.blogspot.com');
   }
 
-  // 🔥 1 SECOND HARD DNS CHECK 🔥
   Future<void> _checkDeepBannerAdblock() async {
     bool isBlocked = false;
     try {
@@ -127,7 +132,14 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
   }
 
   Future<void> _launchExternalBrowser(String urlString) async {
-    final Uri url = Uri.parse(urlString);
+    if (_lastBannerOpenTime != null &&
+        DateTime.now().difference(_lastBannerOpenTime!) < const Duration(milliseconds: 1000)) {
+      return;
+    }
+    _lastBannerOpenTime = DateTime.now();
+
+    final Uri? url = Uri.tryParse(urlString);
+    if (url == null) return;
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
