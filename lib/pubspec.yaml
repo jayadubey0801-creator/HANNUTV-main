@@ -1,0 +1,46 @@
+name: onyxtube
+description: HANNUTV Flutter Movie and Series Application
+publish_to: 'none'
+version: 1.3.0+3
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  url_launcher: ^6.3.0
+  http: ^1.2.2
+  webview_flutter: ^4.10.0
+  webview_flutter_android: ^4.7.0
+  app_links: ^6.1.1
+  
+  # 🔥 DEEP UI PACKAGES FOR PREMIUM DASHBOARD & AMBIENT COLOR 🔥
+  cached_network_image: ^3.3.1
+  palette_generator: ^0.3.3
+  shimmer: ^3.0.0
+  flutter_svg: ^2.0.10+1        # Hulu logo SVG hai
+  shared_preferences: ^2.3.2    # watchlist / continue-watching / notifications
+  
+  # 🔥 Locked to stable version to bypass Kotlin Android crash 🔥
+  google_sign_in: ^6.2.2
+  
+  # 🔥 'any' allows Flutter to auto-sync perfectly with google_sign_in 6.2.2 🔥
+  firebase_core: any
+  firebase_messaging: any
+  firebase_remote_config: any
+  firebase_auth: any
+  cloud_firestore: any
+  firebase_database: any
+  firebase_analytics: any
+  package_info_plus: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png
