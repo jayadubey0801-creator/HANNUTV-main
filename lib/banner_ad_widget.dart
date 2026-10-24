@@ -102,7 +102,7 @@ class _CustomBannerAdState extends State<CustomBannerAd> {
           </script>
         </body>
         </html>
-      ''');
+      ''', baseUrl: 'https://hannutv.blogspot.com');
   }
 
   void _checkDeepBannerAdblock() async {

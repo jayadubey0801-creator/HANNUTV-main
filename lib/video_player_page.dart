@@ -294,6 +294,85 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               `;
               document.head.appendChild(style);
 
+              // 🔥 POPUP / OVERLAY REMOVER: player ke upar aane wala koi bhi ad popup hata deta hai 🔥
+              (function() {
+                if (window.__hannuClean) return;
+                window.__hannuClean = true;
+
+                function pickPlayer() {
+                  var fr = document.getElementsByTagName('iframe');
+                  var first = null;
+                  for (var i = 0; i < fr.length; i++) {
+                    var f = fr[i];
+                    var al = (f.getAttribute('allow') || '').toLowerCase();
+                    if (f.hasAttribute('allowfullscreen') || al.indexOf('fullscreen') !== -1) {
+                      return { el: f, sure: true };
+                    }
+                    if (!first) first = f;
+                  }
+                  return { el: first, sure: false };
+                }
+
+                function adLikeSrc(s) {
+                  s = (s || '').toLowerCase();
+                  var keys = ['ads', 'adsterra', 'monetag', 'propeller', 'exoclick', 'popads', 'doubleclick', 'banner', 'popup', 'onclick', '1xbet', 'bet365'];
+                  for (var k = 0; k < keys.length; k++) {
+                    if (s.indexOf(keys[k]) !== -1) return true;
+                  }
+                  return false;
+                }
+
+                function clean() {
+                  try {
+                    if (!document.body) return;
+                    var pl = pickPlayer();
+                    var p = pl.el;
+                    var vids = document.getElementsByTagName('video');
+                    if (!p && vids.length === 0) return;
+
+                    var vroot = null;
+                    if (vids.length > 0) {
+                      vroot = vids[0].parentElement;
+                      if (vroot === document.body || vroot === document.documentElement) vroot = null;
+                    }
+
+                    var all = document.body.getElementsByTagName('*');
+                    for (var i = all.length - 1; i >= 0; i--) {
+                      var el = all[i];
+                      var t = el.tagName;
+                      if (t === 'SCRIPT' || t === 'STYLE' || t === 'LINK' || t === 'META' || t === 'NOSCRIPT' || t === 'VIDEO' || t === 'SOURCE' || t === 'TRACK') continue;
+                      if (el === p) continue;
+                      if (p && el.contains(p)) continue;
+                      if (el.querySelector('video')) continue;
+                      if (vroot && vroot.contains(el)) continue;
+
+                      if (t === 'IFRAME') {
+                        if (pl.sure || adLikeSrc(el.getAttribute('src'))) el.remove();
+                        continue;
+                      }
+
+                      var cs = window.getComputedStyle(el);
+                      var z = parseInt(cs.zIndex, 10);
+                      if (cs.position === 'fixed' || cs.position === 'sticky' || (cs.position === 'absolute' && z > 100)) {
+                        el.remove();
+                      }
+                    }
+                  } catch (err) {}
+                }
+
+                var busy = false;
+                try {
+                  new MutationObserver(function() {
+                    if (busy) return;
+                    busy = true;
+                    setTimeout(function() { busy = false; clean(); }, 150);
+                  }).observe(document.documentElement, { childList: true, subtree: true });
+                } catch (err) {}
+
+                setInterval(clean, 600);
+                clean();
+              })();
+
               // 🔥 JS TOUCH AD BLOCKER 🔥
               window.open = function() { return null; };
               window.alert = function() { return null; };
