@@ -6,8 +6,9 @@ class UnityAdsService {
   UnityAdsService._();
 
   static const String gameId = '800405137';
-  static const bool testMode = false; // Real Live Earning Mode
+  static const bool testMode = false;
 
+  static const String bannerPlacement = 'BP_Banner_Android';
   static const String interstitialPlacement = 'BP_Interstitial_Android';
   static const String rewardedPlacement = 'BP_Rewarded_Android';
 
@@ -30,12 +31,12 @@ class UnityAdsService {
         gameId: gameId,
         testMode: testMode,
         onComplete: () {
-          debugPrint('[UnityAds] SDK Init Complete ✅');
+          debugPrint('[UnityAds] SDK Init Complete');
           isInitialized = true;
           if (!c.isCompleted) c.complete(true);
         },
         onFailed: (error, message) {
-          debugPrint('[UnityAds] SDK Init Failed ❌: $error | $message');
+          debugPrint('[UnityAds] SDK Init Failed: $error | $message');
           if (!c.isCompleted) c.complete(false);
         },
       );

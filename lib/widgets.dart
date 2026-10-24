@@ -6,11 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'banner_ad_widget.dart';
 import 'config.dart';
+import 'skippable_ad_screen.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
-
 import 'video_player_page.dart';
-import 'skippable_ad_screen.dart';
 
 class DashboardHooks {
   final void Function(BuildContext context, TmdbItem item)? onOpenTitle;
@@ -53,14 +52,16 @@ class ShimmerBox extends StatelessWidget {
       child: Container(
         width: w,
         height: h,
-        decoration: BoxDecoration(color: HC.card, borderRadius: BorderRadius.circular(r)),
+        decoration: BoxDecoration(
+            color: HC.card, borderRadius: BorderRadius.circular(r)),
       ),
     );
   }
 }
 
 class PosterImage extends StatelessWidget {
-  const PosterImage({super.key, required this.item, required this.width, this.size = 'w342'});
+  const PosterImage(
+      {super.key, required this.item, required this.width, this.size = 'w342'});
   final TmdbItem item;
   final double width;
   final String size;
@@ -73,7 +74,9 @@ class PosterImage extends StatelessWidget {
       color: HC.card,
       child: const Icon(Icons.movie_outlined, color: HC.dim),
     );
-    if (item.poster == null) return ClipRRect(borderRadius: BorderRadius.circular(12), child: empty);
+    if (item.poster == null) {
+      return ClipRRect(borderRadius: BorderRadius.circular(12), child: empty);
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: CachedNetworkImage(
@@ -83,14 +86,14 @@ class PosterImage extends StatelessWidget {
         fit: BoxFit.cover,
         memCacheWidth: (width * 3).round(),
         fadeInDuration: const Duration(milliseconds: 180),
-        placeholder: (BuildContext _, String __) => ShimmerBox(w: width, h: width * 1.5),
+        placeholder: (BuildContext _, String __) =>
+            ShimmerBox(w: width, h: width * 1.5),
         errorWidget: (BuildContext _, String __, Object ___) => empty,
       ),
     );
   }
 }
 
-// 🔥 DEEP FIX: SMALLER & 100% TRANSPARENT NUMBER 🔥
 class RankNumber extends StatelessWidget {
   const RankNumber(this.n, {super.key, this.size = 56});
   final int n;
@@ -100,11 +103,10 @@ class RankNumber extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: <Widget>[
-        // Stroke (Bahar ki thin safed outline)
         Text(
           '$n',
           style: TextStyle(
-            fontSize: size * 0.85, // Size chhota kar diya
+            fontSize: size * 0.85,
             fontWeight: FontWeight.w900,
             fontStyle: FontStyle.italic,
             height: 1.0,
@@ -112,23 +114,24 @@ class RankNumber extends StatelessWidget {
             foreground: Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = 2.5
-              ..color = Colors.white.withOpacity(0.9), 
+              ..color = Colors.white.withOpacity(0.9),
             shadows: <Shadow>[
-              Shadow(color: Colors.black.withOpacity(0.6), offset: const Offset(2, 2), blurRadius: 4),
+              Shadow(
+                  color: Colors.black.withOpacity(0.6),
+                  offset: const Offset(2, 2),
+                  blurRadius: 4),
             ],
           ),
         ),
-        // Ander ka fill ekdum transparent kar diya (0.05 opacity)
-        // isse poster ka apna asli color apne aap number me jhalakega!
         Text(
           '$n',
           style: TextStyle(
-            fontSize: size * 0.85, // Same reduced size
+            fontSize: size * 0.85,
             fontWeight: FontWeight.w900,
             fontStyle: FontStyle.italic,
             height: 1.0,
             letterSpacing: -3,
-            color: Colors.white.withOpacity(0.05), // Extremely transparent
+            color: Colors.white.withOpacity(0.05),
           ),
         ),
       ],
@@ -163,7 +166,7 @@ class PosterCard extends StatelessWidget {
       onTap: onTap ?? () => Hooks.open(context, item),
       onLongPress: onLongPress,
       child: SizedBox(
-        width: width + (rank != null ? 22 : 0), 
+        width: width + (rank != null ? 22 : 0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,34 +189,40 @@ class PosterCard extends StatelessWidget {
                         width: width,
                         height: width * 0.75,
                         decoration: BoxDecoration(
-                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                          borderRadius: const BorderRadius.vertical(
+                              bottom: Radius.circular(12)),
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: <Color>[Colors.transparent, Colors.black.withOpacity(0.8)],
+                            colors: <Color>[
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.8)
+                            ],
                           ),
                         ),
                       ),
                     ),
-                  // 🔥 NUMBER AT BOTTOM LEFT OVERLAPPING THE POSTER 🔥
                   if (rank != null)
                     Positioned(
-                      left: -8,
-                      bottom: -8,
-                      child: RankNumber(rank!, size: width * 0.8)
-                    ),
+                        left: -8,
+                        bottom: -8,
+                        child: RankNumber(rank!, size: width * 0.8)),
                   if (badge != null)
                     Positioned(
                       top: 6,
                       right: 6,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.black.withOpacity(0.7),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(badge!,
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white)),
                       ),
                     ),
                   if (progress != null)
@@ -227,7 +236,8 @@ class PosterCard extends StatelessWidget {
                           value: progress,
                           minHeight: 4,
                           backgroundColor: Colors.white24,
-                          valueColor: const AlwaysStoppedAnimation<Color>(HC.accent2),
+                          valueColor:
+                              const AlwaysStoppedAnimation<Color>(HC.accent2),
                         ),
                       ),
                     ),
@@ -240,13 +250,18 @@ class PosterCard extends StatelessWidget {
                 item.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white),
               ),
             ),
             Padding(
               padding: EdgeInsets.only(left: (rank != null ? 28 : 0)),
               child: Text(
-                item.rating > 0 ? '★ ${item.rating.toStringAsFixed(1)}   ${item.year}' : item.year,
+                item.rating > 0
+                    ? '★ ${item.rating.toStringAsFixed(1)}   ${item.year}'
+                    : item.year,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, color: HC.dim),
@@ -260,7 +275,8 @@ class PosterCard extends StatelessWidget {
 }
 
 class SectionTitle extends StatelessWidget {
-  const SectionTitle(this.title, {super.key, this.subtitle, this.leading, this.onMore, this.size = 18});
+  const SectionTitle(this.title,
+      {super.key, this.subtitle, this.leading, this.onMore, this.size = 18});
   final String title;
   final String? subtitle;
   final Widget? leading;
@@ -281,9 +297,13 @@ class SectionTitle extends StatelessWidget {
                 Text(title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Colors.white)),
+                    style: TextStyle(
+                        fontSize: size,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white)),
                 if (subtitle != null)
-                  Text(subtitle!, style: const TextStyle(fontSize: 12, color: HC.dim)),
+                  Text(subtitle!,
+                      style: const TextStyle(fontSize: 12, color: HC.dim)),
               ],
             ),
           ),
@@ -292,7 +312,9 @@ class SectionTitle extends StatelessWidget {
               onTap: onMore,
               child: const Padding(
                 padding: EdgeInsets.all(6),
-                child: Text('See all', style: TextStyle(color: HC.accent2, fontWeight: FontWeight.w700)),
+                child: Text('See all',
+                    style: TextStyle(
+                        color: HC.accent2, fontWeight: FontWeight.w700)),
               ),
             ),
         ],
@@ -301,7 +323,7 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-const double kRowExtra = 52; 
+const double kRowExtra = 52;
 
 class PosterRow extends StatefulWidget {
   const PosterRow({
@@ -357,7 +379,8 @@ class _PosterRowState extends State<PosterRow> {
               child: Container(
                 height: 64,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: HC.surface, borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(
+                    color: HC.surface, borderRadius: BorderRadius.circular(14)),
                 child: Text(
                   tmdbKeyMissing
                       ? 'TMDB API key paste karo (config.dart)'
@@ -372,7 +395,9 @@ class _PosterRowState extends State<PosterRow> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             SectionTitle(widget.title,
-                subtitle: widget.subtitle, leading: widget.leading, size: widget.titleSize),
+                subtitle: widget.subtitle,
+                leading: widget.leading,
+                size: widget.titleSize),
             SizedBox(
               height: h,
               child: loading
@@ -381,7 +406,8 @@ class _PosterRowState extends State<PosterRow> {
                       physics: const NeverScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: 6,
-                      separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
+                      separatorBuilder: (BuildContext _, int __) =>
+                          const SizedBox(width: 12),
                       itemBuilder: (BuildContext _, int __) =>
                           ShimmerBox(w: widget.width, h: widget.width * 1.5),
                     )
@@ -390,7 +416,8 @@ class _PosterRowState extends State<PosterRow> {
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: items.length,
-                      separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
+                      separatorBuilder: (BuildContext _, int __) =>
+                          const SizedBox(width: 12),
                       itemBuilder: (BuildContext _, int i) => PosterCard(
                         item: items[i],
                         width: widget.width,
@@ -420,7 +447,8 @@ class ContinueWatchingRow extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const SectionTitle('Continue Watching', subtitle: 'Long-press se hatao'),
+            const SectionTitle('Continue Watching',
+                subtitle: 'Long-press se hatao'),
             SizedBox(
               height: w * 1.5 + kRowExtra,
               child: ListView.separated(
@@ -428,7 +456,8 @@ class ContinueWatchingRow extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: list.length,
-                separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
+                separatorBuilder: (BuildContext _, int __) =>
+                    const SizedBox(width: 12),
                 itemBuilder: (BuildContext _, int i) {
                   final CwEntry e = list[i];
                   return PosterCard(
@@ -450,7 +479,8 @@ class ContinueWatchingRow extends StatelessWidget {
 }
 
 class OttLogo extends StatelessWidget {
-  const OttLogo(this.ott, {super.key, this.w = 84, this.h = 54, this.radius = 14});
+  const OttLogo(this.ott,
+      {super.key, this.w = 84, this.h = 54, this.radius = 14});
   final Ott ott;
   final double w;
   final double h;
@@ -473,7 +503,10 @@ class OttLogo extends StatelessWidget {
       );
 
   Widget _spinner() => const Center(
-        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+        child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2)),
       );
 
   @override
@@ -497,7 +530,9 @@ class OttLogo extends StatelessWidget {
       width: w,
       height: h,
       clipBehavior: Clip.antiAlias,
-      padding: ott.fit == BoxFit.contain ? const EdgeInsets.all(8) : EdgeInsets.zero,
+      padding: ott.fit == BoxFit.contain
+          ? const EdgeInsets.all(8)
+          : EdgeInsets.zero,
       decoration: BoxDecoration(
         color: ott.tileBg,
         borderRadius: BorderRadius.circular(radius),
@@ -508,13 +543,7 @@ class OttLogo extends StatelessWidget {
   }
 }
 
-const String kDashAdsterraSnippet = '''
-<script type="text/javascript">
-  atOptions = { 'key' : 'a39df283f6ad10c34e229e5715bceff5', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-</script>
-<script type="text/javascript" src="https://www.highrevenueformat.com/a39df283f6ad10c34e229e5715bceff5/invoke.js"></script>
-''';
-
+// 🔥 100% UNITY BANNER SLOT ON DASHBOARD 🔥
 class AdSlot extends StatelessWidget {
   const AdSlot({super.key});
 
@@ -528,7 +557,7 @@ class AdSlot extends StatelessWidget {
       child: Center(
         child: Container(
           height: 62,
-          width: 330, 
+          width: 330,
           alignment: Alignment.center,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -536,9 +565,7 @@ class AdSlot extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.white10),
           ),
-          child: b != null
-              ? b(context)
-              : const CustomBannerAd(htmlBannerCode: kDashAdsterraSnippet),
+          child: b != null ? b(context) : const CustomBannerAd(),
         ),
       ),
     );
@@ -573,9 +600,14 @@ class GenreBlock extends StatelessWidget {
                     child: Text(g.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)),
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white)),
                   ),
-                  if (onSeeAll != null) const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+                  if (onSeeAll != null)
+                    const Icon(Icons.chevron_right_rounded,
+                        color: Colors.white70),
                 ],
               ),
             ),
@@ -628,7 +660,8 @@ class _TitleSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
       decoration: const BoxDecoration(
         color: HC.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -640,13 +673,16 @@ class _TitleSheet extends StatelessWidget {
           children: <Widget>[
             if (item.backdrop != null)
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Stack(
                     fit: StackFit.expand,
                     children: <Widget>[
-                      CachedNetworkImage(imageUrl: item.backdropUrl('w780'), fit: BoxFit.cover),
+                      CachedNetworkImage(
+                          imageUrl: item.backdropUrl('w780'),
+                          fit: BoxFit.cover),
                       DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -667,7 +703,10 @@ class _TitleSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(item.title,
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+                      style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white)),
                   const SizedBox(height: 6),
                   Text(
                     '★ ${item.rating.toStringAsFixed(1)}   ${item.year}   ${item.kind}',
@@ -675,7 +714,9 @@ class _TitleSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    item.overview.isEmpty ? 'Description available nahi.' : item.overview,
+                    item.overview.isEmpty
+                        ? 'Description available nahi.'
+                        : item.overview,
                     style: const TextStyle(color: Colors.white70, height: 1.4),
                   ),
                   const SizedBox(height: 18),
@@ -684,7 +725,7 @@ class _TitleSheet extends StatelessWidget {
                       Expanded(
                         child: GestureDetector(
                           onTap: () {
-                            Navigator.of(context).pop(); 
+                            Navigator.of(context).pop();
                             Navigator.push(
                               outer,
                               MaterialPageRoute(
@@ -712,10 +753,13 @@ class _TitleSheet extends StatelessWidget {
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: <Widget>[
-                                Icon(Icons.play_arrow_rounded, color: Colors.white),
+                                Icon(Icons.play_arrow_rounded,
+                                    color: Colors.white),
                                 SizedBox(width: 6),
                                 Text('Watch Now',
-                                    style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white)),
                               ],
                             ),
                           ),
@@ -730,18 +774,26 @@ class _TitleSheet extends StatelessWidget {
                             onTap: () => WatchlistStore.I.toggle(item),
                             child: Container(
                               height: 48,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: on ? HC.accent2 : Colors.white24),
+                                border: Border.all(
+                                    color: on ? HC.accent2 : Colors.white24),
                               ),
                               child: Row(
                                 children: <Widget>[
-                                  Icon(on ? Icons.check_rounded : Icons.add_rounded, color: Colors.white),
+                                  Icon(
+                                      on
+                                          ? Icons.check_rounded
+                                          : Icons.add_rounded,
+                                      color: Colors.white),
                                   const SizedBox(width: 6),
                                   const Text('My List',
-                                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white)),
                                 ],
                               ),
                             ),
