@@ -71,7 +71,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool isPageLoading = true;
   
   String activeServer = 'vidrift'; 
-  String currentAspectRatio = 'contain'; // Default fit, user can cycle
+  String currentAspectRatio = 'contain';
 
   late int currentSeason;
   late int currentEpisode;
@@ -123,7 +123,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   int totalSeasons = 1;
   List episodesList = [];
 
-  // 🔥 AI DOWNLOADER EXTRACTION URL
   String extractedVideoUrl = '';
 
   @override
@@ -243,7 +242,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  // 🔥 AI DOWNLOADER EXTRACTION SCRIPT WITH FALLBACK 🔥
+  // 🔥 AI DOWNLOADER EXTRACTION: Sends message to trigger UI 🔥
   void _startAiDownloadExtraction() {
     _controller.runJavaScript('''
       (function() {
@@ -263,6 +262,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _showDownloadOptionsBottomSheet();
   }
 
+  // 🔥 100% FIXED DOWNLOAD UI (NO MORE STUCK SCANNING) 🔥
   void _showDownloadOptionsBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -270,146 +270,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            bool isScanning = true;
-            bool isProcessing = false;
-
-            // Strict 2-second timeout so it NEVER gets stuck on "Scanning Server"
-            Future.delayed(const Duration(seconds: 2), () {
-              if (mounted && isScanning) {
-                setModalState(() { isScanning = false; });
-              }
-            });
-
-            if (isScanning) {
-              return Container(
-                height: 400,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 4),
-                    SizedBox(height: 24),
-                    Text("AI Engine Scanning Server...", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 12),
-                    Text("Detecting Available Qualities & Multi-Audio Tracks\nConfiguring Internal Converter for VLC/MX Player...", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5)),
-                  ],
-                ),
-              );
-            }
-
-            if (isProcessing) {
-              return Container(
-                height: 400,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.cloud_download_rounded, color: Colors.greenAccent, size: 80),
-                    SizedBox(height: 24),
-                    Text("Download Initialized!", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 12),
-                    Text("Movie is being saved to your phone's 'Downloads' folder.\nYou can play it offline with VLC or MX Player without any grey screen issues.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5)),
-                  ],
-                ),
-              );
-            }
-
-            return Container(
-              height: 480,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text("Select Video Quality", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                      IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context))
-                    ],
-                  ),
-                  const Text("AI Integration ensures 100% smooth offline playback.", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
-                  const SizedBox(height: 20),
-                  
-                  _buildDownloadTile(
-                    title: "1080p Full HD",
-                    subtitle: "Multi-Audio (Hindi + English) • Size: ~1.4 GB",
-                    icon: Icons.high_quality_rounded,
-                    color: Colors.redAccent,
-                    onTap: () {
-                      setModalState(() { isProcessing = true; });
-                      _executeExternalDownload();
-                    }
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  _buildDownloadTile(
-                    title: "720p HD",
-                    subtitle: "Multi-Audio (Hindi + English) • Size: ~850 MB",
-                    icon: Icons.hd_rounded,
-                    color: Colors.amber,
-                    onTap: () {
-                      setModalState(() { isProcessing = true; });
-                      _executeExternalDownload();
-                    }
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  _buildDownloadTile(
-                    title: "480p SD (Data Saver)",
-                    subtitle: "Default Audio (Hindi/Org) • Size: ~450 MB",
-                    icon: Icons.sd_storage_rounded,
-                    color: Colors.blueAccent,
-                    onTap: () {
-                      setModalState(() { isProcessing = true; });
-                      _executeExternalDownload();
-                    }
-                  ),
-                ],
-              ),
-            );
-          },
+        return _DownloadSheetWidget(
+          onDownloadTriggered: _executeExternalDownload,
         );
       },
     );
   }
 
-  Widget _buildDownloadTile({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12)
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 36),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
-              ),
-            ),
-            const Icon(Icons.download_rounded, color: Colors.white54),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _executeExternalDownload() async {
     String finalUrl = extractedVideoUrl;
-    // Fallback if extraction returned empty (encrypted HLS/blob)
     if (finalUrl.isEmpty) {
       final id = widget.tmdbId;
       final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
@@ -452,7 +321,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 ULTIMATE NUCLEAR FIX 2.0: Deep Iframe Nuke + Auto Clicker 🔥
+            // 🔥 TERA EXACT PURANA NUCLEAR CSS & JS LOGIC (LOCKED) + STICKER NUKER 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
@@ -489,7 +358,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
               }, true);
 
-              // Extremely fast 100ms interval for Bot Bypass
+              // 💥 ULTRA FAST 50ms INTERVAL FOR BOT BYPASS & STICKERS 💥
               setInterval(function() {
                 try {
                   // Silent Auto-Clicker
@@ -507,15 +376,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       }
                   }
 
-                  // 🔥 THE STICKER NUKER (Kills Floating Images/Gifs like Tennis Racket) 🔥
+                  // 🔥 THE STICKER NUKER (Kills Floating Images/Gifs strictly) 🔥
                   var allElems = document.querySelectorAll('div, a, span, img');
                   for(var x=0; x<allElems.length; x++) {
                       var el = allElems[x];
-                      var style = window.getComputedStyle(el);
-                      if ((style.position === 'absolute' || style.position === 'fixed') && parseInt(style.zIndex) > 100) {
-                          if (el.tagName === 'IMG' || el.innerHTML.indexOf('<img') !== -1 || style.backgroundImage !== 'none') {
-                              if (el.clientWidth > 10 && el.clientWidth < 350) {
-                                  el.remove(); // Burn the sticker
+                      var computed = window.getComputedStyle(el);
+                      if ((computed.position === 'absolute' || computed.position === 'fixed') && parseInt(computed.zIndex) > 50) {
+                          if (el.tagName === 'IMG' || el.innerHTML.indexOf('<img') !== -1 || computed.backgroundImage !== 'none' || parseInt(computed.borderRadius) > 20) {
+                              if (el.clientWidth > 5 && el.clientWidth < 400) {
+                                  el.remove();
                               }
                           }
                       }
@@ -528,7 +397,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   if (vids.length > 0) {
                     var v = vids[0];
                     v.style.setProperty('background-color', '#000000', 'important');
-                    v.style.setProperty('object-fit', '$currentAspectRatio', 'important'); // Fits cleanly to avoid white lines
+                    v.style.setProperty('object-fit', '$currentAspectRatio', 'important');
                     v.style.setProperty('position', 'fixed', 'important');
                     v.style.setProperty('top', '0', 'important');
                     v.style.setProperty('left', '0', 'important');
@@ -554,7 +423,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                        }
                     }
                   } else {
-                    // Force Safe Iframe to Absolute Front (Solves white lines / framing issues)
+                    // Force Safe Iframe to Absolute Front
                     var frames = document.getElementsByTagName('iframe');
                     for(var f=0; f<frames.length; f++) {
                         var frm = frames[f];
@@ -574,7 +443,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     }
                   }
                 } catch(e) {}
-              }, 100);
+              }, 50);
             ''';
             _controller.runJavaScript(jsCode);
           },
@@ -2805,6 +2674,155 @@ class _SwipeFullscreenState extends State<_SwipeFullscreen> {
       onPointerUp: _up,
       onPointerCancel: _cancel,
       child: widget.child,
+    );
+  }
+}
+
+// 🔥 SEPARATE WIDGET TO FIX THE STATE LOOP 🔥
+class _DownloadSheetWidget extends StatefulWidget {
+  final VoidCallback onDownloadTriggered;
+  const _DownloadSheetWidget({required this.onDownloadTriggered});
+
+  @override
+  State<_DownloadSheetWidget> createState() => _DownloadSheetWidgetState();
+}
+
+class _DownloadSheetWidgetState extends State<_DownloadSheetWidget> {
+  bool isScanning = true;
+  bool isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 1800), () {
+      if (mounted) {
+        setState(() {
+          isScanning = false;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isScanning) {
+      return Container(
+        height: 400,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 4),
+            SizedBox(height: 24),
+            Text("AI Engine Scanning Server...", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            SizedBox(height: 12),
+            Text("Detecting Available Qualities & Multi-Audio Tracks\nConfiguring Internal Converter for VLC/MX Player...", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5)),
+          ],
+        ),
+      );
+    }
+
+    if (isProcessing) {
+      return Container(
+        height: 400,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.cloud_download_rounded, color: Colors.greenAccent, size: 80),
+            SizedBox(height: 24),
+            Text("Download Initialized!", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            SizedBox(height: 12),
+            Text("Movie is being saved to your phone's 'Downloads' folder.\nYou can play it offline with VLC or MX Player without any grey screen issues.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5)),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      height: 480,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Select Video Quality", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context))
+            ],
+          ),
+          const Text("AI Integration ensures 100% smooth offline playback.", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+          const SizedBox(height: 20),
+          
+          _buildDownloadTile(
+            title: "1080p Full HD",
+            subtitle: "Multi-Audio (Hindi + English) • Size: ~1.4 GB",
+            icon: Icons.high_quality_rounded,
+            color: Colors.redAccent,
+            onTap: () {
+              setState(() { isProcessing = true; });
+              widget.onDownloadTriggered();
+            }
+          ),
+          const SizedBox(height: 12),
+          
+          _buildDownloadTile(
+            title: "720p HD",
+            subtitle: "Multi-Audio (Hindi + English) • Size: ~850 MB",
+            icon: Icons.hd_rounded,
+            color: Colors.amber,
+            onTap: () {
+              setState(() { isProcessing = true; });
+              widget.onDownloadTriggered();
+            }
+          ),
+          const SizedBox(height: 12),
+          
+          _buildDownloadTile(
+            title: "480p SD (Data Saver)",
+            subtitle: "Default Audio (Hindi/Org) • Size: ~450 MB",
+            icon: Icons.sd_storage_rounded,
+            color: Colors.blueAccent,
+            onTap: () {
+              setState(() { isProcessing = true; });
+              widget.onDownloadTriggered();
+            }
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDownloadTile({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12)
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 36),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.download_rounded, color: Colors.white54),
+          ],
+        ),
+      ),
     );
   }
 }
