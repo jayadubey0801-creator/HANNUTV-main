@@ -5,7 +5,6 @@ import 'hero.dart';
 import 'pages.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
-import 'video_player_page.dart';
 import 'widgets.dart';
 
 /// HANNUTV main dashboard.
@@ -39,7 +38,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     WatchlistStore.I.load();
     ContinueWatchingStore.I.load();
     NotificationStore.I.init();
-    HannuDownloadStore.I.load();
     _hero = Tmdb.I.heroItems();
   }
 
@@ -70,9 +68,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     switch (i) {
       case 0:
         if (_scroll.hasClients) {
-          _scroll.animateTo(0,
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOut);
+          _scroll.animateTo(0, duration: const Duration(milliseconds: 400), curve: Curves.easeOut);
         }
         break;
       case 1:
@@ -93,9 +89,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
           f();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text(
-                    'Live TV: DashboardHooks.onOpenLiveTv me apni Live TV screen do.')),
+            const SnackBar(content: Text('Live TV: DashboardHooks.onOpenLiveTv me apni Live TV screen do.')),
           );
         }
         break;
@@ -117,8 +111,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
               onRefresh: _refresh,
               child: CustomScrollView(
                 controller: _scroll,
-                physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics()),
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                 cacheExtent: 900,
                 slivers: <Widget>[
                   SliverList(delegate: SliverChildListDelegate(_children())),
@@ -207,8 +200,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     );
   }
 
-  Widget _iconBtn(IconData icon, VoidCallback onTap,
-      {int badge = 0, Color? iconColor}) {
+  Widget _iconBtn(IconData icon, VoidCallback onTap, {int badge = 0, Color? iconColor}) {
     return Stack(
       clipBehavior: Clip.none,
       children: <Widget>[
@@ -225,14 +217,10 @@ class _HannuDashboardState extends State<HannuDashboard> {
                 constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: HC.accent2, borderRadius: BorderRadius.circular(9)),
+                decoration: BoxDecoration(color: HC.accent2, borderRadius: BorderRadius.circular(9)),
                 child: Text(
                   badge > 9 ? '9+' : '$badge',
-                  style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white),
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
                 ),
               ),
             ),
@@ -255,14 +243,9 @@ class _HannuDashboardState extends State<HannuDashboard> {
                   'assets/logo.png',
                   height: 34,
                   fit: BoxFit.contain,
-                  errorBuilder:
-                      (BuildContext _, Object __, StackTrace? ___) =>
-                          const Text(
+                  errorBuilder: (BuildContext _, Object __, StackTrace? ___) => const Text(
                     'HANNUTV',
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1),
                   ),
                 ),
               ),
@@ -275,26 +258,18 @@ class _HannuDashboardState extends State<HannuDashboard> {
                 openSearch(context);
               }
             }),
+            
+            // 🔥 NEW DOWNLOAD BUTTON IN HEADER 🔥
+            _iconBtn(Icons.download_for_offline_rounded, () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineDownloadsPage()));
+            }, iconColor: Colors.redAccent),
+            
             AnimatedBuilder(
               animation: WatchlistStore.I,
               builder: (BuildContext _, Widget? __) => _iconBtn(
                 Icons.bookmark_border_rounded,
                 () => openWatchlist(context),
                 badge: WatchlistStore.I.length,
-              ),
-            ),
-            // 🔥 OFFLINE DOWNLOADS ICON WITH LIVE BADGE 🔥
-            AnimatedBuilder(
-              animation: HannuDownloadStore.I,
-              builder: (BuildContext _, Widget? __) => _iconBtn(
-                Icons.download_for_offline_rounded,
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const OfflineDownloadsPage()),
-                ),
-                badge: HannuDownloadStore.I.length,
-                iconColor: Colors.redAccent,
               ),
             ),
             AnimatedBuilder(
@@ -317,8 +292,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white24),
                   ),
-                  child: const Icon(Icons.support_agent_rounded,
-                      size: 21, color: Colors.white),
+                  child: const Icon(Icons.support_agent_rounded, size: 21, color: Colors.white),
                 ),
               ),
             ),
@@ -338,7 +312,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
         itemCount: _tabs.length,
         separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 10),
         itemBuilder: (BuildContext _, int i) {
-          final bool sel = i == 0;
+          final bool sel = i == 0; 
           return GestureDetector(
             onTap: () => _onTab(i),
             child: Container(
@@ -348,8 +322,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
                 gradient: sel ? HC.primary : null,
                 color: sel ? null : alpha(Colors.white, 0.06),
                 borderRadius: BorderRadius.circular(22),
-                border:
-                    Border.all(color: sel ? Colors.transparent : Colors.white24),
+                border: Border.all(color: sel ? Colors.transparent : Colors.white24),
               ),
               child: Text(
                 _tabs[i],
@@ -370,9 +343,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     return FutureBuilder<List<TmdbItem>>(
       future: _hero,
       builder: (BuildContext ctx, AsyncSnapshot<List<TmdbItem>> s) {
-        if (s.connectionState != ConnectionState.done) {
-          return const HeroSkeleton();
-        }
+        if (s.connectionState != ConnectionState.done) return const HeroSkeleton();
         final List<TmdbItem> items = s.data ?? const <TmdbItem>[];
         if (items.isEmpty) return _heroError();
         return HeroCarousel(
@@ -392,8 +363,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
         child: Container(
           height: 170,
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-              color: HC.surface, borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(color: HC.surface, borderRadius: BorderRadius.circular(20)),
           child: Text(
             tmdbKeyMissing
                 ? 'TMDB API key nahi mili.\nlib/dashboard/config.dart me paste karo.'
@@ -418,8 +388,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: kOtts.length,
-            separatorBuilder: (BuildContext _, int __) =>
-                const SizedBox(width: 12),
+            separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 12),
             itemBuilder: (BuildContext _, int i) => GestureDetector(
               onTap: () => openOtt(context, kOtts[i]),
               child: OttLogo(kOtts[i], w: 96, h: 60),
@@ -443,8 +412,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: kAllGenres.length,
-            separatorBuilder: (BuildContext _, int __) =>
-                const SizedBox(width: 10),
+            separatorBuilder: (BuildContext _, int __) => const SizedBox(width: 10),
             itemBuilder: (BuildContext _, int i) {
               final GenreDef g = kAllGenres[i];
               return GestureDetector(
@@ -466,8 +434,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
                       Positioned(
                         right: -8,
                         bottom: -8,
-                        child: Icon(g.icon,
-                            size: 52, color: alpha(Colors.white, 0.18)),
+                        child: Icon(g.icon, size: 52, color: alpha(Colors.white, 0.18)),
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
@@ -495,6 +462,59 @@ class _HannuDashboardState extends State<HannuDashboard> {
         ),
         const SizedBox(height: 20),
       ],
+    );
+  }
+}
+
+// 🔥 NEW OFFLINE DOWNLOADS PAGE 🔥
+class OfflineDownloadsPage extends StatelessWidget {
+  const OfflineDownloadsPage({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: HC.bg,
+      appBar: AppBar(
+        backgroundColor: HC.bg,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Offline Downloads', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.folder_special_rounded, size: 100, color: HC.accent2.withOpacity(0.9)),
+              const SizedBox(height: 24),
+              const Text(
+                "Internal AI Converter",
+                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                "All your movies and web series are directly downloaded and optimized into your phone's main storage.\n\nTo watch offline without any format errors (Grey/Purple screen), simply open your device's File Manager and go to the Downloads folder.\n\nYou can seamlessly play them using VLC Media Player, MX Player, or any supported player.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.6),
+              ),
+              const SizedBox(height: 35),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.play_circle_fill, color: Colors.white),
+                label: const Text("Continue Watching", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
