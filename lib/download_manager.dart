@@ -655,7 +655,7 @@ class DownloadStore extends ChangeNotifier {
       if (j.state == DlState.done && (j.filePath.isEmpty || !File(j.filePath).existsSync())) {
         // user ne file manager se delete kar di
         j.state = DlState.failed;
-        j.error = 'File phone se delete ho chuki hai.';
+        j.error = 'The file has been deleted from the phone.';
       }
     }
     notifyListeners();
@@ -865,19 +865,19 @@ class _Runner {
 
   String _netMsg(Object? e) {
     if (e is _DlFail) return e.msg;
-    if (e is SocketException) return 'Internet / server se connection toot gaya. Network check karke Resume dabao.';
-    if (e is TimeoutException) return 'Server bahut slow hai (timeout). Resume dabao.';
-    if (e is HandshakeException) return 'Secure connection fail hua. Resume dabao.';
+    if (e is SocketException) return 'Connection to the internet / server was lost. Check your network and tap Resume.';
+    if (e is TimeoutException) return 'The server is too slow (timeout). Tap Resume.';
+    if (e is HandshakeException) return 'Secure connection failed. Tap Resume.';
     if (e is _HttpStatus) {
       if (e.code == 403 || e.code == 401 || e.code == 410) {
-        return 'Server ne link reject kiya (HTTP ${e.code}) — link expire ho gaya. Movie ke player se dubara Download dabao.';
+        return 'The server rejected the link (HTTP ${e.code}) because it expired. Tap Download again from the movie player.';
       }
-      if (e.code == 404) return 'Server par segment nahi mila (HTTP 404). Dubara Download dabao.';
-      if (e.code == 429) return 'Server ne rate-limit kiya (HTTP 429). Thodi der baad Resume dabao.';
-      return 'Server error (HTTP ${e.code}). Resume dabao.';
+      if (e.code == 404) return 'Segment not found on the server (HTTP 404). Tap Download again.';
+      if (e.code == 429) return 'The server rate-limited the request (HTTP 429). Wait a bit, then tap Resume.';
+      return 'Server error (HTTP ${e.code}). Tap Resume.';
     }
-    if (e is HttpException) return 'Server connection error. Resume dabao.';
-    return 'Download me error aaya: $e';
+    if (e is HttpException) return 'Server connection error. Tap Resume.';
+    return 'Download error: $e';
   }
 
   bool _noSpace(FileSystemException e) {
@@ -994,7 +994,7 @@ class _Runner {
       }
     }
 
-    job.stage = 'Playlist padh raha hai…';
+    job.stage = 'Reading playlist…';
     store._tick(force: true);
     final List<String> urls = <String>[job.videoUrl, ...job.audios.map((DlAudioSel a) => a.url)];
     for (int i = 0; i < urls.length; i++) {
@@ -1002,14 +1002,14 @@ class _Runner {
       final String id = i == 0 ? 'v' : 'a${i - 1}';
       final String text = await _getText(urls[i]);
       if (!HlsParser.isPlaylist(text)) {
-        throw _DlFail('Server ne valid playlist nahi diya. Dubara Download dabao.');
+        throw _DlFail('The server did not return a valid playlist. Tap Download again.');
       }
       final HlsMedia m = HlsParser.parseMedia(text, Uri.parse(urls[i]));
       if (m.unsupported) {
-        throw _DlFail('Ye stream DRM / protected encryption use karti hai — download possible nahi.');
+        throw _DlFail('This stream uses DRM / protected encryption, so it cannot be downloaded.');
       }
       if (m.segs.isEmpty) {
-        throw _DlFail('Playlist me koi video segment nahi mila.');
+        throw _DlFail('No video segments found in the playlist.');
       }
       final Directory d = Directory('${root.path}/$id');
       if (!d.existsSync()) d.createSync(recursive: true);
@@ -1107,7 +1107,7 @@ class _Runner {
         return;
       } on FileSystemException catch (e) {
         if (_noSpace(e)) {
-          throw _DlFail('Phone ki storage full ho gayi. Jagah khali karke Resume dabao.');
+          throw _DlFail('Phone storage is full. Free up space, then tap Resume.');
         }
         last = e;
         await Future<void>.delayed(Duration(milliseconds: 400 * (i + 1)));
@@ -1271,7 +1271,7 @@ class _Runner {
   Future<void> _merge(Directory root, List<_TrackState> tracks) async {
     _check();
     job.state = DlState.merging;
-    job.stage = 'Converting (playable MP4 ban rahi hai)…';
+    job.stage = 'Converting (creating a playable MP4)…';
     job.progress = 0.9;
     store._tick(force: true);
 
@@ -1372,7 +1372,7 @@ class _Runner {
     }
 
     if (outPath.isEmpty) {
-      throw _DlFail('Converter movie ko jod nahi paya. Dubara Download dabao (naya link).');
+      throw _DlFail('The converter could not merge the movie. Tap Download again (new link).');
     }
 
     job.filePath = outPath;
@@ -1380,7 +1380,7 @@ class _Runner {
     job.progress = 1;
     job.speedBps = 0;
     job.state = DlState.done;
-    job.stage = job.exportToGallery ? 'Phone Movies folder me save ho raha hai…' : '';
+    job.stage = job.exportToGallery ? 'Saving to the phone Movies folder…' : '';
     store._tick(force: true);
 
     // temporary segments hata do (space bachane ke liye)
@@ -1458,7 +1458,7 @@ class _Runner {
         if (e is _StopSignal) rethrow;
         if (_stop) throw _StopSignal();
         if (e is FileSystemException && _noSpace(e)) {
-          throw _DlFail('Phone ki storage full ho gayi. Jagah khali karke Resume dabao.');
+          throw _DlFail('Phone storage is full. Free up space, then tap Resume.');
         }
         last = e;
         if (_fatalStatus(e)) break;
@@ -1482,7 +1482,7 @@ class _Runner {
     job.progress = 1;
     job.speedBps = 0;
     job.state = DlState.done;
-    job.stage = job.exportToGallery ? 'Phone Movies folder me save ho raha hai…' : '';
+    job.stage = job.exportToGallery ? 'Saving to the phone Movies folder…' : '';
     store._tick(force: true);
     try {
       if (root.existsSync()) await root.delete(recursive: true);

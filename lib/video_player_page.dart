@@ -74,6 +74,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool isPageLoading = true;
   
   String activeServer = 'vidrift'; 
+
+  // Hindi-server popup bypass (set to false to switch the unwrap trick off)
+  static const bool kHindiUnwrap = true;
+  String _unwrapUrl = '';
+  String _unwrapHost = '';
+  int _unwrapTries = 0;
+
   String currentAspectRatio = 'cover'; 
 
   late int currentSeason;
@@ -277,7 +284,65 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
+  // Pops the embedded player iframe out of the wrapper page so the popup killer can reach it.
+  Future<void> _tryUnwrapHindi() async {
+    if (!kHindiUnwrap || activeServer != 'screenscape' || widget.customUrl != null) return;
+    if (_unwrapUrl.isNotEmpty || _unwrapTries >= 4) return;
+    _unwrapTries++;
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (!mounted || _unwrapUrl.isNotEmpty) return;
+    try {
+      final Object r = await _controller.runJavaScriptReturningResult(
+        "(function(){var f=document.getElementsByTagName('iframe');for(var i=0;i<f.length;i++){var s=f[i].src||'';var l=s.toLowerCase();if(s.indexOf('http')===0&&!/(ads|pop|bet|track|doubleclick|leela|google)/.test(l)){return s;}}return '';})()",
+      );
+      String u = r.toString().replaceAll('"', '').replaceAll('\\/', '/').trim();
+      if (u.isEmpty || !u.startsWith('http')) {
+        _tryUnwrapHindi();
+        return;
+      }
+      _unwrapUrl = u;
+      _unwrapHost = Uri.tryParse(u)?.host ?? '';
+      await _controller.loadRequest(Uri.parse(u), headers: const {'Referer': 'https://pantyflix.com/'});
+    } catch (_) {}
+  }
+
+  static const String _kPopupKillerJs = r'''
+    (function () {
+      if (window.__hnPk) return;
+      window.__hnPk = 1;
+      function kill() {
+        try {
+          var ins = document.querySelectorAll('input[type="tel"], input[placeholder*="phone" i], input[name*="phone" i], input[placeholder*="mobile" i]');
+          for (var i = 0; i < ins.length; i++) {
+            var n = ins[i], tgt = null;
+            for (var d = 0; d < 14 && n && n !== document.body; d++) {
+              n = n.parentElement;
+              if (!n) break;
+              var cs = getComputedStyle(n);
+              if (cs.position === 'fixed' || cs.position === 'absolute' || parseInt(cs.zIndex) > 100) tgt = n;
+            }
+            if (tgt && !tgt.querySelector('video')) tgt.remove();
+          }
+          var els = document.querySelectorAll('div, section, form, aside');
+          for (var j = 0; j < els.length; j++) {
+            var el = els[j];
+            var t = (el.innerText || '').toLowerCase();
+            if (t.length > 0 && t.length < 500 && (t.indexOf('phone number') > -1 || t.indexOf('जारी रखना') > -1) && !el.querySelector('video')) {
+              var cs2 = getComputedStyle(el);
+              if (cs2.position === 'fixed' || cs2.position === 'absolute' || parseInt(cs2.zIndex) > 100) el.remove();
+            }
+          }
+        } catch (e) {}
+      }
+      setInterval(kill, 100);
+      kill();
+    })();
+  ''';
+
   void _initStream() {
+    _unwrapUrl = '';
+    _unwrapHost = '';
+    _unwrapTries = 0;
     setState(() { isPageLoading = true; isVideoPlaying = false; showIntroAnimation = false; });
 
     _controller = WebViewController()
@@ -441,6 +506,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               }, 50);
             ''';
             _controller.runJavaScript(jsCode);
+            _controller.runJavaScript(_kPopupKillerJs);
+            _tryUnwrapHindi();
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
@@ -466,6 +533,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                 url.startsWith('tg://') ||
                 url.contains('about:blank')) {
                 return NavigationDecision.prevent;
+            }
+
+            if (request.isMainFrame && _unwrapHost.isNotEmpty && (Uri.tryParse(request.url)?.host ?? '') == _unwrapHost) {
+              return NavigationDecision.navigate;
             }
 
             if (request.isMainFrame && widget.customUrl == null) {

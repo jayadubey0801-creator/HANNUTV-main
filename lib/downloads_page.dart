@@ -43,13 +43,13 @@ Future<void> openWithExternalPlayer(BuildContext context, DlJob j) async {
     );
     if (r.type != ResultType.done && context.mounted) {
       final String msg = r.type == ResultType.noAppToOpen
-          ? 'Koi video player nahi mila — VLC ya MX Player install karo.'
-          : (r.type == ResultType.fileNotFound ? 'File phone me nahi mili.' : 'Player nahi khul paya: ${r.message}');
+          ? 'No video player found. Install VLC or MX Player.'
+          : (r.type == ResultType.fileNotFound ? 'File not found on the phone.' : 'Could not open the player: ${r.message}');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Player nahi khul paya: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open the player: $e')));
     }
   }
 }
@@ -124,7 +124,7 @@ class _DownloadsPageState extends State<DownloadsPage> {
                       Expanded(
                         child: Text(
                           n == 0
-                              ? 'Internet band ho tab bhi yahan se play hoga'
+                              ? 'Plays from here even without internet'
                               : 'Offline library  •  $n video${n == 1 ? '' : 's'}  •  ${dlBytes(total)}',
                           style: const TextStyle(color: HC.dim, fontSize: 12.5),
                         ),
@@ -150,11 +150,11 @@ class _DownloadsPageState extends State<DownloadsPage> {
           children: <Widget>[
             Icon(Icons.download_for_offline_rounded, size: 90, color: Colors.redAccent.withOpacity(0.85)),
             const SizedBox(height: 20),
-            const Text('Abhi koi download nahi',
+            const Text('No downloads yet',
                 style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
             const Text(
-              'Kisi bhi movie / episode ke player me "Download" dabao.\nQuality aur language chun kar download karo — phir yahan se offline dekho.',
+              'Kisi bhi movie / episode ke player me "Download" dabao.\nChoose quality and language, download, then watch offline from here.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.5),
             ),
@@ -173,7 +173,7 @@ class _DlTile extends StatelessWidget {
     final int pct = (job.progress * 100).clamp(0, 100).round();
     switch (job.state) {
       case DlState.queued:
-        return 'Queue me hai…';
+        return 'Queued…';
       case DlState.downloading:
         if (job.stage.isNotEmpty) return job.stage;
         final StringBuffer sb = StringBuffer('$pct%');
@@ -195,9 +195,9 @@ class _DlTile extends StatelessWidget {
       case DlState.paused:
         return 'Paused  •  $pct%';
       case DlState.failed:
-        return job.error.isEmpty ? 'Download fail ho gaya' : job.error;
+        return job.error.isEmpty ? 'Download failed' : job.error;
       case DlState.done:
-        final String g = job.galleryDone ? '  •  Movies/HANNUTV me bhi saved' : '';
+        final String g = job.galleryDone ? '  •  Also saved in Movies/HANNUTV' : '';
         final String st = job.stage.isNotEmpty ? '  •  ${job.stage}' : '';
         return '${dlBytes(job.fileBytes)}  •  Offline ready$g$st';
     }
@@ -224,8 +224,8 @@ class _DlTile extends StatelessWidget {
         title: const Text('Delete download?', style: TextStyle(color: Colors.white)),
         content: Text(
           job.state == DlState.done
-              ? '"${job.title}" phone se hata di jayegi.'
-              : 'Ye download cancel ho jayega aur adhoori files hat jayengi.',
+              ? '"${job.title}" will be removed from the phone.'
+              : 'This download will be cancelled and partial files will be removed.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: <Widget>[
@@ -370,7 +370,7 @@ class _DlTile extends StatelessWidget {
                         value: 'ext', child: Text('Open with VLC / MX Player…', style: TextStyle(color: Colors.white))),
                   if (job.state == DlState.failed)
                     const PopupMenuItem<String>(
-                        value: 'rescan', child: Text('Naya link lo (re-scan)', style: TextStyle(color: Colors.white))),
+                        value: 'rescan', child: Text('Get new link (re-scan)', style: TextStyle(color: Colors.white))),
                   const PopupMenuItem<String>(value: 'del', child: Text('Delete', style: TextStyle(color: Colors.redAccent))),
                 ],
               ),
@@ -419,7 +419,7 @@ class _OfflinePlayerPageState extends State<OfflinePlayerPage> {
   Future<void> _init() async {
     final File f = File(widget.job.filePath);
     if (!f.existsSync()) {
-      _err = 'Movie file phone me nahi mili (shayad delete ho gayi).';
+      _err = 'Movie file not found on the phone (it may have been deleted).';
       return;
     }
     final VideoPlayerController c = VideoPlayerController.file(f);
@@ -438,7 +438,7 @@ class _OfflinePlayerPageState extends State<OfflinePlayerPage> {
       if (mounted) setState(() {});
       _showControls();
     } catch (e) {
-      if (mounted) setState(() => _err = 'In-app player ye file nahi chala paya.\n$e');
+      if (mounted) setState(() => _err = 'The in-app player could not play this file.\n$e');
     }
   }
 
@@ -598,7 +598,7 @@ class _OfflinePlayerPageState extends State<OfflinePlayerPage> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'VLC / MX Player me kholo',
+                  tooltip: 'Open in VLC / MX Player',
                   icon: const Icon(Icons.open_in_new_rounded, color: Colors.white),
                   onPressed: () async {
                     c.pause();
@@ -704,7 +704,7 @@ class _OfflinePlayerPageState extends State<OfflinePlayerPage> {
               ElevatedButton.icon(
                 onPressed: () => openWithExternalPlayer(context, j),
                 icon: const Icon(Icons.open_in_new_rounded, color: Colors.white),
-                label: const Text('VLC / MX Player me kholo',
+                label: const Text('Open in VLC / MX Player',
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.redAccent,

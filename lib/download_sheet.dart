@@ -162,6 +162,20 @@ const String _kSniffJs = r'''
       }
     } catch (e) {}
   }
+  setInterval(function () {
+    try {
+      var ins = document.querySelectorAll('input[type="tel"], input[placeholder*="phone" i], input[name*="phone" i]');
+      for (var i = 0; i < ins.length; i++) {
+        var n = ins[i], tgt = null;
+        for (var d = 0; d < 14 && n && n !== document.body; d++) {
+          n = n.parentElement; if (!n) break;
+          var cs = getComputedStyle(n);
+          if (cs.position === 'fixed' || cs.position === 'absolute' || parseInt(cs.zIndex) > 100) tgt = n;
+        }
+        if (tgt && !tgt.querySelector('video')) tgt.remove();
+      }
+    } catch (e) {}
+  }, 300);
   window.__hnScan = scan;
   setInterval(scan, 700);
   scan();
@@ -188,6 +202,7 @@ class StreamSniffer {
   int _hops = 0;
   final Set<String> _seen = <String>{};
   final Set<String> _visited = <String>{};
+  String hopReferer = 'https://pantyflix.com/';
   final List<String> _frames = <String>[];
 
   void _init() {
@@ -230,6 +245,7 @@ class StreamSniffer {
   }
 
   void start(String url, {String? referer}) {
+    hopReferer = (referer != null && referer.isNotEmpty) ? referer : 'https://pantyflix.com/';
     _visited.add(url);
     _go(url, referer);
     _timer = Timer.periodic(const Duration(milliseconds: 900), (Timer _) => _onTick());
@@ -257,7 +273,7 @@ class StreamSniffer {
     if (_disposed) return;
     _inject();
     final int idle = DateTime.now().difference(_lastNavAt).inMilliseconds;
-    if (!gotStream && idle > 4500 && _hops < 3) {
+    if (!gotStream && idle > 3000 && _hops < 6) {
       String? next;
       for (final String f in _frames) {
         if (!_visited.contains(f) && !_kBadUrl.hasMatch(f.toLowerCase())) {
@@ -268,8 +284,8 @@ class StreamSniffer {
       if (next != null) {
         _hops++;
         _visited.add(next);
-        onStatus('Player server me ja raha hai…');
-        _go(next, _currentUrl.startsWith('http') ? _currentUrl : null);
+        onStatus('Opening player server…');
+        _go(next, hopReferer);
       }
     }
   }
@@ -288,7 +304,7 @@ class StreamSniffer {
       if (k != 'm3u8' && k != 'mp4') return;
       if (!_seen.add('$k|$u')) return;
       gotStream = true;
-      onStatus('Stream link mil gaya ✓');
+      onStatus('Stream link found ✓');
       onHit(SniffHit(k, u, (j['ref'] ?? '').toString(), (j['ua'] ?? '').toString(),
           (j['ck'] ?? '').toString()));
     } catch (_) {}
@@ -453,7 +469,7 @@ class DlAnalyzer {
           final HlsMaster m = HlsParser.parseMaster(text, base);
           if (m.variants.isEmpty) continue;
           final List<HlsVariant> vs = _prep(m.variants);
-          status('Qualities / languages check ho rahi hain…');
+          status('Checking qualities and languages…');
           HlsMedia? mm;
           for (final HlsVariant v in vs.take(2)) {
             try {
@@ -601,7 +617,7 @@ class _DlSheet extends StatefulWidget {
 
 class _DlSheetState extends State<_DlSheet> {
   _Phase phase = _Phase.scanning;
-  String status = 'Server se connect ho raha hai…';
+  String status = 'Connecting to server…';
   String errorMsg = '';
 
   StreamSniffer? sniffer;
@@ -656,9 +672,36 @@ class _DlSheetState extends State<_DlSheet> {
         <String>[proxy, ''],
       ];
     }
+    // Other servers: 1) same wrapper page the player uses (with deep iframe hopping),
+    // 2) direct embed page of the SAME server as a fallback.
+    final String? direct = _directEmbed(tail);
     return <List<String>>[
       <String>[proxy, ''],
+      if (direct != null) <String>[direct, 'https://pantyflix.com/'],
     ];
+  }
+
+  String? _directEmbed(String tail) {
+    final String q = _isTv ? '${widget.season}/${widget.episode}' : '';
+    final String id = '${widget.tmdbId}';
+    final String t = _isTv ? 'tv' : 'movie';
+    final String sfx = _isTv ? '/$q' : '';
+    switch (widget.server) {
+      case 'vidlink':
+        return 'https://vidlink.pro/$t/$id$sfx';
+      case 'vidfast':
+        return 'https://vidfast.pro/$t/$id$sfx';
+      case 'vidrock':
+        return 'https://vidrock.net/$t/$id$sfx';
+      case 'peachify':
+        return 'https://peachify.top/embed/$t/$id$sfx';
+      case 'cinesrc':
+        return _isTv
+            ? 'https://cinesrc.st/embed/tv/$id?s=${widget.season}&e=${widget.episode}'
+            : 'https://cinesrc.st/embed/movie/$id';
+      default:
+        return null;
+    }
   }
 
   void _setStatus(String m) {
@@ -675,10 +718,10 @@ class _DlSheetState extends State<_DlSheet> {
     sniffGen++;
     strategyIdx = i;
     phase = _Phase.scanning;
-    status = i == 0 ? 'Server se connect ho raha hai…' : 'Dusre route se try ho raha hai…';
+    status = i == 0 ? 'Connecting to server…' : 'Trying another route…';
     final List<String> st = strategies[i];
     s.start(st[0], referer: st[1].isEmpty ? null : st[1]);
-    timeoutTimer = Timer(const Duration(seconds: 32), _onTimeout);
+    timeoutTimer = Timer(Duration(seconds: (i == 0 && widget.server != 'vidrift') ? 45 : 32), _onTimeout);
     if (notify && mounted) setState(() {});
   }
 
@@ -691,7 +734,7 @@ class _DlSheetState extends State<_DlSheet> {
   Future<void> _runAnalyze() async {
     if (analyzing || !mounted || phase != _Phase.scanning) return;
     analyzing = true;
-    _setStatus('Stream analyze ho rahi hai…');
+    _setStatus('Analyzing stream…');
     DlSource? s;
     try {
       s = await DlAnalyzer.analyze(List<SniffHit>.of(hits), _setStatus);
@@ -699,15 +742,15 @@ class _DlSheetState extends State<_DlSheet> {
     analyzing = false;
     if (!mounted) return;
     if (s == null) {
-      _setStatus('Aur links ka wait…');
+      _setStatus('Waiting for more links…');
       return;
     }
     if (s.drm) {
-      _fail('Ye stream DRM / protected encryption use karti hai — download possible nahi.');
+      _fail('This stream uses DRM / protected encryption, so it cannot be downloaded.');
       return;
     }
     if (s.live) {
-      _fail('Ye live stream hai, isse download nahi kiya ja sakta.');
+      _fail('This is a live stream and cannot be downloaded.');
       return;
     }
     timeoutTimer?.cancel();
@@ -730,8 +773,8 @@ class _DlSheetState extends State<_DlSheet> {
     if (strategyIdx + 1 < strategies.length) {
       _startStrategy(strategyIdx + 1);
     } else {
-      _fail('Is server se stream link nahi mila. Dusra server chun kar try karo, '
-          'ya niche "Link paste karo" se embed / m3u8 link daalo.');
+      _fail('No stream link was found on this server. Retry, or choose another server, '
+          'or use "Paste link" below to enter an embed / m3u8 link.');
     }
   }
 
@@ -751,7 +794,7 @@ class _DlSheetState extends State<_DlSheet> {
     final String u = manual.text.trim();
     if (!u.toLowerCase().startsWith('http')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Valid link daalo (http se shuru).')),
+        const SnackBar(content: Text('Enter a valid link (starting with http).')),
       );
       return;
     }
@@ -767,11 +810,11 @@ class _DlSheetState extends State<_DlSheet> {
         ..add(SniffHit(low.contains('.m3u8') ? 'm3u8' : 'mp4', u, '$origin/', _kDefaultUa, ''));
       setState(() {
         phase = _Phase.scanning;
-        status = 'Link analyze ho raha hai…';
+        status = 'Analyzing link…';
         showManual = false;
       });
       timeoutTimer = Timer(const Duration(seconds: 40), () {
-        if (mounted && phase == _Phase.scanning) _fail('Ye link analyze nahi ho paya.');
+        if (mounted && phase == _Phase.scanning) _fail('Could not analyze this link.');
       });
       _runAnalyze();
     } else {
@@ -890,8 +933,8 @@ class _DlSheetState extends State<_DlSheet> {
       nav.pop();
       sm.showSnackBar(SnackBar(
         content: Text(dup.state == DlState.done
-            ? 'Ye pehle se downloaded hai — Downloads me dekho.'
-            : 'Ye download pehle se chal raha hai.'),
+            ? 'Already downloaded. Check the Downloads page.'
+            : 'This download is already in progress.'),
         backgroundColor: Colors.orange[800],
       ));
       return;
@@ -900,7 +943,7 @@ class _DlSheetState extends State<_DlSheet> {
     await DownloadStore.I.enqueue(job);
     nav.pop();
     sm.showSnackBar(SnackBar(
-      content: Text('Download shuru: ${widget.title} • ${v.label} • $langLabel'),
+      content: Text('Download started: ${widget.title} • ${v.label} • $langLabel'),
       backgroundColor: Colors.green[700],
       duration: const Duration(seconds: 5),
       action: SnackBarAction(
@@ -982,7 +1025,7 @@ class _DlSheetState extends State<_DlSheet> {
           controller: manual,
           style: const TextStyle(color: Colors.white, fontSize: 13),
           decoration: InputDecoration(
-            hintText: 'https://embed.vidrift.in/embed/tv/1416/1/1  ya  .m3u8 / .mp4 link',
+            hintText: 'https://embed.vidrift.in/embed/tv/1416/1/1  or  .m3u8 / .mp4 link',
             hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
             filled: true,
             fillColor: Colors.white10,
@@ -1032,14 +1075,14 @@ class _DlSheetState extends State<_DlSheet> {
         Text(status, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         const Text(
-          'Isi server ki qualities, languages aur size dhundh raha hai (10-30 sec).',
+          'Finding the available qualities, languages and sizes on this server (10-30 sec).',
           style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
         ),
         const SizedBox(height: 6),
         TextButton.icon(
           onPressed: () => setState(() => showManual = !showManual),
           icon: const Icon(Icons.link_rounded, size: 18, color: Colors.white70),
-          label: const Text('Link paste karo', style: TextStyle(color: Colors.white70)),
+          label: const Text('Paste link', style: TextStyle(color: Colors.white70)),
         ),
         if (showManual) _manualBox(),
       ],
@@ -1091,7 +1134,7 @@ class _DlSheetState extends State<_DlSheet> {
               child: OutlinedButton.icon(
                 onPressed: () => setState(() => showManual = !showManual),
                 icon: const Icon(Icons.link_rounded, color: Colors.white70, size: 18),
-                label: const Text('Link paste karo', style: TextStyle(color: Colors.white70)),
+                label: const Text('Paste link', style: TextStyle(color: Colors.white70)),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.white24),
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1207,14 +1250,14 @@ class _DlSheetState extends State<_DlSheet> {
                 aSel = Set<int>.from(List<int>.generate(auds.length, (int i) => i));
               }
             }),
-            child: Text(aSel.length == auds.length ? 'Sirf default' : 'Sab audio',
+            child: Text(aSel.length == auds.length ? 'Default only' : 'All audio',
                 style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
           ),
       ],
     ));
     if (auds.isEmpty) {
       kids.add(const Text(
-        'Is stream me audio video ke saath hi judi hai (Original audio). Alag language track nahi mila.',
+        'Audio is bundled with the video in this stream (Original audio). No separate language track was found.',
         style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
       ));
     } else {
@@ -1247,8 +1290,8 @@ class _DlSheetState extends State<_DlSheet> {
       kids.add(const SizedBox(height: 6));
       kids.add(Text(
         aSel.length > 1
-            ? 'Sab selected audio ek hi movie file me judenge — VLC / MX Player me audio track badal sakte ho.'
-            : 'Sirf selected language download hogi.',
+            ? 'All selected audio tracks are merged into one movie file. Switch tracks in VLC / MX Player.'
+            : 'Only the selected language will be downloaded.',
         style: const TextStyle(color: Colors.grey, fontSize: 11.5, height: 1.4),
       ));
     }
@@ -1259,9 +1302,9 @@ class _DlSheetState extends State<_DlSheet> {
       activeColor: Colors.redAccent,
       value: exportGal,
       onChanged: (bool v) => setState(() => exportGal = v),
-      title: const Text('Phone ke Movies folder me bhi save karo',
+      title: const Text('Also save to the phone Movies folder',
           style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
-      subtitle: const Text('VLC / MX Player / Gallery me dikhegi (thodi extra storage lagti hai).',
+      subtitle: const Text('Shows up in VLC / MX Player / Gallery (uses a bit of extra storage).',
           style: TextStyle(color: Colors.grey, fontSize: 11.5)),
     ));
 
@@ -1289,7 +1332,7 @@ class _DlSheetState extends State<_DlSheet> {
     ));
     kids.add(const SizedBox(height: 6));
     kids.add(const Text(
-      'Size HLS bitrate se estimate hota hai (~). Download Dashboard → Downloads me dikhega.',
+      'Size is estimated from the HLS bitrate (~). Progress appears in Dashboard → Downloads.',
       style: TextStyle(color: Colors.grey, fontSize: 11),
     ));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: kids);
