@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'config.dart';
+import 'download_manager.dart';
+import 'downloads_page.dart'; // 🔥 ASLI DOWNLOAD PAGE CONNECTED
 import 'hero.dart';
 import 'pages.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
 
+/// HANNUTV main dashboard.
 class HannuDashboard extends StatefulWidget {
   const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
   final DashboardHooks hooks;
@@ -37,6 +40,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     WatchlistStore.I.load();
     ContinueWatchingStore.I.load();
     NotificationStore.I.init();
+    DownloadStore.I.load(); // 🔥 v1.4.0 downloads initialization
     _hero = Tmdb.I.heroItems();
   }
 
@@ -257,6 +261,18 @@ class _HannuDashboardState extends State<HannuDashboard> {
                 openSearch(context);
               }
             }),
+            
+            // 🔥 DOWNLOAD MANAGER BUTTON IN DASHBOARD 🔥
+            AnimatedBuilder(
+              animation: DownloadStore.I,
+              builder: (BuildContext _, Widget? __) => _iconBtn(
+                Icons.download_for_offline_rounded,
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage())),
+                badge: DownloadStore.I.activeCount,
+                iconColor: Colors.redAccent,
+              ),
+            ),
+            
             AnimatedBuilder(
               animation: WatchlistStore.I,
               builder: (BuildContext _, Widget? __) => _iconBtn(

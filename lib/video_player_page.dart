@@ -11,13 +11,15 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart'; 
 
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
 import 'tmdb_service.dart';
 import 'config.dart' show kAllGenres, GenreDef;
+
+// 🔥 TERI APNI FILE JO ANDAR DEEP DOWNLOAD MANAGER KO CALL KARTI HAI
+import 'download_sheet.dart'; 
 
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
@@ -122,10 +124,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   int totalSeasons = 1;
   List episodesList = [];
-
-  // 🔥 AI DOWNLOADER EXTRACTION URL
-  String extractedVideoUrl = '';
-  List<String> detectedAudioTracks = ['Hindi [Default]', 'English [Original]'];
 
   @override
   void initState() {
@@ -244,289 +242,38 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  // 🔥 AI DEEP NETWORK SCANNER & EXTRACTOR 🔥
-  void _startAiDownloadExtraction() async {
-    _showScanningSheet();
-    
-    try {
-      await _controller.runJavaScript('''
-        (function() {
-          var frames = document.getElementsByTagName('iframe');
-          for(var i=0; i<frames.length; i++) {
-              try {
-                  var s = frames[i].src.toLowerCase();
-                  if(s && s.includes('http') && !s.includes('ads') && !s.includes('pop') && !s.includes('leela') && !s.includes('bet')) {
-                      VideoState.postMessage('EXTRACTED_URL:' + frames[i].src);
-                      return;
-                  }
-              } catch(e) {}
-          }
-        })();
-      ''');
-      
-      await Future.delayed(const Duration(milliseconds: 2600));
-      
-      if (mounted) {
-        Navigator.pop(context); 
-        
-        final id = widget.tmdbId;
-        final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
-        String directLink = extractedVideoUrl.isNotEmpty && extractedVideoUrl.startsWith('http')
-            ? extractedVideoUrl
-            : (isTv 
-                ? 'https://pantyflix.com/watch/play/tv/$id?season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
-                : 'https://pantyflix.com/watch/play/movie/$id?server=$activeServer');
-
-        if (activeServer.contains('hindi') || activeServer == 'cinezo') {
-          detectedAudioTracks = ['Hindi [Clean Dual-Audio]', 'English [Original 5.1]', 'Tamil / Telugu Multi'];
-        } else {
-          detectedAudioTracks = ['Hindi [Default]', 'English [Original Audio]', 'Multi-Audio Dubbed'];
-        }
-
-        _showQualitySelectionSheet(directLink);
-      }
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
+  // 🔥 TERA ASLI DOWNLOAD MANAGER JO TUNE KHUD BHEJA HAI, YAHAN CALL KIYA GAYA HAI 🔥
+  Future<void> _openDownloadSheet() async {
+    if (widget.customUrl != null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Live TV download nahi ho sakta.'),
+        backgroundColor: Colors.orangeAccent,
+      ));
+      return;
     }
-  }
-
-  void _showScanningSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF151515),
-      isScrollControlled: true,
-      isDismissible: false,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) {
-        return Container(
-          height: 360,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              SizedBox(
-                width: 50,
-                height: 50,
-                child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 4),
-              ),
-              SizedBox(height: 24),
-              Text("AI Deep Source Analyzer...", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              SizedBox(height: 12),
-              Text("Extracting internal server link to open securely in\nAll Video Downloader / External Apps...", 
-                textAlign: TextAlign.center, 
-                style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5)
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showQualitySelectionSheet(String directLink) {
-    String selectedAudio = detectedAudioTracks.first;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF141414),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            bool isProcessing = false;
-
-            if (isProcessing) {
-              return Container(
-                height: 400,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 80),
-                    SizedBox(height: 24),
-                    Text("Link Copied Successfully!", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 12),
-                    Text("The video source has been extracted and copied to clipboard.\nPassing to External Downloader...", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5)),
-                  ],
-                ),
-              );
-            }
-
-            return Container(
-              height: 480,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text("Download Manager (v1.4.0)", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      IconButton(icon: const Icon(Icons.close, color: Colors.white70), onPressed: () => Navigator.pop(context))
-                    ],
-                  ),
-                  const Text("AI Integration bypasses web redirects for direct download.", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
-                  const SizedBox(height: 16),
-                  
-                  // Audio Track Selector
-                  const Text("Select Audio Track:", style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: detectedAudioTracks.map((track) {
-                        final bool isSel = selectedAudio == track;
-                        return GestureDetector(
-                          onTap: () => setModalState(() => selectedAudio = track),
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: isSel ? Colors.redAccent : Colors.white10,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: isSel ? Colors.red : Colors.white24)
-                            ),
-                            child: Text(track, style: TextStyle(color: isSel ? Colors.white : Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  
-                  _buildDownloadOptionTile(
-                    title: "1080p Full HD (Lossless)",
-                    sizeInfo: "1.85 GB • High Bitrate • Fast Server",
-                    audioInfo: selectedAudio,
-                    icon: Icons.high_quality_rounded,
-                    color: Colors.redAccent,
-                    onTap: () {
-                      setModalState(() { isProcessing = true; });
-                      _executeExternalDownload(directLink, "1080p", selectedAudio);
-                    }
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  _buildDownloadOptionTile(
-                    title: "720p HD (Balanced)",
-                    sizeInfo: "920 MB • Crisp Quality • Recommended",
-                    audioInfo: selectedAudio,
-                    icon: Icons.hd_rounded,
-                    color: Colors.amber,
-                    onTap: () {
-                      setModalState(() { isProcessing = true; });
-                      _executeExternalDownload(directLink, "720p", selectedAudio);
-                    }
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  _buildDownloadOptionTile(
-                    title: "480p SD (Data Saver)",
-                    sizeInfo: "430 MB • Mobile Ultra Compact",
-                    audioInfo: selectedAudio,
-                    icon: Icons.sd_storage_rounded,
-                    color: Colors.blueAccent,
-                    onTap: () {
-                      setModalState(() { isProcessing = true; });
-                      _executeExternalDownload(directLink, "480p", selectedAudio);
-                    }
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildDownloadOptionTile({
-    required String title,
-    required String sizeInfo,
-    required String audioInfo,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12)
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 36),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 2),
-                  Text(sizeInfo, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                  const SizedBox(height: 2),
-                  Text("Audio: $audioInfo", style: const TextStyle(color: Colors.greenAccent, fontSize: 10)),
-                ],
-              ),
-            ),
-            const Icon(Icons.open_in_new_rounded, color: Colors.white54, size: 26),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _executeExternalDownload(String link, String quality, String audio) async {
-    // Copy the true embedded URL to clipboard so Downloader app gets it.
-    await Clipboard.setData(ClipboardData(text: link));
-    
+    String posterPath = '';
     try {
-      final User? user = FirebaseAuth.instance.currentUser;
-      if (user != null && !user.isAnonymous) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('offline_downloads').doc(widget.tmdbId.toString()).set({
-          'id': widget.tmdbId,
-          'title': widget.movieTitle,
-          'mediaType': widget.mediaType,
-          'season': currentSeason,
-          'episode': currentEpisode,
-          'downloadUrl': link,
-          'quality': quality,
-          'audio': audio,
-          'timestamp': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+      posterPath = await _posterUrlForWatchlist();
     } catch (_) {}
-
-    Future.delayed(const Duration(milliseconds: 1000), () async {
-      if (mounted) Navigator.pop(context); // Close processing sheet
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Link copied! Opening All Video Downloader..."),
-            backgroundColor: Colors.green[800],
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-      
-      final Uri url = Uri.parse(link);
-      try {
-        await launchUrl(url, mode: LaunchMode.externalNonBrowserApplication);
-      } catch (e) {
-        try {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        } catch (e) {
-          debugPrint("Download trigger failure: $e");
-        }
-      }
-    });
+    
+    if (!mounted) return;
+    
+    final String realTitle = (details?['title'] ?? details?['name'] ?? widget.movieTitle).toString();
+    String realYear = (details?['release_date'] ?? details?['first_air_date'] ?? widget.year).toString();
+    if (realYear.length >= 4) realYear = realYear.substring(0, 4);
+    
+    // 🔥 Calls the function from your own `download_sheet.dart` 🔥
+    await showDownloadSheet(
+      context,
+      tmdbId: widget.tmdbId,
+      mediaType: _tmdbType,
+      season: currentSeason,
+      episode: currentEpisode,
+      title: realTitle,
+      year: realYear,
+      posterPath: posterPath,
+      server: activeServer,
+    );
   }
 
   void _initStream() {
@@ -541,10 +288,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { 
         if (message.message == 'playing' && mounted) {
           _triggerCinematicPlayAnimation(); 
-        } else if (message.message.startsWith('EXTRACTED_URL:')) {
-          if (extractedVideoUrl.isEmpty || !extractedVideoUrl.contains('.m3u8')) {
-            extractedVideoUrl = message.message.replaceFirst('EXTRACTED_URL:', '');
-          }
         }
       })
       ..setNavigationDelegate(
@@ -557,7 +300,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 PERMANENT ZERO WHITE LINES + NUCLEAR CSS & JS SCRIPT (100% LOCKED) 🔥
+            // 🔥 TERA EXACT PURANA NUCLEAR CSS & JS LOGIC (LOCKED) 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
@@ -602,7 +345,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
               }, true);
 
-              // 💥 50ms INTERVAL FOR BOT BYPASS & STICKERS 💥
+              // 💥 ULTRA FAST 50ms INTERVAL FOR BOT BYPASS & STICKERS 💥
               setInterval(function() {
                 try {
                   var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
@@ -639,7 +382,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   if (vids.length > 0) {
                     var v = vids[0];
                     v.style.setProperty('background-color', '#000000', 'important');
-                    v.style.setProperty('object-fit', 'cover', 'important'); // 🔥 FIX: cover ensures NO WHITE LINES 🔥
+                    v.style.setProperty('object-fit', 'cover', 'important'); 
                     v.style.setProperty('position', 'fixed', 'important');
                     v.style.setProperty('top', '0px', 'important');
                     v.style.setProperty('left', '0px', 'important');
@@ -667,7 +410,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                        }
                     }
                   } else {
-                    // Force Safe Iframe to Absolute Front (Solves white lines / framing issues)
                     var frames = document.getElementsByTagName('iframe');
                     for(var f=0; f<frames.length; f++) {
                         var frm = frames[f];
@@ -682,7 +424,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                             frm.style.setProperty('height', '100vh', 'important');
                             frm.style.setProperty('margin', '0px', 'important');
                             frm.style.setProperty('padding', '0px', 'important');
-                            frm.style.setProperty('border', 'none', 'important'); // 🔥 WHITE LINE FIX 🔥
+                            frm.style.setProperty('border', 'none', 'important');
                             frm.style.setProperty('outline', 'none', 'important');
                             frm.style.setProperty('object-fit', 'cover', 'important');
                             frm.style.setProperty('z-index', '2147483647', 'important');
@@ -1736,10 +1478,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           ],
                           _buildFocusableItem(onTap: _showSearchSheet, borderRadius: BorderRadius.circular(20), child: _buildActionButton(Icons.search, "Search")),
                           
-                          // 🔥 NEW: AI DOWNLOAD BUTTON 🔥
+                          // 🔥 NEW: AI DOWNLOAD BUTTON (CONNECTED TO INTERNAL DOWNLOAD SHEET) 🔥
                           const SizedBox(width: 8),
                           _buildFocusableItem(
-                            onTap: _startAiDownloadExtraction, 
+                            onTap: _openDownloadSheet, 
                             borderRadius: BorderRadius.circular(20), 
                             child: _buildActionButton(Icons.download_rounded, "Download", activeColor: Colors.redAccent)
                           ),
@@ -2206,7 +1948,7 @@ class _SearchSheetState extends State<_SearchSheet> {
       setState(() { _results = []; _loading = false; _lastQuery = ''; });
       return;
     }
-    setState(() {});
+    setState({});
     _debounce = Timer(const Duration(milliseconds: 400), () { _search(q); });
   }
 

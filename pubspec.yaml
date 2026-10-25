@@ -29,6 +29,14 @@ dependencies:
   firebase_database: any
   firebase_analytics: any
   package_info_plus: any
+  
+  # 🔥 DEEP INTERNAL DOWNLOADER PACKAGES (FIX FOR YOUR ERRORS) 🔥
+  ffmpeg_kit_flutter_new_min: any
+  path_provider: any
+  video_player: any
+  open_filex: any
+  gal: any
+  wakelock_plus: any
 
 dev_dependencies:
   flutter_test:
