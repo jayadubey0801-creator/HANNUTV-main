@@ -23,8 +23,8 @@ import 'pages.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// 🔥 APP KA CURRENT VERSION (Tera naya update 1.3.0) 🔥
-const String currentAppVersion = "1.3.0"; 
+// 🔥 APP KA CURRENT VERSION (Tera naya update 1.4.0) 🔥
+const String currentAppVersion = "1.4.0"; 
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -65,7 +65,7 @@ Future<void> main() async {
     await remoteConfig.setDefaults(const {
       'show_ads': true, 
       'maintenance_mode': false,
-      'latest_version': '1.3.0',
+      'latest_version': '1.4.0',
       'update_link': 'https://hannutv.blogspot.com'
     });
     

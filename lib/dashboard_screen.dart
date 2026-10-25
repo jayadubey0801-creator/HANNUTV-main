@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'config.dart';
+import 'download_manager.dart';
+import 'downloads_page.dart';
 import 'hero.dart';
 import 'pages.dart';
 import 'stores.dart';
@@ -38,6 +40,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     WatchlistStore.I.load();
     ContinueWatchingStore.I.load();
     NotificationStore.I.init();
+    DownloadStore.I.load(); // 🔥 v1.4.0 downloads
     _hero = Tmdb.I.heroItems();
   }
 
@@ -260,9 +263,15 @@ class _HannuDashboardState extends State<HannuDashboard> {
             }),
             
             // 🔥 NEW DOWNLOAD BUTTON IN HEADER 🔥
-            _iconBtn(Icons.download_for_offline_rounded, () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineDownloadsPage()));
-            }, iconColor: Colors.redAccent),
+            AnimatedBuilder(
+              animation: DownloadStore.I,
+              builder: (BuildContext _, Widget? __) => _iconBtn(
+                Icons.download_for_offline_rounded,
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage())),
+                badge: DownloadStore.I.activeCount,
+                iconColor: Colors.redAccent,
+              ),
+            ),
             
             AnimatedBuilder(
               animation: WatchlistStore.I,
@@ -466,55 +475,11 @@ class _HannuDashboardState extends State<HannuDashboard> {
   }
 }
 
-// 🔥 NEW OFFLINE DOWNLOADS PAGE 🔥
+// 🔥 v1.4.0: placeholder hata diya — asli Downloads page downloads_page.dart me hai.
+// Purane naam ko compatible rakhne ke liye ye wrapper bacha hai.
 class OfflineDownloadsPage extends StatelessWidget {
   const OfflineDownloadsPage({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: HC.bg,
-      appBar: AppBar(
-        backgroundColor: HC.bg,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('Offline Downloads', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.folder_special_rounded, size: 100, color: HC.accent2.withOpacity(0.9)),
-              const SizedBox(height: 24),
-              const Text(
-                "Internal AI Converter",
-                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                "All your movies and web series are directly downloaded and optimized into your phone's main storage.\n\nTo watch offline without any format errors (Grey/Purple screen), simply open your device's File Manager and go to the Downloads folder.\n\nYou can seamlessly play them using VLC Media Player, MX Player, or any supported player.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.6),
-              ),
-              const SizedBox(height: 35),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.play_circle_fill, color: Colors.white),
-                label: const Text("Continue Watching", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))
-                ),
-              )
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const DownloadsPage();
 }
