@@ -12,6 +12,8 @@ import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'download_sheet.dart'; // 🔥 Import added for SniffHit dependencies
+
 String dlBytes(num b) {
   if (b <= 0) return '0 MB';
   const List<String> u = <String>['B', 'KB', 'MB', 'GB', 'TB'];
@@ -320,7 +322,7 @@ class HlsParser {
               keyIdx = m.keys.length - 1;
             }
           } else {
-            m.unsupported = true;
+            m.unsupported = true; 
           }
         } else if (l.startsWith('#EXT-X-MAP:')) {
           final Map<String, String> a = attrs(_after(l));
