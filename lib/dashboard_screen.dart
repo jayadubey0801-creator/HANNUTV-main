@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'config.dart';
-import 'download_manager.dart';
-import 'downloads_page.dart';
 import 'hero.dart';
 import 'pages.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
 
-/// HANNUTV main dashboard.
 class HannuDashboard extends StatefulWidget {
   const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
   final DashboardHooks hooks;
@@ -40,7 +37,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
     WatchlistStore.I.load();
     ContinueWatchingStore.I.load();
     NotificationStore.I.init();
-    DownloadStore.I.load(); // 🔥 v1.4.0 downloads
     _hero = Tmdb.I.heroItems();
   }
 
@@ -261,18 +257,6 @@ class _HannuDashboardState extends State<HannuDashboard> {
                 openSearch(context);
               }
             }),
-            
-            // 🔥 NEW DOWNLOAD BUTTON IN HEADER 🔥
-            AnimatedBuilder(
-              animation: DownloadStore.I,
-              builder: (BuildContext _, Widget? __) => _iconBtn(
-                Icons.download_for_offline_rounded,
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage())),
-                badge: DownloadStore.I.activeCount,
-                iconColor: Colors.redAccent,
-              ),
-            ),
-            
             AnimatedBuilder(
               animation: WatchlistStore.I,
               builder: (BuildContext _, Widget? __) => _iconBtn(
@@ -473,13 +457,4 @@ class _HannuDashboardState extends State<HannuDashboard> {
       ],
     );
   }
-}
-
-// 🔥 v1.4.0: placeholder hata diya — asli Downloads page downloads_page.dart me hai.
-// Purane naam ko compatible rakhne ke liye ye wrapper bacha hai.
-class OfflineDownloadsPage extends StatelessWidget {
-  const OfflineDownloadsPage({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) => const DownloadsPage();
 }
