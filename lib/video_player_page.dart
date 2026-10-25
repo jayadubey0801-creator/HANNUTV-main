@@ -11,7 +11,6 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart'; 
 
 import 'banner_ad_widget.dart';
 import 'skippable_ad_screen.dart';
@@ -74,7 +73,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool isPageLoading = true;
   
   String activeServer = 'vidrift'; 
-  String currentAspectRatio = 'cover'; 
+  String currentAspectRatio = 'cover'; // 🔥 WHITE LINE FIX
 
   late int currentSeason;
   late int currentEpisode;
@@ -247,7 +246,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Future<void> _openDownloadSheet() async {
     if (widget.customUrl != null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Live TV download nahi ho sakta.'),
+        content: Text('Live TV download is not supported.'),
         backgroundColor: Colors.orangeAccent,
       ));
       return;
@@ -263,7 +262,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     String realYear = (details?['release_date'] ?? details?['first_air_date'] ?? widget.year).toString();
     if (realYear.length >= 4) realYear = realYear.substring(0, 4);
     
-    // 🔥 Calls the function directly from your own `download_sheet.dart` 🔥
+    // 🔥 Calls the function from your own `download_sheet.dart` 🔥
     await showDownloadSheet(
       context,
       tmdbId: widget.tmdbId,
@@ -273,7 +272,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       title: realTitle,
       year: realYear,
       posterPath: posterPath,
-      server: activeServer,
+      server: activeServer, // Passes current server directly
     );
   }
 
@@ -301,7 +300,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 TERA EXACT PURANA NUCLEAR CSS & JS LOGIC (100% LOCKED) 🔥
+            // 🔥 PERMANENT ZERO WHITE LINES + NUCLEAR CSS & ANTI-CAPTCHA JS SCRIPT (100% LOCKED) 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
@@ -346,7 +345,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   }
               }, true);
 
-              // 💥 ULTRA FAST 50ms INTERVAL FOR BOT BYPASS & STICKERS 💥
+              // 💥 ULTRA FAST 50ms INTERVAL FOR BOT BYPASS & STICKERS & CAPTCHA KILLER 💥
               setInterval(function() {
                 try {
                   // Silent Auto-Clicker
@@ -361,6 +360,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       var txt = (btns[i].innerText || btns[i].textContent || '').toLowerCase().trim();
                       if(txt === "i'm not a robot" || txt === "im not a robot" || txt === "continue" || txt.indexOf("verify") !== -1) {
                           btns[i].click();
+                      }
+                  }
+
+                  // 🔥 NUCLEAR "HINDI SERVER" OVERLAY/CAPTCHA KILLER (NEWLY ADDED FOR PHONE/ROBOT POPUP) 🔥
+                  var badKeywords = ['robot', 'captcha', 'continue', 'verify', 'phone', 'number', 'जारी रखना'];
+                  var allNodes = document.querySelectorAll('div, iframe, span, p, h1, h2, h3, form, input, section');
+                  for (var b = 0; b < allNodes.length; b++) {
+                      var node = allNodes[b];
+                      var nodeText = (node.innerText || node.textContent || '').toLowerCase();
+                      var containsBadWord = badKeywords.some(function(kw) { return nodeText.indexOf(kw) !== -1; });
+                      if (containsBadWord && !node.querySelector('video')) {
+                          node.style.setProperty('display', 'none', 'important');
+                          node.style.setProperty('opacity', '0', 'important');
+                          node.style.setProperty('visibility', 'hidden', 'important');
+                          node.style.setProperty('pointer-events', 'none', 'important');
+                          node.style.setProperty('z-index', '-2147483648', 'important');
                       }
                   }
 

@@ -1,14 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════════════
-//  HANNUTV  •  download_manager.dart  (v1.4.0)
-//
-//  Ye file poora DOWNLOAD ENGINE hai:
-//    1. HLS (.m3u8) parser  → qualities, audio languages, segments
-//    2. Segment downloader  → parallel, retry, resume, pause (headers ke saath)
-//    3. Internal converter  → FFmpeg se video + audio ko ek playable MP4 me jodta hai
-//    4. DownloadStore       → jobs ki list (SharedPreferences me save), dashboard ye hi dikhata hai
-//
-//  Is file me app ke kisi purane logic ko touch nahi kiya gaya.
-// ═══════════════════════════════════════════════════════════════════════════
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -22,8 +11,6 @@ import 'package:flutter/foundation.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-// ───────────────────────────── helpers ─────────────────────────────
 
 String dlBytes(num b) {
   if (b <= 0) return '0 MB';
@@ -63,7 +50,6 @@ const Map<String, String> _l3 = <String, String>{
   'pl': 'pol', 'nl': 'nld', 'vi': 'vie', 'fa': 'fas', 'he': 'heb',
 };
 
-/// 2-letter / 3-letter language code ko MP4 ke liye 3-letter (ISO-639-2) me badalta hai.
 String dlLang3(String code) {
   String c = code.trim().toLowerCase();
   if (c.isEmpty) return 'und';
@@ -89,8 +75,6 @@ String _q(String s) {
   }
   return s;
 }
-
-// ───────────────────────────── HLS models ─────────────────────────────
 
 class HlsVariant {
   const HlsVariant({
@@ -137,7 +121,7 @@ class HlsAudio {
   final String groupId;
   final String name;
   final String lang;
-  final String url; // empty = audio video ke andar muxed hai
+  final String url; 
   final bool isDefault;
   final String channels;
 
@@ -238,8 +222,6 @@ class HlsMedia {
   }
 }
 
-// ───────────────────────────── HLS parser ─────────────────────────────
-
 class HlsParser {
   static bool isPlaylist(String t) => t.trimLeft().startsWith('#EXTM3U');
   static bool isMaster(String t) => t.contains('#EXT-X-STREAM-INF');
@@ -338,7 +320,7 @@ class HlsParser {
               keyIdx = m.keys.length - 1;
             }
           } else {
-            m.unsupported = true; // SAMPLE-AES / DRM
+            m.unsupported = true;
           }
         } else if (l.startsWith('#EXT-X-MAP:')) {
           final Map<String, String> a = attrs(_after(l));
@@ -384,8 +366,6 @@ class HlsParser {
     return m;
   }
 }
-
-// ───────────────────────────── Job model ─────────────────────────────
 
 enum DlState { queued, downloading, merging, done, failed, paused }
 
@@ -451,7 +431,7 @@ class DlJob {
   final double durationSec;
   final int estBytes;
   final bool exportToGallery;
-  final String kind; // 'hls' | 'mp4'
+  final String kind; 
   final bool hevc;
   final bool audioNeedsAac;
   final int createdAt;
@@ -557,8 +537,6 @@ class DlJob {
   }
 }
 
-// ───────────────────────────── Store (dashboard isko dikhata hai) ─────────────────────────────
-
 class DownloadStore extends ChangeNotifier {
   DownloadStore._();
   static final DownloadStore I = DownloadStore._();
@@ -582,7 +560,6 @@ class DownloadStore extends ChangeNotifier {
     return null;
   }
 
-  /// Same movie/episode + same quality + same language pehle se hai?
   DlJob? duplicateOf(String dupKey) {
     for (final DlJob j in _jobs) {
       if (j.dupKey == dupKey && j.state != DlState.failed) return j;
@@ -617,7 +594,6 @@ class DownloadStore extends ChangeNotifier {
     return d;
   }
 
-  /// Phone storage ki permission (sirf purane Android / gallery export ke liye chahiye).
   Future<bool> ensureStorageAccess() async {
     try {
       if (await Gal.hasAccess(toAlbum: true)) return true;
@@ -646,14 +622,12 @@ class DownloadStore extends ChangeNotifier {
     } catch (e) {
       debugPrint('downloads load error: $e');
     }
-    // Jo download beech me ruk gaya tha use wapas queue me daalo (segments disk par safe hain).
     for (final DlJob j in _jobs) {
       if (j.state == DlState.downloading || j.state == DlState.merging) {
         j.state = DlState.queued;
         j.speedBps = 0;
       }
       if (j.state == DlState.done && (j.filePath.isEmpty || !File(j.filePath).existsSync())) {
-        // user ne file manager se delete kar di
         j.state = DlState.failed;
         j.error = 'File phone se delete ho chuki hai.';
       }
@@ -733,7 +707,6 @@ class DownloadStore extends ChangeNotifier {
       j.error = '';
       j.stage = '';
       _tick(force: true);
-      // purana runner abhi band ho raha ho to uske khatam hone par _pump chalega
       _pump();
     }
   }
@@ -771,8 +744,6 @@ class DownloadStore extends ChangeNotifier {
     _saveSoon();
   }
 }
-
-// ───────────────────────────── Runner (ek job ka kaam) ─────────────────────────────
 
 class _StopSignal implements Exception {}
 
@@ -893,7 +864,6 @@ class _Runner {
       await _body();
     } catch (e) {
       if (e is _StopSignal || _stop) {
-        // pause / delete: state caller set kar chuka hai
       } else {
         job.state = DlState.failed;
         job.error = _netMsg(e);
@@ -923,8 +893,6 @@ class _Runner {
       await _runHls(root);
     }
   }
-
-  // ───────────── HLS ─────────────
 
   Future<String> _getText(String url) async {
     Object? last;
@@ -1035,7 +1003,6 @@ class _Runner {
     return d[i] == 0x3c /* < */ || d[i] == 0x7b /* { */;
   }
 
-  /// Kuch servers segment ke aage fake image header laga dete hain. Pehle valid MPEG-TS sync se kaat do.
   Uint8List _stripJunk(Uint8List d) {
     if (d.length < 564) return d;
     if (d[0] == 0x47 && d[188] == 0x47 && d[376] == 0x47) return d;
@@ -1139,14 +1106,12 @@ class _Runner {
     final List<_TrackState> tracks = await _prepare(root);
     _check();
 
-    // keys
     for (final _TrackState t in tracks) {
       for (int i = 0; i < t.media.keys.length; i++) {
         await _fetchKey(t.media.keys[i], '${t.dir}/key_$i.bin');
       }
     }
 
-    // tasks
     final List<_Task> all = <_Task>[];
     for (final _TrackState t in tracks) {
       final HlsMedia m = t.media;
@@ -1204,8 +1169,6 @@ class _Runner {
     job.speedBps = 0;
     await _merge(root, tracks);
   }
-
-  // ───────────── Internal converter ─────────────
 
   String _localPlaylist(_TrackState t) {
     final HlsMedia m = t.media;
@@ -1287,18 +1250,15 @@ class _Runner {
         '_${_safeName(job.qualityLabel, max: 10)}_${job.createdAt % 100000}';
 
     final List<List<String>> variants = <List<String>>[
-      // 1) sab copy (fast, quality same)
       <String>['mp4', job.audioNeedsAac ? 'aac' : 'copy'],
-      // 2) audio ko AAC me convert
       <String>['mp4', 'aac'],
-      // 3) MKV container (VLC / MX Player ke liye hamesha chalta hai)
       <String>['mkv', job.audioNeedsAac ? 'aac' : 'copy'],
     ];
 
     String outPath = '';
     for (int a = 0; a < variants.length; a++) {
       _check();
-      if (a == 1 && variants[0][1] == 'aac') continue; // same attempt dobara nahi
+      if (a == 1 && variants[0][1] == 'aac') continue; 
       final String ext = variants[a][0];
       final bool aac = variants[a][1] == 'aac';
       final String out = '${movies.path}/$stem.$ext';
@@ -1383,7 +1343,6 @@ class _Runner {
     job.stage = job.exportToGallery ? 'Phone Movies folder me save ho raha hai…' : '';
     store._tick(force: true);
 
-    // temporary segments hata do (space bachane ke liye)
     try {
       if (root.existsSync()) await root.delete(recursive: true);
     } catch (_) {}
@@ -1404,8 +1363,6 @@ class _Runner {
       debugPrint('gallery export error: $e');
     }
   }
-
-  // ───────────── Direct MP4 ─────────────
 
   Future<void> _runMp4(Directory root) async {
     final File part = File('${root.path}/video.mp4.part');

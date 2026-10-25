@@ -1,14 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════════════
-//  HANNUTV  •  download_sheet.dart  (v1.4.0)
-//
-//  Player ke "Download" button se ye sheet khulti hai:
-//    1. Hidden mini-browser (sniffer) usi server ka embed page khol kar asli
-//       stream link (.m3u8 / .mp4) pakadta hai   (e.g. embed.vidrift.in/embed/tv/1416/1/1)
-//    2. Analyzer us stream ko khol kar dekhta hai: kaun-kaun si quality,
-//       kaun-kaun si language (audio tracks), kitne GB
-//    3. User quality + language chunta hai → DownloadStore me job daal deta hai
-//       → download_manager.dart download + convert karta hai
-// ═══════════════════════════════════════════════════════════════════════════
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -24,18 +13,15 @@ const String _kDefaultUa =
     'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) '
     'Chrome/124.0.0.0 Mobile Safari/537.36';
 
-// ───────────────────────────── Sniffer ─────────────────────────────
-
 class SniffHit {
   const SniffHit(this.kind, this.url, this.ref, this.ua, this.cookie);
-  final String kind; // m3u8 | mp4 | mpd
+  final String kind; 
   final String url;
   final String ref;
   final String ua;
   final String cookie;
 }
 
-/// Page ke andar chalne wali JS: fetch / XHR / <video> / hls.js / performance timeline sab hook karti hai.
 const String _kSniffJs = r'''
 (function () {
   if (window.__hnInit) { if (window.__hnScan) window.__hnScan(); return; }
@@ -304,239 +290,6 @@ class StreamSniffer {
   }
 }
 
-// ───────────────────────────── Analyzer ─────────────────────────────
-
-class DlSource {
-  DlSource({
-    required this.kind,
-    required this.variants,
-    required this.audios,
-    required this.durationSec,
-    required this.headers,
-    required this.host,
-    this.singleSize = 0,
-    this.drm = false,
-    this.live = false,
-  });
-  final String kind; // hls | mp4
-  final List<HlsVariant> variants;
-  final List<HlsAudio> audios;
-  final double durationSec;
-  final Map<String, String> headers;
-  final String host;
-  final int singleSize;
-  final bool drm;
-  final bool live;
-}
-
-class _Net {
-  static Future<String> text(String url, Map<String, String> h, {int tries = 3}) async {
-    Object? last;
-    for (int i = 0; i < tries; i++) {
-      final HttpClient c = HttpClient();
-      try {
-        c.connectionTimeout = const Duration(seconds: 15);
-        final String ua = h['User-Agent'] ?? '';
-        if (ua.isNotEmpty) c.userAgent = ua;
-        final HttpClientRequest req =
-            await c.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 20));
-        h.forEach((String k, String v) {
-          if (v.isNotEmpty) req.headers.set(k, v);
-        });
-        final HttpClientResponse r = await req.close().timeout(const Duration(seconds: 25));
-        if (r.statusCode != 200) {
-          await r.drain<void>();
-          throw HttpException('HTTP ${r.statusCode}');
-        }
-        final List<int> bytes = <int>[];
-        await for (final List<int> ch in r.timeout(const Duration(seconds: 25))) {
-          bytes.addAll(ch);
-          if (bytes.length > 6 * 1024 * 1024) break;
-        }
-        return utf8.decode(bytes, allowMalformed: true);
-      } catch (e) {
-        last = e;
-        await Future<void>.delayed(Duration(milliseconds: 500 * (i + 1)));
-      } finally {
-        c.close(force: true);
-      }
-    }
-    throw last ?? Exception('network');
-  }
-
-  /// File ka total size (Range 0-0 trick). Fail ho to 0.
-  static Future<int> probeSize(String url, Map<String, String> h) async {
-    final HttpClient c = HttpClient();
-    try {
-      c.connectionTimeout = const Duration(seconds: 12);
-      final String ua = h['User-Agent'] ?? '';
-      if (ua.isNotEmpty) c.userAgent = ua;
-      final HttpClientRequest req =
-          await c.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 15));
-      h.forEach((String k, String v) {
-        if (v.isNotEmpty) req.headers.set(k, v);
-      });
-      req.headers.set('Range', 'bytes=0-0');
-      final HttpClientResponse r = await req.close().timeout(const Duration(seconds: 15));
-      int size = 0;
-      final String cr = r.headers.value('content-range') ?? '';
-      final int slash = cr.lastIndexOf('/');
-      if (slash > 0) {
-        size = int.tryParse(cr.substring(slash + 1)) ?? 0;
-      } else if (r.statusCode == 200 && r.contentLength > 1) {
-        size = r.contentLength;
-      }
-      await r.drain<void>();
-      return size;
-    } catch (_) {
-      return 0;
-    } finally {
-      c.close(force: true);
-    }
-  }
-}
-
-class DlAnalyzer {
-  static Map<String, String> headersFor(SniffHit h) {
-    final Uri r = Uri.tryParse(h.ref) ?? Uri();
-    final String origin = (r.hasScheme && r.host.isNotEmpty)
-        ? '${r.scheme}://${r.host}${r.hasPort ? ':${r.port}' : ''}'
-        : 'https://pantyflix.com';
-    return <String, String>{
-      'User-Agent': h.ua.isEmpty ? _kDefaultUa : h.ua,
-      'Referer': '$origin/',
-      'Origin': origin,
-      'Accept': '*/*',
-      if (h.cookie.isNotEmpty) 'Cookie': h.cookie,
-    };
-  }
-
-  /// Ek height ka ek hi variant rakho (H.264 ko HEVC par tarjeeh), upar se neeche sort.
-  static List<HlsVariant> _prep(List<HlsVariant> vs) {
-    final Map<int, HlsVariant> by = <int, HlsVariant>{};
-    for (final HlsVariant v in vs) {
-      final int key = v.height > 0 ? v.height : -(v.bandwidth ~/ 400000) - 1;
-      final HlsVariant? cur = by[key];
-      if (cur == null) {
-        by[key] = v;
-      } else if (cur.isHevc && !v.isHevc) {
-        by[key] = v;
-      } else if (v.isHevc == cur.isHevc && v.bps > cur.bps) {
-        by[key] = v;
-      }
-    }
-    final List<HlsVariant> out = by.values.toList();
-    out.sort((HlsVariant a, HlsVariant b) {
-      if (a.height != b.height) return b.height.compareTo(a.height);
-      return b.bps.compareTo(a.bps);
-    });
-    return out;
-  }
-
-  static Future<DlSource?> analyze(List<SniffHit> hits, void Function(String) status) async {
-    DlSource? best;
-    double bestScore = -1;
-    final List<SniffHit> m3 = hits.where((SniffHit h) => h.kind == 'm3u8').toList();
-    for (final SniffHit h in m3.take(6)) {
-      final Map<String, String> hdr = headersFor(h);
-      String text;
-      try {
-        text = await _Net.text(h.url, hdr);
-      } catch (_) {
-        continue;
-      }
-      if (!HlsParser.isPlaylist(text)) continue;
-      final Uri base = Uri.parse(h.url);
-      DlSource? s;
-      try {
-        if (HlsParser.isMaster(text)) {
-          final HlsMaster m = HlsParser.parseMaster(text, base);
-          if (m.variants.isEmpty) continue;
-          final List<HlsVariant> vs = _prep(m.variants);
-          status('Qualities / languages check ho rahi hain…');
-          HlsMedia? mm;
-          for (final HlsVariant v in vs.take(2)) {
-            try {
-              final String t = await _Net.text(v.url, hdr, tries: 2);
-              if (HlsParser.isPlaylist(t)) {
-                final HlsMedia x = HlsParser.parseMedia(t, Uri.parse(v.url));
-                if (x.segs.isNotEmpty) {
-                  mm = x;
-                  break;
-                }
-              }
-            } catch (_) {}
-          }
-          s = DlSource(
-            kind: 'hls',
-            variants: vs,
-            audios: m.audios.where((HlsAudio a) => a.url.isNotEmpty).toList(),
-            durationSec: mm?.totalDur ?? 0,
-            headers: hdr,
-            host: base.host,
-            drm: mm?.unsupported ?? false,
-            live: mm != null && !mm.endList,
-          );
-        } else {
-          final HlsMedia mm = HlsParser.parseMedia(text, base);
-          if (mm.segs.isEmpty) continue;
-          int size = 0;
-          final int one = await _Net.probeSize(mm.segs.first.url, hdr);
-          if (one > 0) size = one * mm.segs.length;
-          s = DlSource(
-            kind: 'hls',
-            variants: <HlsVariant>[HlsVariant(url: h.url)],
-            audios: const <HlsAudio>[],
-            durationSec: mm.totalDur,
-            headers: hdr,
-            host: base.host,
-            singleSize: size,
-            drm: mm.unsupported,
-            live: !mm.endList,
-          );
-        }
-      } catch (_) {
-        continue;
-      }
-      if (s == null) continue;
-      final DlSource cand = s;
-      double score = cand.durationSec + cand.variants.length * 0.1 + cand.audios.length * 0.05;
-      if (cand.live) score -= 100000;
-      if (score > bestScore) {
-        best = cand;
-        bestScore = score;
-      }
-    }
-    if (best != null) return best;
-
-    // direct MP4 fallback
-    SniffHit? bestMp4;
-    int bestSize = 0;
-    for (final SniffHit h in hits.where((SniffHit h) => h.kind == 'mp4').take(4)) {
-      final Map<String, String> hdr = headersFor(h);
-      final int sz = await _Net.probeSize(h.url, hdr);
-      if (sz > 5 * 1024 * 1024 && sz > bestSize) {
-        bestSize = sz;
-        bestMp4 = h;
-      }
-    }
-    if (bestMp4 != null) {
-      return DlSource(
-        kind: 'mp4',
-        variants: <HlsVariant>[HlsVariant(url: bestMp4.url)],
-        audios: const <HlsAudio>[],
-        durationSec: 0,
-        headers: headersFor(bestMp4),
-        host: Uri.parse(bestMp4.url).host,
-        singleSize: bestSize,
-      );
-    }
-    return null;
-  }
-}
-
-// ───────────────────────────── Sheet ─────────────────────────────
-
 Future<void> showDownloadSheet(
   BuildContext context, {
   required int tmdbId,
@@ -610,7 +363,7 @@ class _DlSheetState extends State<_DlSheet> {
   Timer? analyzeTimer;
   Timer? timeoutTimer;
   bool analyzing = false;
-  List<List<String>> strategies = <List<String>>[]; // [url, referer]
+  List<List<String>> strategies = <List<String>>[]; 
   int strategyIdx = 0;
 
   DlSource? src;
@@ -783,8 +536,6 @@ class _DlSheetState extends State<_DlSheet> {
     }
   }
 
-  // ───────── selection helpers ─────────
-
   List<HlsAudio> _audiosFor(HlsVariant v) {
     final DlSource s = src!;
     if (s.audios.isEmpty) return <HlsAudio>[];
@@ -914,8 +665,6 @@ class _DlSheetState extends State<_DlSheet> {
       ),
     ));
   }
-
-  // ───────── UI ─────────
 
   @override
   Widget build(BuildContext context) {
