@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 
 import 'config.dart';
-import 'download_manager.dart';
-import 'downloads_page.dart'; // 🔥 ASLI DOWNLOAD PAGE CONNECTED
+import 'download_manager.dart'; // 🔥 TERA DOWNLOAD MANAGER CONNECTED
+import 'downloads_page.dart';   // 🔥 TERA OFFLINE PLAYER CONNECTED
 import 'hero.dart';
 import 'pages.dart';
 import 'stores.dart';
 import 'tmdb_service.dart';
 import 'widgets.dart';
 
-/// HANNUTV main dashboard.
 class HannuDashboard extends StatefulWidget {
   const HannuDashboard({super.key, this.hooks = const DashboardHooks()});
   final DashboardHooks hooks;
@@ -40,7 +39,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
     WatchlistStore.I.load();
     ContinueWatchingStore.I.load();
     NotificationStore.I.init();
-    DownloadStore.I.load(); // 🔥 v1.4.0 downloads initialization
+    DownloadStore.I.load(); // 🔥 TERA DOWNLOADER INITIALIZE HO GAYA
     _hero = Tmdb.I.heroItems();
   }
 
@@ -262,7 +261,7 @@ class _HannuDashboardState extends State<HannuDashboard> {
               }
             }),
             
-            // 🔥 DOWNLOAD MANAGER BUTTON IN DASHBOARD 🔥
+            // 🔥 DOWNLOAD BUTTON IN HEADER CONNECTED 🔥
             AnimatedBuilder(
               animation: DownloadStore.I,
               builder: (BuildContext _, Widget? __) => _iconBtn(
