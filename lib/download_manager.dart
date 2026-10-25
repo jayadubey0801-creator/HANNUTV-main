@@ -12,7 +12,7 @@ import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'download_sheet.dart'; // 🔥 Import added for SniffHit dependencies
+import 'download_sheet.dart'; // CONNECTED WITH SHEET
 
 String dlBytes(num b) {
   if (b <= 0) return '0 MB';
@@ -369,6 +369,231 @@ class HlsParser {
   }
 }
 
+// 🔥 DlSource & DlAnalyzer Restored for Error Fix 🔥
+class DlSource {
+  DlSource({
+    required this.kind,
+    required this.variants,
+    required this.audios,
+    required this.durationSec,
+    required this.headers,
+    required this.host,
+    this.singleSize = 0,
+    this.drm = false,
+    this.live = false,
+  });
+  final String kind; 
+  final List<HlsVariant> variants;
+  final List<HlsAudio> audios;
+  final double durationSec;
+  final Map<String, String> headers;
+  final String host;
+  final int singleSize;
+  final bool drm;
+  final bool live;
+}
+
+class _Net {
+  static Future<String> text(String url, Map<String, String> h, {int tries = 3}) async {
+    Object? last;
+    for (int i = 0; i < tries; i++) {
+      final HttpClient c = HttpClient();
+      try {
+        c.connectionTimeout = const Duration(seconds: 15);
+        final String ua = h['User-Agent'] ?? '';
+        if (ua.isNotEmpty) c.userAgent = ua;
+        final HttpClientRequest req = await c.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 20));
+        h.forEach((String k, String v) {
+          if (v.isNotEmpty) req.headers.set(k, v);
+        });
+        final HttpClientResponse r = await req.close().timeout(const Duration(seconds: 25));
+        if (r.statusCode != 200) {
+          await r.drain<void>();
+          throw HttpException('HTTP ${r.statusCode}');
+        }
+        final List<int> bytes = <int>[];
+        await for (final List<int> ch in r.timeout(const Duration(seconds: 25))) {
+          bytes.addAll(ch);
+          if (bytes.length > 6 * 1024 * 1024) break;
+        }
+        return utf8.decode(bytes, allowMalformed: true);
+      } catch (e) {
+        last = e;
+        await Future<void>.delayed(Duration(milliseconds: 500 * (i + 1)));
+      } finally {
+        c.close(force: true);
+      }
+    }
+    throw last ?? Exception('network');
+  }
+
+  static Future<int> probeSize(String url, Map<String, String> h) async {
+    final HttpClient c = HttpClient();
+    try {
+      c.connectionTimeout = const Duration(seconds: 12);
+      final String ua = h['User-Agent'] ?? '';
+      if (ua.isNotEmpty) c.userAgent = ua;
+      final HttpClientRequest req = await c.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      h.forEach((String k, String v) {
+        if (v.isNotEmpty) req.headers.set(k, v);
+      });
+      req.headers.set('Range', 'bytes=0-0');
+      final HttpClientResponse r = await req.close().timeout(const Duration(seconds: 15));
+      int size = 0;
+      final String cr = r.headers.value('content-range') ?? '';
+      final int slash = cr.lastIndexOf('/');
+      if (slash > 0) {
+        size = int.tryParse(cr.substring(slash + 1)) ?? 0;
+      } else if (r.statusCode == 200 && r.contentLength > 1) {
+        size = r.contentLength;
+      }
+      await r.drain<void>();
+      return size;
+    } catch (_) {
+      return 0;
+    } finally {
+      c.close(force: true);
+    }
+  }
+}
+
+class DlAnalyzer {
+  static Map<String, String> headersFor(SniffHit h) {
+    final Uri r = Uri.tryParse(h.ref) ?? Uri();
+    final String origin = (r.hasScheme && r.host.isNotEmpty)
+        ? '${r.scheme}://${r.host}${r.hasPort ? ':${r.port}' : ''}'
+        : 'https://pantyflix.com';
+    return <String, String>{
+      'User-Agent': h.ua.isEmpty ? _kDefaultUa : h.ua,
+      'Referer': '$origin/',
+      'Origin': origin,
+      'Accept': '*/*',
+      if (h.cookie.isNotEmpty) 'Cookie': h.cookie,
+    };
+  }
+
+  static List<HlsVariant> _prep(List<HlsVariant> vs) {
+    final Map<int, HlsVariant> by = <int, HlsVariant>{};
+    for (final HlsVariant v in vs) {
+      final int key = v.height > 0 ? v.height : -(v.bandwidth ~/ 400000) - 1;
+      final HlsVariant? cur = by[key];
+      if (cur == null) {
+        by[key] = v;
+      } else if (cur.isHevc && !v.isHevc) {
+        by[key] = v;
+      } else if (v.isHevc == cur.isHevc && v.bps > cur.bps) {
+        by[key] = v;
+      }
+    }
+    final List<HlsVariant> out = by.values.toList();
+    out.sort((HlsVariant a, HlsVariant b) {
+      if (a.height != b.height) return b.height.compareTo(a.height);
+      return b.bps.compareTo(a.bps);
+    });
+    return out;
+  }
+
+  static Future<DlSource?> analyze(List<SniffHit> hits, void Function(String) status) async {
+    DlSource? best;
+    double bestScore = -1;
+    final List<SniffHit> m3 = hits.where((SniffHit h) => h.kind == 'm3u8').toList();
+    for (final SniffHit h in m3.take(6)) {
+      final Map<String, String> hdr = headersFor(h);
+      String text;
+      try {
+        text = await _Net.text(h.url, hdr);
+      } catch (_) {
+        continue;
+      }
+      if (!HlsParser.isPlaylist(text)) continue;
+      final Uri base = Uri.parse(h.url);
+      DlSource? s;
+      try {
+        if (HlsParser.isMaster(text)) {
+          final HlsMaster m = HlsParser.parseMaster(text, base);
+          if (m.variants.isEmpty) continue;
+          final List<HlsVariant> vs = _prep(m.variants);
+          status('Checking qualities / languages...'); // 🔥 ENGLISH TRANSLATION
+          HlsMedia? mm;
+          for (final HlsVariant v in vs.take(2)) {
+            try {
+              final String t = await _Net.text(v.url, hdr, tries: 2);
+              if (HlsParser.isPlaylist(t)) {
+                final HlsMedia x = HlsParser.parseMedia(t, Uri.parse(v.url));
+                if (x.segs.isNotEmpty) {
+                  mm = x;
+                  break;
+                }
+              }
+            } catch (_) {}
+          }
+          s = DlSource(
+            kind: 'hls',
+            variants: vs,
+            audios: m.audios.where((HlsAudio a) => a.url.isNotEmpty).toList(),
+            durationSec: mm?.totalDur ?? 0,
+            headers: hdr,
+            host: base.host,
+            drm: mm?.unsupported ?? false,
+            live: mm != null && !mm.endList,
+          );
+        } else {
+          final HlsMedia mm = HlsParser.parseMedia(text, base);
+          if (mm.segs.isEmpty) continue;
+          int size = 0;
+          final int one = await _Net.probeSize(mm.segs.first.url, hdr);
+          if (one > 0) size = one * mm.segs.length;
+          s = DlSource(
+            kind: 'hls',
+            variants: <HlsVariant>[HlsVariant(url: h.url)],
+            audios: const <HlsAudio>[],
+            durationSec: mm.totalDur,
+            headers: hdr,
+            host: base.host,
+            singleSize: size,
+            drm: mm.unsupported,
+            live: !mm.endList,
+          );
+        }
+      } catch (_) {
+        continue;
+      }
+      if (s == null) continue;
+      final DlSource cand = s;
+      double score = cand.durationSec + cand.variants.length * 0.1 + cand.audios.length * 0.05;
+      if (cand.live) score -= 100000;
+      if (score > bestScore) {
+        best = cand;
+        bestScore = score;
+      }
+    }
+    if (best != null) return best;
+
+    SniffHit? bestMp4;
+    int bestSize = 0;
+    for (final SniffHit h in hits.where((SniffHit h) => h.kind == 'mp4').take(4)) {
+      final Map<String, String> hdr = headersFor(h);
+      final int sz = await _Net.probeSize(h.url, hdr);
+      if (sz > 5 * 1024 * 1024 && sz > bestSize) {
+        bestSize = sz;
+        bestMp4 = h;
+      }
+    }
+    if (bestMp4 != null) {
+      return DlSource(
+        kind: 'mp4',
+        variants: <HlsVariant>[HlsVariant(url: bestMp4.url)],
+        audios: const <HlsAudio>[],
+        durationSec: 0,
+        headers: headersFor(bestMp4),
+        host: Uri.parse(bestMp4.url).host,
+        singleSize: bestSize,
+      );
+    }
+    return null;
+  }
+}
+
 enum DlState { queued, downloading, merging, done, failed, paused }
 
 class DlAudioSel {
@@ -631,7 +856,7 @@ class DownloadStore extends ChangeNotifier {
       }
       if (j.state == DlState.done && (j.filePath.isEmpty || !File(j.filePath).existsSync())) {
         j.state = DlState.failed;
-        j.error = 'File phone se delete ho chuki hai.';
+        j.error = 'File not found on phone.';
       }
     }
     notifyListeners();
@@ -838,19 +1063,19 @@ class _Runner {
 
   String _netMsg(Object? e) {
     if (e is _DlFail) return e.msg;
-    if (e is SocketException) return 'Internet / server se connection toot gaya. Network check karke Resume dabao.';
-    if (e is TimeoutException) return 'Server bahut slow hai (timeout). Resume dabao.';
-    if (e is HandshakeException) return 'Secure connection fail hua. Resume dabao.';
+    if (e is SocketException) return 'Connection lost. Check network and press Resume.';
+    if (e is TimeoutException) return 'Server is too slow (timeout). Press Resume.';
+    if (e is HandshakeException) return 'Secure connection failed. Press Resume.';
     if (e is _HttpStatus) {
       if (e.code == 403 || e.code == 401 || e.code == 410) {
-        return 'Server ne link reject kiya (HTTP ${e.code}) — link expire ho gaya. Movie ke player se dubara Download dabao.';
+        return 'Link expired or rejected (HTTP ${e.code}). Press Download from the player again.';
       }
-      if (e.code == 404) return 'Server par segment nahi mila (HTTP 404). Dubara Download dabao.';
-      if (e.code == 429) return 'Server ne rate-limit kiya (HTTP 429). Thodi der baad Resume dabao.';
-      return 'Server error (HTTP ${e.code}). Resume dabao.';
+      if (e.code == 404) return 'Segment not found (HTTP 404). Press Download again.';
+      if (e.code == 429) return 'Rate-limited by server (HTTP 429). Press Resume later.';
+      return 'Server error (HTTP ${e.code}). Press Resume.';
     }
-    if (e is HttpException) return 'Server connection error. Resume dabao.';
-    return 'Download me error aaya: $e';
+    if (e is HttpException) return 'Server connection error. Press Resume.';
+    return 'Download error: $e';
   }
 
   bool _noSpace(FileSystemException e) {
@@ -884,7 +1109,7 @@ class _Runner {
   Future<void> _body() async {
     job.state = DlState.downloading;
     job.error = '';
-    job.stage = 'Starting…';
+    job.stage = 'Starting...'; // 🔥 ENGLISH TRANSLATION
     store._tick(force: true);
     _baseBytes = job.bytesDone;
     _lastSpeedAt = DateTime.now().millisecondsSinceEpoch;
@@ -964,7 +1189,7 @@ class _Runner {
       }
     }
 
-    job.stage = 'Playlist padh raha hai…';
+    job.stage = 'Reading playlist...'; // 🔥 ENGLISH TRANSLATION
     store._tick(force: true);
     final List<String> urls = <String>[job.videoUrl, ...job.audios.map((DlAudioSel a) => a.url)];
     for (int i = 0; i < urls.length; i++) {
@@ -972,14 +1197,14 @@ class _Runner {
       final String id = i == 0 ? 'v' : 'a${i - 1}';
       final String text = await _getText(urls[i]);
       if (!HlsParser.isPlaylist(text)) {
-        throw _DlFail('Server ne valid playlist nahi diya. Dubara Download dabao.');
+        throw _DlFail('Invalid playlist from server. Press Download again.');
       }
       final HlsMedia m = HlsParser.parseMedia(text, Uri.parse(urls[i]));
       if (m.unsupported) {
-        throw _DlFail('Ye stream DRM / protected encryption use karti hai — download possible nahi.');
+        throw _DlFail('This stream uses DRM encryption — download is not possible.');
       }
       if (m.segs.isEmpty) {
-        throw _DlFail('Playlist me koi video segment nahi mila.');
+        throw _DlFail('No video segments found in playlist.');
       }
       final Directory d = Directory('${root.path}/$id');
       if (!d.existsSync()) d.createSync(recursive: true);
@@ -1034,7 +1259,7 @@ class _Runner {
           bb.add(ch);
         }
         final Uint8List b = bb.takeBytes();
-        if (b.length != 16) throw _DlFail('Encryption key invalid mili (${b.length} bytes).');
+        if (b.length != 16) throw _DlFail('Invalid encryption key (${b.length} bytes).');
         await f.writeAsBytes(b, flush: true);
         return;
       } catch (e) {
@@ -1076,7 +1301,7 @@ class _Runner {
         return;
       } on FileSystemException catch (e) {
         if (_noSpace(e)) {
-          throw _DlFail('Phone ki storage full ho gayi. Jagah khali karke Resume dabao.');
+          throw _DlFail('Phone storage is full. Free up space and press Resume.');
         }
         last = e;
         await Future<void>.delayed(Duration(milliseconds: 400 * (i + 1)));
@@ -1236,7 +1461,7 @@ class _Runner {
   Future<void> _merge(Directory root, List<_TrackState> tracks) async {
     _check();
     job.state = DlState.merging;
-    job.stage = 'Converting (playable MP4 ban rahi hai)…';
+    job.stage = 'Converting (creating playable MP4)...'; // 🔥 ENGLISH TRANSLATION
     job.progress = 0.9;
     store._tick(force: true);
 
@@ -1334,7 +1559,7 @@ class _Runner {
     }
 
     if (outPath.isEmpty) {
-      throw _DlFail('Converter movie ko jod nahi paya. Dubara Download dabao (naya link).');
+      throw _DlFail('Failed to merge movie. Press Download again for a new link.');
     }
 
     job.filePath = outPath;
@@ -1342,7 +1567,7 @@ class _Runner {
     job.progress = 1;
     job.speedBps = 0;
     job.state = DlState.done;
-    job.stage = job.exportToGallery ? 'Phone Movies folder me save ho raha hai…' : '';
+    job.stage = job.exportToGallery ? 'Saving to phone Movies folder...' : '';
     store._tick(force: true);
 
     try {
@@ -1417,7 +1642,7 @@ class _Runner {
         if (e is _StopSignal) rethrow;
         if (_stop) throw _StopSignal();
         if (e is FileSystemException && _noSpace(e)) {
-          throw _DlFail('Phone ki storage full ho gayi. Jagah khali karke Resume dabao.');
+          throw _DlFail('Phone storage is full. Free up space and press Resume.');
         }
         last = e;
         if (_fatalStatus(e)) break;
@@ -1441,7 +1666,7 @@ class _Runner {
     job.progress = 1;
     job.speedBps = 0;
     job.state = DlState.done;
-    job.stage = job.exportToGallery ? 'Phone Movies folder me save ho raha hai…' : '';
+    job.stage = job.exportToGallery ? 'Saving to phone Movies folder...' : '';
     store._tick(force: true);
     try {
       if (root.existsSync()) await root.delete(recursive: true);

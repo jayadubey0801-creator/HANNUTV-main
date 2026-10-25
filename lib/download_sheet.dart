@@ -6,21 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
-import 'download_manager.dart'; // Is line ko theek se joda hai
+import 'download_manager.dart'; // CONNECTED WITH MANAGER
 import 'downloads_page.dart';
 
 const String _kDefaultUa =
     'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) '
     'Chrome/124.0.0.0 Mobile Safari/537.36';
-
-class SniffHit {
-  const SniffHit(this.kind, this.url, this.ref, this.ua, this.cookie);
-  final String kind; 
-  final String url;
-  final String ref;
-  final String ua;
-  final String cookie;
-}
 
 const String _kSniffJs = r'''
 (function () {
@@ -254,7 +245,7 @@ class StreamSniffer {
       if (next != null) {
         _hops++;
         _visited.add(next);
-        onStatus('Player server me ja raha hai…');
+        onStatus('Connecting to player server...'); // 🔥 ENGLISH TRANSLATION
         _go(next, _currentUrl.startsWith('http') ? _currentUrl : null);
       }
     }
@@ -274,7 +265,7 @@ class StreamSniffer {
       if (k != 'm3u8' && k != 'mp4') return;
       if (!_seen.add('$k|$u')) return;
       gotStream = true;
-      onStatus('Stream link mil gaya ✓');
+      onStatus('Stream link found ✓'); // 🔥 ENGLISH TRANSLATION
       onHit(SniffHit(k, u, (j['ref'] ?? '').toString(), (j['ua'] ?? '').toString(),
           (j['ck'] ?? '').toString()));
     } catch (_) {}
@@ -354,7 +345,7 @@ class _DlSheet extends StatefulWidget {
 
 class _DlSheetState extends State<_DlSheet> {
   _Phase phase = _Phase.scanning;
-  String status = 'Server se connect ho raha hai…';
+  String status = 'Connecting to server...'; // 🔥 ENGLISH TRANSLATION
   String errorMsg = '';
 
   StreamSniffer? sniffer;
@@ -393,25 +384,27 @@ class _DlSheetState extends State<_DlSheet> {
     super.dispose();
   }
 
+  // 🔥 ALL SERVERS FIX: Proxy loads any active server directly 🔥
   List<List<String>> _buildStrategies() {
-    final String tail = _isTv
-        ? 'tv/${widget.tmdbId}/${widget.season}/${widget.episode}'
-        : 'movie/${widget.tmdbId}';
-    final String vid = 'https://embed.vidrift.in/embed/$tail';
     final String orig = _isTv
         ? 'https://pantyflix.com/watch/play/tv/${widget.tmdbId}?season=${widget.season}&episode=${widget.episode}&server=${widget.server}'
         : 'https://pantyflix.com/watch/play/movie/${widget.tmdbId}?server=${widget.server}';
     final String proxy =
         'https://hannutv-proxy-1.vercel.app/api/proxy?stream=${Uri.encodeComponent(orig)}';
-    if (widget.server == 'vidrift') {
-      return <List<String>>[
-        <String>[vid, 'https://pantyflix.com/'],
-        <String>[proxy, ''],
-      ];
-    }
-    return <List<String>>[
-      <String>[proxy, ''],
+    
+    List<List<String>> strats = [
+      <String>[proxy, ''], 
     ];
+
+    if (widget.server == 'vidrift') {
+      final String tail = _isTv
+          ? 'tv/${widget.tmdbId}/${widget.season}/${widget.episode}'
+          : 'movie/${widget.tmdbId}';
+      final String vid = 'https://embed.vidrift.in/embed/$tail';
+      strats.add(<String>[vid, 'https://pantyflix.com/']);
+    }
+    
+    return strats;
   }
 
   void _setStatus(String m) {
@@ -428,7 +421,7 @@ class _DlSheetState extends State<_DlSheet> {
     sniffGen++;
     strategyIdx = i;
     phase = _Phase.scanning;
-    status = i == 0 ? 'Server se connect ho raha hai…' : 'Dusre route se try ho raha hai…';
+    status = i == 0 ? 'Connecting to server...' : 'Trying alternate route...'; // 🔥 ENGLISH TRANSLATION
     final List<String> st = strategies[i];
     s.start(st[0], referer: st[1].isEmpty ? null : st[1]);
     timeoutTimer = Timer(const Duration(seconds: 32), _onTimeout);
@@ -444,7 +437,7 @@ class _DlSheetState extends State<_DlSheet> {
   Future<void> _runAnalyze() async {
     if (analyzing || !mounted || phase != _Phase.scanning) return;
     analyzing = true;
-    _setStatus('Stream analyze ho rahi hai…');
+    _setStatus('Analyzing stream...'); // 🔥 ENGLISH TRANSLATION
     DlSource? s;
     try {
       s = await DlAnalyzer.analyze(List<SniffHit>.of(hits), _setStatus);
@@ -452,15 +445,15 @@ class _DlSheetState extends State<_DlSheet> {
     analyzing = false;
     if (!mounted) return;
     if (s == null) {
-      _setStatus('Aur links ka wait…');
+      _setStatus('Waiting for more links...'); // 🔥 ENGLISH TRANSLATION
       return;
     }
     if (s.drm) {
-      _fail('Ye stream DRM / protected encryption use karti hai — download possible nahi.');
+      _fail('This stream uses DRM encryption — download is not possible.'); // 🔥 ENGLISH TRANSLATION
       return;
     }
     if (s.live) {
-      _fail('Ye live stream hai, isse download nahi kiya ja sakta.');
+      _fail('This is a live stream and cannot be downloaded.'); // 🔥 ENGLISH TRANSLATION
       return;
     }
     timeoutTimer?.cancel();
@@ -483,8 +476,7 @@ class _DlSheetState extends State<_DlSheet> {
     if (strategyIdx + 1 < strategies.length) {
       _startStrategy(strategyIdx + 1);
     } else {
-      _fail('Is server se stream link nahi mila. Dusra server chun kar try karo, '
-          'ya niche "Link paste karo" se embed / m3u8 link daalo.');
+      _fail('Stream link not found on this server. Try choosing a different server, or paste an embed/m3u8 link below.'); // 🔥 ENGLISH TRANSLATION
     }
   }
 
@@ -504,7 +496,7 @@ class _DlSheetState extends State<_DlSheet> {
     final String u = manual.text.trim();
     if (!u.toLowerCase().startsWith('http')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Valid link daalo (http se shuru).')),
+        const SnackBar(content: Text('Enter a valid link (starting with http).')), // 🔥 ENGLISH TRANSLATION
       );
       return;
     }
@@ -520,11 +512,11 @@ class _DlSheetState extends State<_DlSheet> {
         ..add(SniffHit(low.contains('.m3u8') ? 'm3u8' : 'mp4', u, '$origin/', _kDefaultUa, ''));
       setState(() {
         phase = _Phase.scanning;
-        status = 'Link analyze ho raha hai…';
+        status = 'Analyzing link...'; // 🔥 ENGLISH TRANSLATION
         showManual = false;
       });
       timeoutTimer = Timer(const Duration(seconds: 40), () {
-        if (mounted && phase == _Phase.scanning) _fail('Ye link analyze nahi ho paya.');
+        if (mounted && phase == _Phase.scanning) _fail('Could not analyze this link.'); // 🔥 ENGLISH TRANSLATION
       });
       _runAnalyze();
     } else {
@@ -641,8 +633,8 @@ class _DlSheetState extends State<_DlSheet> {
       nav.pop();
       sm.showSnackBar(SnackBar(
         content: Text(dup.state == DlState.done
-            ? 'Ye pehle se downloaded hai — Downloads me dekho.'
-            : 'Ye download pehle se chal raha hai.'),
+            ? 'Already downloaded — check your Downloads.' // 🔥 ENGLISH TRANSLATION
+            : 'This download is already in progress.'), // 🔥 ENGLISH TRANSLATION
         backgroundColor: Colors.orange[800],
       ));
       return;
@@ -651,7 +643,7 @@ class _DlSheetState extends State<_DlSheet> {
     await DownloadStore.I.enqueue(job);
     nav.pop();
     sm.showSnackBar(SnackBar(
-      content: Text('Download shuru: ${widget.title} • ${v.label} • $langLabel'),
+      content: Text('Download started: ${widget.title} • ${v.label} • $langLabel'), // 🔥 ENGLISH TRANSLATION
       backgroundColor: Colors.green[700],
       duration: const Duration(seconds: 5),
       action: SnackBarAction(
@@ -731,7 +723,7 @@ class _DlSheetState extends State<_DlSheet> {
           controller: manual,
           style: const TextStyle(color: Colors.white, fontSize: 13),
           decoration: InputDecoration(
-            hintText: 'https://embed.vidrift.in/embed/tv/1416/1/1  ya  .m3u8 / .mp4 link',
+            hintText: 'https://embed.vidrift.in/embed/tv/1416/1/1  or  .m3u8 / .mp4 link', // 🔥 ENGLISH TRANSLATION
             hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
             filled: true,
             fillColor: Colors.white10,
@@ -781,14 +773,14 @@ class _DlSheetState extends State<_DlSheet> {
         Text(status, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         const Text(
-          'Isi server ki qualities, languages aur size dhundh raha hai (10-30 sec).',
+          'Scanning server for qualities, languages, and size (10-30 sec).', // 🔥 ENGLISH TRANSLATION
           style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
         ),
         const SizedBox(height: 6),
         TextButton.icon(
           onPressed: () => setState(() => showManual = !showManual),
           icon: const Icon(Icons.link_rounded, size: 18, color: Colors.white70),
-          label: const Text('Link paste karo', style: TextStyle(color: Colors.white70)),
+          label: const Text('Paste link', style: TextStyle(color: Colors.white70)), // 🔥 ENGLISH TRANSLATION
         ),
         if (showManual) _manualBox(),
       ],
@@ -840,7 +832,7 @@ class _DlSheetState extends State<_DlSheet> {
               child: OutlinedButton.icon(
                 onPressed: () => setState(() => showManual = !showManual),
                 icon: const Icon(Icons.link_rounded, color: Colors.white70, size: 18),
-                label: const Text('Link paste karo', style: TextStyle(color: Colors.white70)),
+                label: const Text('Paste link', style: TextStyle(color: Colors.white70)), // 🔥 ENGLISH TRANSLATION
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.white24),
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -956,14 +948,14 @@ class _DlSheetState extends State<_DlSheet> {
                 aSel = Set<int>.from(List<int>.generate(auds.length, (int i) => i));
               }
             }),
-            child: Text(aSel.length == auds.length ? 'Sirf default' : 'Sab audio',
+            child: Text(aSel.length == auds.length ? 'Default only' : 'All audio', // 🔥 ENGLISH TRANSLATION
                 style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
           ),
       ],
     ));
     if (auds.isEmpty) {
       kids.add(const Text(
-        'Is stream me audio video ke saath hi judi hai (Original audio). Alag language track nahi mila.',
+        'Audio is muxed with the video (Original audio). No separate language tracks found.', // 🔥 ENGLISH TRANSLATION
         style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
       ));
     } else {
@@ -996,8 +988,8 @@ class _DlSheetState extends State<_DlSheet> {
       kids.add(const SizedBox(height: 6));
       kids.add(Text(
         aSel.length > 1
-            ? 'Sab selected audio ek hi movie file me judenge — VLC / MX Player me audio track badal sakte ho.'
-            : 'Sirf selected language download hogi.',
+            ? 'All selected audio tracks will be merged into one file. You can change tracks in VLC/MX Player.' // 🔥 ENGLISH TRANSLATION
+            : 'Only the selected language will be downloaded.', // 🔥 ENGLISH TRANSLATION
         style: const TextStyle(color: Colors.grey, fontSize: 11.5, height: 1.4),
       ));
     }
@@ -1008,9 +1000,9 @@ class _DlSheetState extends State<_DlSheet> {
       activeColor: Colors.redAccent,
       value: exportGal,
       onChanged: (bool v) => setState(() => exportGal = v),
-      title: const Text('Phone ke Movies folder me bhi save karo',
+      title: const Text('Also save to phone\'s Movies folder', // 🔥 ENGLISH TRANSLATION
           style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
-      subtitle: const Text('VLC / MX Player / Gallery me dikhegi (thodi extra storage lagti hai).',
+      subtitle: const Text('Will be visible in VLC / MX Player / Gallery (uses extra storage).', // 🔥 ENGLISH TRANSLATION
           style: TextStyle(color: Colors.grey, fontSize: 11.5)),
     ));
 
@@ -1038,7 +1030,7 @@ class _DlSheetState extends State<_DlSheet> {
     ));
     kids.add(const SizedBox(height: 6));
     kids.add(const Text(
-      'Size HLS bitrate se estimate hota hai (~). Download Dashboard → Downloads me dikhega.',
+      'Size is estimated from HLS bitrate (~). Progress is visible in Dashboard → Downloads.', // 🔥 ENGLISH TRANSLATION
       style: TextStyle(color: Colors.grey, fontSize: 11),
     ));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: kids);
