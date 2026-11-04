@@ -11,6 +11,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:url_launcher/url_launcher.dart'; 
 
 import 'banner_ad_widget.dart';
@@ -77,6 +78,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   // Hindi-server popup bypass (set to false to switch the unwrap trick off)
   static const bool kHindiUnwrap = true;
+
+  // false = purana auto-clicker (captcha/robot/verify/close click) band. Fake captcha ko click karna
+  // hi apk-download page tak le jata tha. Sirf tab true karo jab kisi server ka real gate click maange.
+  static const bool kLegacyAutoClick = false;
   String _unwrapUrl = '';
   String _unwrapHost = '';
   int _unwrapTries = 0;
@@ -286,7 +291,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   // Pops the embedded player iframe out of the wrapper page so the popup killer can reach it.
   Future<void> _tryUnwrapHindi() async {
-    if (!kHindiUnwrap || activeServer != 'screenscape' || widget.customUrl != null) return;
+    if (!kHindiUnwrap || !_unwrapServers.contains(activeServer) || widget.customUrl != null) return;
     if (_unwrapUrl.isNotEmpty || _unwrapTries >= 4) return;
     _unwrapTries++;
     await Future.delayed(const Duration(milliseconds: 1500));
@@ -339,7 +344,244 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     })();
   ''';
 
+  // 🛡️ PLAYER SHIELD v2 — structural popup guard (fake captcha / apk download / stickers / overlays).
+  // Naam ya class pe depend nahi: jo bhi element player ke upar aa jaye wo hit-test se pakda jata hai.
+  static const String _kShieldJs = r'''
+    (function () {
+      if (window.__hnShield) return;
+      window.__hnShield = 1;
+      var R = window.__hnRules || {};
+      var KW = (R.keywords || []).map(function (s) { return String(s).toLowerCase(); });
+      var SEL = R.selectors || [];
+      var HOSTS = (R.hosts || []).map(function (s) { return String(s).toLowerCase(); });
+      var SKIP = { HTML: 1, BODY: 1, HEAD: 1, SCRIPT: 1, STYLE: 1, LINK: 1, META: 1, NOSCRIPT: 1 };
+      var AD_RE = /(ads|pop|bet|track|doubleclick|leela|google|captcha)/;
+
+      function isBadUrl(u) {
+        u = String(u || "").toLowerCase();
+        if (/^(intent|market|mailto|tel|sms|content|file):/.test(u)) return true;
+        if (/\.(apk|xapk|apks|aab|exe|msi|dmg|zip|rar|7z)(\?|#|$)/.test(u)) return true;
+        if (u.indexOf("file_download") > -1) return true;
+        for (var i = 0; i < HOSTS.length; i++) { if (HOSTS[i] && u.indexOf(HOSTS[i]) > -1) return true; }
+        return false;
+      }
+
+      // ---- 1. Dangerous APIs ko neutral kar do
+      try { window.open = function () { return null; }; } catch (e) {}
+      try { if (window.Notification) { Notification.requestPermission = function () { return Promise.resolve("denied"); }; } } catch (e) {}
+      try {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText = function () { return Promise.resolve(); };
+          navigator.clipboard.readText = function () { return Promise.resolve(""); };
+        }
+      } catch (e) {}
+      try {
+        var _ec = document.execCommand;
+        document.execCommand = function (c) {
+          var k = String(c).toLowerCase();
+          if (k === "copy" || k === "cut") return false;
+          return _ec.apply(document, arguments);
+        };
+      } catch (e) {}
+      try {
+        var _ac = HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click = function () {
+          if (isBadUrl(this.href) || this.hasAttribute("download")) return;
+          return _ac.apply(this, arguments);
+        };
+      } catch (e) {}
+      try {
+        document.addEventListener("click", function (e) {
+          var a = e.target && e.target.closest ? e.target.closest("a") : null;
+          if (a && (a.hasAttribute("download") || isBadUrl(a.href))) { e.preventDefault(); e.stopPropagation(); }
+        }, true);
+      } catch (e) {}
+
+      // ---- 2. Helpers
+      function area(el) { var r = el.getBoundingClientRect(); return r.width * r.height; }
+
+      function findPlayer() {
+        var best = null, ba = 0, i, a, el;
+        var fr = document.getElementsByTagName("iframe");
+        for (i = 0; i < fr.length; i++) {
+          el = fr[i];
+          var src = (el.src || "").toLowerCase();
+          if (src && (isBadUrl(src) || AD_RE.test(src))) continue;
+          a = area(el);
+          if (a > ba) { ba = a; best = el; }
+        }
+        var vs = document.getElementsByTagName("video");
+        for (i = 0; i < vs.length; i++) { a = area(vs[i]); if (a > ba) { ba = a; best = vs[i]; } }
+        if (ba < window.innerWidth * window.innerHeight * 0.2) return null;
+        return best;
+      }
+
+      function related(el, P) {
+        if (!P) return false;
+        if (el === P || P.contains(el) || el.contains(P)) return true;
+        if (P.tagName === "VIDEO" && P.parentElement && P.parentElement.contains(el)) return true;
+        return false;
+      }
+
+      function rootOverlay(el, P) {
+        var r = el;
+        while (r.parentElement && r.parentElement !== document.body && r.parentElement !== document.documentElement &&
+               !(P && r.parentElement.contains(P))) { r = r.parentElement; }
+        return r;
+      }
+
+      function kill(el) {
+        try {
+          if (el && el.parentNode && !SKIP[el.tagName]) el.parentNode.removeChild(el);
+          document.body.style.setProperty("overflow", "hidden", "important");
+        } catch (e) {}
+      }
+
+      // ---- 3. Hit-test sweep: player ke upar jo bhi dikhe wo overlay hai
+      var PTS = [[0.5, 0.5], [0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85], [0.5, 0.15], [0.5, 0.85], [0.15, 0.5], [0.85, 0.5]];
+      function hitSweep(P) {
+        if (!P || !document.elementsFromPoint) return;
+        var W = window.innerWidth, H = window.innerHeight;
+        for (var p = 0; p < PTS.length; p++) {
+          var st = document.elementsFromPoint(W * PTS[p][0], H * PTS[p][1]);
+          for (var k = 0; k < st.length; k++) {
+            var el = st[k];
+            if (el === P || P.contains(el)) break;
+            if (SKIP[el.tagName] || related(el, P)) continue;
+            kill(rootOverlay(el, P));
+          }
+        }
+      }
+
+      // ---- 4. Positioned extra iframes (ad frames) hatao
+      function frameSweep(P) {
+        var fr = document.getElementsByTagName("iframe");
+        for (var i = fr.length - 1; i >= 0; i--) {
+          var el = fr[i];
+          if (el === P || (P && (P.contains(el) || el.contains(P)))) continue;
+          var cs = getComputedStyle(el);
+          if (cs.position === "fixed" || cs.position === "absolute") kill(rootOverlay(el, P));
+        }
+      }
+
+      // ---- 5. Keyword sweep (fake captcha / apk / notification-scam text)
+      function kwSweep(P) {
+        if (!KW.length) return;
+        var els = document.querySelectorAll("div,section,aside,form,dialog");
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i];
+          if (related(el, P)) continue;
+          if (!P && el.querySelector("video,iframe")) continue;
+          var t = el.innerText || "";
+          if (!t || t.length > 700) continue;
+          t = t.toLowerCase();
+          var hit = false;
+          for (var j = 0; j < KW.length; j++) { if (KW[j] && t.indexOf(KW[j]) > -1) { hit = true; break; } }
+          if (!hit) continue;
+          var cs = getComputedStyle(el);
+          if (cs.position === "fixed" || cs.position === "absolute" || cs.position === "sticky" || (parseInt(cs.zIndex) || 0) > 10) {
+            kill(rootOverlay(el, P));
+          }
+        }
+      }
+
+      // ---- 6. Remote selectors (Firebase Remote Config se update hote hain)
+      function selSweep(P) {
+        for (var i = 0; i < SEL.length; i++) {
+          try {
+            var list = document.querySelectorAll(SEL[i]);
+            for (var j = 0; j < list.length; j++) { if (!related(list[j], P)) kill(list[j]); }
+          } catch (e) {}
+        }
+      }
+
+      function sweep() {
+        try {
+          var P = findPlayer();
+          hitSweep(P);
+          frameSweep(P);
+          selSweep(P);
+        } catch (e) {}
+      }
+
+      setInterval(sweep, 120);
+      setInterval(function () { try { kwSweep(findPlayer()); } catch (e) {} }, 350);
+
+      var pend = 0;
+      try {
+        new MutationObserver(function () {
+          if (pend) return;
+          pend = setTimeout(function () { pend = 0; sweep(); }, 25);
+        }).observe(document.documentElement, { childList: true, subtree: true });
+      } catch (e) {}
+      sweep();
+    })();
+  ''';
+
+  // Default rules (Firebase Remote Config key: player_shield_rules se extend ho sakte hain, app update ke bina)
+  static const List<String> _kShieldKeywords = [
+    "not a robot", "i'm not a robot", "im not a robot", "verify you are human", "verify you're human",
+    "check the box", "file_download", ".apk", "we're ready", "download now", "install now",
+    "your phone number", "enter your number", "allow notifications", "click allow", "press allow",
+    "you have won", "you've won", "congratulations", "virus", "update required", "claim your", "free gift",
+  ];
+  static const List<String> _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10'];
+  static const Set<String> _kDefaultUnwrapServers = {'screenscape'};
+
+  String _shieldRulesJs = 'window.__hnRules={};';
+  List<String> _remoteBlockHosts = <String>[];
+  Set<String> _unwrapServers = <String>{'screenscape'};
+
+  void _loadShieldRules() {
+    final List<String> kw = List<String>.of(_kShieldKeywords);
+    final List<String> hosts = List<String>.of(_kShieldHosts);
+    final List<String> sel = <String>[];
+    final Set<String> unwrap = Set<String>.of(_kDefaultUnwrapServers);
+    try {
+      final FirebaseRemoteConfig rc = FirebaseRemoteConfig.instance;
+      final String raw = rc.getString('player_shield_rules').trim();
+      if (raw.isNotEmpty) {
+        final dynamic d = json.decode(raw);
+        if (d is Map) {
+          for (final dynamic x in (d['keywords'] as List? ?? const [])) { kw.add(x.toString()); }
+          for (final dynamic x in (d['hosts'] as List? ?? const [])) { hosts.add(x.toString()); }
+          for (final dynamic x in (d['selectors'] as List? ?? const [])) { sel.add(x.toString()); }
+        }
+      }
+      final String un = rc.getString('unwrap_servers').trim();
+      if (un.isNotEmpty) {
+        for (final String s in un.split(',')) { if (s.trim().isNotEmpty) unwrap.add(s.trim()); }
+      }
+    } catch (_) {}
+    _remoteBlockHosts = hosts.map((String h) => h.toLowerCase()).toList();
+    _unwrapServers = unwrap;
+    _shieldRulesJs = 'window.__hnRules=' + json.encode(<String, dynamic>{'keywords': kw, 'hosts': hosts, 'selectors': sel}) + ';';
+  }
+
+  void _injectShield() {
+    try {
+      _controller.runJavaScript(_shieldRulesJs);
+      _controller.runJavaScript(_kShieldJs);
+    } catch (_) {}
+  }
+
+  bool _shieldBlocksUrl(String url) {
+    if (url.isEmpty) return false;
+    final int colon = url.indexOf(':');
+    if (colon > 0) {
+      const Set<String> okSchemes = {'http', 'https', 'about', 'data', 'blob'};
+      if (!okSchemes.contains(url.substring(0, colon))) return true;
+    }
+    if (RegExp(r'\.(apk|xapk|apks|aab|exe|msi|dmg|zip|rar|7z)(\?|#|$)').hasMatch(url)) return true;
+    if (url.contains('file_download')) return true;
+    for (final String h in _remoteBlockHosts) {
+      if (h.isNotEmpty && url.contains(h)) return true;
+    }
+    return false;
+  }
+
   void _initStream() {
+    _loadShieldRules();
     _unwrapUrl = '';
     _unwrapHost = '';
     _unwrapTries = 0;
@@ -361,6 +603,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           onPageStarted: (String url) { 
             if (mounted) setState(() => isPageLoading = true); 
           },
+          onProgress: (int p) { if (p >= 25) _injectShield(); },
           onPageFinished: (String url) {
             Future.delayed(const Duration(milliseconds: 600), () {
               if (mounted) setState(() => isPageLoading = false);
@@ -414,7 +657,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               // 💥 ULTRA FAST 50ms INTERVAL FOR BOT BYPASS & STICKERS 💥
               setInterval(function() {
                 try {
-                  // Silent Auto-Clicker
+                  // Silent Auto-Clicker (kLegacyAutoClick=false ho to band)
+                  if (${kLegacyAutoClick}) {
                   var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
                   for(var j=0; j<spamEls.length; j++) { spamEls[j].click(); }
                   
@@ -427,6 +671,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       if(txt === "i'm not a robot" || txt === "im not a robot" || txt === "continue" || txt.indexOf("verify") !== -1) {
                           btns[i].click();
                       }
+                  }
+
                   }
 
                   // 🔥 THE STICKER NUKER (Kills Floating Images/Gifs strictly) 🔥
@@ -507,10 +753,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             ''';
             _controller.runJavaScript(jsCode);
             _controller.runJavaScript(_kPopupKillerJs);
+            _injectShield();
             _tryUnwrapHindi();
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url.toLowerCase();
+
+            // 🛡️ SHIELD: apk/download/non-web schemes + remote blocklist (main frame + sub-frames)
+            if (_shieldBlocksUrl(url)) return NavigationDecision.prevent;
             
             // 🔥 MASSIVE FIREWALL: Redirects Blocked 🔥
             if (url.contains('thufd.com') ||
