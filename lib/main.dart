@@ -23,8 +23,8 @@ import 'pages.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// 🔥 APP KA CURRENT VERSION (Tera naya update 1.4.0) 🔥
-const String currentAppVersion = "1.4.0"; 
+// 🔥 APP KA CURRENT VERSION (Tera naya update 1.4.1) 🔥
+const String currentAppVersion = "1.4.1"; 
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -57,7 +57,7 @@ Future<void> main() async {
     await remoteConfig.setConfigSettings(
       RemoteConfigSettings(
         fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: const Duration(minutes: 1), // Turant update catch karne ke liye
+        minimumFetchInterval: const Duration(minutes: 5), // Real-time listener niche turant update deta hai, ye sirf server-throttle se bachata hai
       ),
     );
     
@@ -65,11 +65,34 @@ Future<void> main() async {
     await remoteConfig.setDefaults(const {
       'show_ads': true, 
       'maintenance_mode': false,
-      'latest_version': '1.4.0',
-      'update_link': 'https://hannutv.blogspot.com'
+      'latest_version': '1.4.1',
+      'update_link': 'https://hannutv.blogspot.com',
+      // 🛡️ PLAYER POPUP SHIELD: Firebase se popup fix (bina APK update ke)
+      'player_shield_rules': '{}',
+      'unwrap_servers': ''
     });
-    
-    await remoteConfig.fetchAndActivate();
+
+    // 🔥 REAL-TIME: Firebase me "Publish" karte hi chalte hue app ko naye rules mil jaate hain 🔥
+    try {
+      remoteConfig.onConfigUpdated.listen((RemoteConfigUpdate update) async {
+        try {
+          await remoteConfig.activate();
+          debugPrint('Remote Config live update: \${update.updatedKeys}');
+        } catch (e) {
+          debugPrint('Remote Config activate error: \$e');
+        }
+      }, onError: (Object e) {
+        debugPrint('Remote Config listener error: \$e');
+      });
+    } catch (e) {
+      debugPrint('Remote Config realtime not available: \$e');
+    }
+
+    try {
+      await remoteConfig.fetchAndActivate();
+    } catch (e) {
+      debugPrint('Remote Config fetch error: \$e');
+    }
   } catch (error) {
     debugPrint('Firebase Startup error (Bypassed for Safe Boot): \$error');
   }
@@ -84,13 +107,14 @@ class HannuTvApp extends StatefulWidget {
   State<HannuTvApp> createState() => _HannuTvAppState();
 }
 
-class _HannuTvAppState extends State<HannuTvApp> {
+class _HannuTvAppState extends State<HannuTvApp> with WidgetsBindingObserver {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initDeepLinks();
   }
 
@@ -130,8 +154,21 @@ class _HannuTvAppState extends State<HannuTvApp> {
     );
   }
 
+  // App background se wapas aaye to naye popup-shield rules / update info turant fetch
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    try {
+      FirebaseRemoteConfig.instance.fetchAndActivate().catchError((Object e) {
+        debugPrint('Remote Config resume fetch error: \$e');
+        return false;
+      });
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _linkSubscription?.cancel();
     super.dispose();
   }
