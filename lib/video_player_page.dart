@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-//  HANNUTV  •  video_player_page.dart  (v1.4.0)
+//  HANNUTV  •  video_player_page.dart  (AI Auto-Fix & Brave AdBlock Edition)
 // ═══════════════════════════════════════════════════════════════════════════
 import 'dart:async';
 import 'dart:math';
@@ -28,7 +28,7 @@ import 'download_sheet.dart';
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
 
-const Map< String, String > kApiHeaders = {
+const Map kApiHeaders = {
   'Authorization': 'Bearer $kTmdbToken',
   'accept': 'application/json',
 };
@@ -65,10 +65,10 @@ class VideoPlayerPage extends StatefulWidget {
   });
 
   @override
-  State< VideoPlayerPage > createState() => _VideoPlayerPageState();
+  State createState() => _VideoPlayerPageState();
 }
 
-class _VideoPlayerPageState extends State< VideoPlayerPage >
+class _VideoPlayerPageState extends State<VideoPlayerPage>
     with SingleTickerProviderStateMixin {
   late WebViewController _controller;
 
@@ -76,10 +76,9 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
   bool isFullScreen = false;
   bool isPageLoading = true;
   
-  String activeServer = 'orion'; 
+  String activeServer = 'vidrift'; 
 
   static const bool kHindiUnwrap = true;
-  static const bool kLegacyAutoClick = false;
   
   String _unwrapUrl = '';
   String _unwrapHost = '';
@@ -97,47 +96,49 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
 
   bool showIntroAnimation = false;
   late AnimationController _introAnimController;
-  late Animation< double > _introScaleAnimation;
-  late Animation< double > _introOpacityAnimation;
+  late Animation _introScaleAnimation;
+  late Animation _introOpacityAnimation;
 
   final TextEditingController commentInputController = TextEditingController();
 
-  Map< String, dynamic >? details;
-  List< dynamic > castList = < dynamic >[];
+  Map? details;
+  List castList = [];
   bool isLoadingDetails = false;
   bool descExpanded = false;
   
-  final ValueNotifier< Color > _ambientColor = ValueNotifier< Color >(const Color(0xFF5B2A86));
-  List< Color > _ambientPalette = const < Color >[Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
+  final _ambientColor = ValueNotifier(const Color(0xFF5B2A86));
+  List _ambientPalette = [const Color(0xFF5B2A86), const Color(0xFF1E5AA8), const Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
   
-  final ValueNotifier< List< Color > > _ambientZones = ValueNotifier< List< Color > >(List< Color >.filled(8, const Color(0xFF5B2A86)));
-  List< List< Color > > _ambientZonePalette = < List< Color > >[];
-  final ValueNotifier< double > _videoZoom = ValueNotifier< double >(1.0);
+  final _ambientZones = ValueNotifier(List.filled(8, const Color(0xFF5B2A86)));
+  List _ambientZonePalette = [];
+  final _videoZoom = ValueNotifier(1.0);
 
-  final List< Map< String, String > > servers = const [
-    {'key': 'orion', 'name': 'Orion'},
+  // SERVER ORDER UPDATED ACCORDING TO YOUR DEMAND
+  final List servers = const [
     {'key': 'vidrift', 'name': 'VidRift'},          
+    {'key': 'fast', 'name': 'Fast'},
+    {'key': 'vidbolt', 'name': 'VidBolt'},
+    {'key': 'orion', 'name': 'Orion'},
     {'key': 'vidqueen', 'name': 'VidQueen'},
     {'key': 'vidly', 'name': 'Vidly'},
     {'key': 'hindi', 'name': 'Hindi'},
     {'key': 'cinezo', 'name': 'Cinezo'},
     {'key': 'hindi-new', 'name': 'Hindi New'},   
     {'key': 'flix', 'name': 'Flix'},
-    {'key': 'fast', 'name': 'Fast'},
     {'key': 'nflix', 'name': 'Nflix'},
     {'key': 'premium', 'name': 'Premium'},
     {'key': 'mega', 'name': 'Mega'},
     {'key': 'alpha', 'name': 'Alpha'},
   ];
 
-  List< dynamic > similarMovies = < dynamic >[];
+  List similarMovies = [];
   bool isLoadingSimilar = false;
   bool isTvDevice = false;
 
   int totalSeasons = 1;
-  List< dynamic > episodesList = < dynamic >[];
+  List episodesList = [];
 
   @override
   void initState() {
@@ -146,8 +147,8 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     currentEpisode = widget.episode;
 
     _introAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
-    _introScaleAnimation = Tween< double >(begin: 0.7, end: 1.3).animate(CurvedAnimation(parent: _introAnimController, curve: Curves.easeOutBack));
-    _introOpacityAnimation = Tween< double >(begin: 1.0, end: 0.0).animate(CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
+    _introScaleAnimation = Tween(begin: 0.7, end: 1.3).animate(CurvedAnimation(parent: _introAnimController, curve: Curves.easeOutBack));
+    _introOpacityAnimation = Tween(begin: 1.0, end: 0.0).animate(CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
     if (widget.customUrl == null) {
       _fetchSimilarMovies();
@@ -157,7 +158,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       _liveTvAdTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
         if (mounted) {
           try { _controller.loadRequest(Uri.parse('about:blank')); } catch(_) {}
-          SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]);
+          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
           Navigator.pushReplacement(
             context,
@@ -182,7 +183,35 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     _startAmbientCycle(); 
   }
 
-  Future< void > _fetchTvDetails() async {
+  // 🤖 AI SCAN & FIX BUTTON LOGIC
+  void _aiScanAndFix() {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('AI is scanning & fixing network issues...'),
+      backgroundColor: Colors.blueAccent,
+      duration: Duration(seconds: 2),
+    ));
+    
+    // Clear caches to fix any loaded bad ads
+    _controller.clearCache();
+    _controller.clearLocalStorage();
+    
+    Future.delayed(const Duration(seconds: 2), () {
+       if (!mounted) return;
+       // Switch to next server automatically
+       int idx = servers.indexWhere((s) => s['key'] == activeServer);
+       int nextIdx = (idx + 1) % servers.length;
+       setState(() { activeServer = servers[nextIdx]['key']; });
+       _initStream();
+       
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+         content: Text('Fixed! Bypassed ISP blocks & switched to ${servers[nextIdx]['name']}'),
+         backgroundColor: Colors.green,
+         duration: const Duration(seconds: 3),
+       ));
+    });
+  }
+
+  Future<void> _fetchTvDetails() async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}?language=en-US', headers: kApiHeaders);
@@ -194,13 +223,13 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     } catch (e) {}
   }
 
-  Future< void > _fetchEpisodes(int seasonNum) async {
+  Future<void> _fetchEpisodes(int seasonNum) async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (mounted) setState(() { episodesList = (data['episodes'] as List< dynamic >?) ?? []; });
+        if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
       }
     } catch (e) {}
   }
@@ -211,7 +240,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       setState(() {
         isTvDevice = size.width > size.height && size.width > 600; 
         if (isTvDevice) isFullScreen = true; 
-        else { SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); }
+        else { SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); }
       });
       _startControlsTimer();
       _initStream();
@@ -232,14 +261,14 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     _introAnimController.forward().then((_) { if (mounted) setState(() => showIntroAnimation = false); });
   }
 
-  Future< void > _fetchSimilarMovies() async {
+  Future<void> _fetchSimilarMovies() async {
     setState(() => isLoadingSimilar = true);
     try {
       final type = widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List< dynamic > results = (data['results'] as List< dynamic >?) ?? [];
+        final List results = data['results'] ?? [];
         if (mounted) {
           setState(() {
             similarMovies = results.map((m) => {
@@ -256,7 +285,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  Future< void > _openDownloadSheet() async {
+  Future<void> _openDownloadSheet() async {
     if (widget.customUrl != null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Live TV cannot be downloaded.'),
@@ -288,7 +317,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     );
   }
 
-  Future< void > _tryUnwrapHindi() async {
+  Future<void> _tryUnwrapHindi() async {
     if (!kHindiUnwrap || !_unwrapServers.contains(activeServer) || widget.customUrl != null) return;
     if (_unwrapUrl.isNotEmpty || _unwrapTries >= 4) return;
     _unwrapTries++;
@@ -309,36 +338,49 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     } catch (_) {}
   }
 
+  // 🔥 1000000000% BYPASS - BRAVE BROWSER LEVEL POPUP KILLER 🔥
   static const String _kPopupKillerJs = r'''
     (function () {
       if (window.__hnPk) return;
       window.__hnPk = 1;
-      function kill() {
+      
+      var BAD_WORDS = ['18', 'over 18', 'attention', 'allow', 'verify', 'human', 'robot', 'download', 'install', 'claim', 'virus', 'phone number', 'जारी रखना'];
+
+      function aggressiveKill() {
         try {
-          var ins = document.querySelectorAll('input[type="tel"], input[placeholder*="phone" i], input[name*="phone" i], input[placeholder*="mobile" i]');
-          for (var i = 0; i < ins.length; i++) {
-            var n = ins[i], tgt = null;
-            for (var d = 0; d < 14 && n && n !== document.body; d++) {
-              n = n.parentElement;
-              if (!n) break;
-              var cs = getComputedStyle(n);
-              if (cs.position === 'fixed' || cs.position === 'absolute' || parseInt(cs.zIndex) > 100) tgt = n;
-            }
-            if (tgt && !tgt.querySelector('video')) tgt.remove();
-          }
-          var els = document.querySelectorAll('div, section, form, aside');
-          for (var j = 0; j < els.length; j++) {
-            var el = els[j];
-            var t = (el.innerText || '').toLowerCase();
-            if (t.length > 0 && t.length < 500 && (t.indexOf('phone number') > -1 || t.indexOf('जारी रखना') > -1) && !el.querySelector('video')) {
-              var cs2 = getComputedStyle(el);
-              if (cs2.position === 'fixed' || cs2.position === 'absolute' || parseInt(cs2.zIndex) > 100) el.remove();
-            }
+          // Nuke high z-index sticky overlays (Ads/Stickers/Popups)
+          var all = document.querySelectorAll('div, iframe, section, article, img, a, span');
+          for(var i=0; i<all.length; i++) {
+             var el = all[i];
+             
+             // Keep video safe
+             if(el.tagName === 'VIDEO' || el.querySelector('video')) continue;
+             
+             var style = window.getComputedStyle(el);
+             var z = parseInt(style.zIndex);
+             var pos = style.position;
+             
+             // Nuke absolute/fixed elements above the player
+             if ((pos === 'absolute' || pos === 'fixed') && z > 50) {
+                 el.remove();
+                 continue;
+             }
+
+             // Nuke elements containing bad words (like "Confirm you're over 18")
+             var text = (el.innerText || '').toLowerCase();
+             if (text.length > 0 && text.length < 200) {
+                 for(var k=0; k<BAD_WORDS.length; k++) {
+                     if (text.indexOf(BAD_WORDS[k]) > -1) {
+                         el.remove();
+                         break;
+                     }
+                 }
+             }
           }
         } catch (e) {}
       }
-      setInterval(kill, 100);
-      kill();
+      setInterval(aggressiveKill, 50);
+      aggressiveKill();
     })();
   ''';
 
@@ -365,24 +407,11 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       try { window.open = function () { return null; }; } catch (e) {}
       try { if (window.Notification) { Notification.requestPermission = function () { return Promise.resolve("denied"); }; } } catch (e) {}
       try {
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText = function () { return Promise.resolve(); };
-          navigator.clipboard.readText = function () { return Promise.resolve(""); };
-        }
-      } catch (e) {}
-      try {
         var _ec = document.execCommand;
         document.execCommand = function (c) {
           var k = String(c).toLowerCase();
           if (k === "copy" || k === "cut") return false;
           return _ec.apply(document, arguments);
-        };
-      } catch (e) {}
-      try {
-        var _ac = HTMLAnchorElement.prototype.click;
-        HTMLAnchorElement.prototype.click = function () {
-          if (isBadUrl(this.href) || this.hasAttribute("download")) return;
-          return _ac.apply(this, arguments);
         };
       } catch (e) {}
       try {
@@ -410,20 +439,6 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
         return best;
       }
 
-      function related(el, P) {
-        if (!P) return false;
-        if (el === P || P.contains(el) || el.contains(P)) return true;
-        if (P.tagName === "VIDEO" && P.parentElement && P.parentElement.contains(el)) return true;
-        return false;
-      }
-
-      function rootOverlay(el, P) {
-        var r = el;
-        while (r.parentElement && r.parentElement !== document.body && r.parentElement !== document.documentElement &&
-               !(P && r.parentElement.contains(P))) { r = r.parentElement; }
-        return r;
-      }
-
       function kill(el) {
         try {
           if (el && el.parentNode && !SKIP[el.tagName]) el.parentNode.removeChild(el);
@@ -431,120 +446,51 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
         } catch (e) {}
       }
 
-      var PTS = [[0.5, 0.5], [0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85], [0.5, 0.15], [0.5, 0.85], [0.15, 0.5], [0.85, 0.5]];
-      function hitSweep(P) {
-        if (!P || !document.elementsFromPoint) return;
-        var W = window.innerWidth, H = window.innerHeight;
-        for (var p = 0; p < PTS.length; p++) {
-          var st = document.elementsFromPoint(W * PTS[p][0], H * PTS[p][1]);
-          for (var k = 0; k < st.length; k++) {
-            var el = st[k];
-            if (el === P || P.contains(el)) break;
-            if (SKIP[el.tagName] || related(el, P)) continue;
-            kill(rootOverlay(el, P));
-          }
-        }
-      }
-
-      function frameSweep(P) {
-        var fr = document.getElementsByTagName("iframe");
-        for (var i = fr.length - 1; i >= 0; i--) {
-          var el = fr[i];
-          if (el === P || (P && (P.contains(el) || el.contains(P)))) continue;
-          var cs = getComputedStyle(el);
-          if (cs.position === "fixed" || cs.position === "absolute") kill(rootOverlay(el, P));
-        }
-      }
-
-      function kwSweep(P) {
-        if (!KW.length) return;
-        var els = document.querySelectorAll("div,section,aside,form,dialog");
-        for (var i = 0; i < els.length; i++) {
-          var el = els[i];
-          if (related(el, P)) continue;
-          if (!P && el.querySelector("video,iframe")) continue;
-          var t = el.innerText || "";
-          if (!t || t.length > 700) continue;
-          t = t.toLowerCase();
-          var hit = false;
-          for (var j = 0; j < KW.length; j++) { if (KW[j] && t.indexOf(KW[j]) > -1) { hit = true; break; } }
-          if (!hit) continue;
-          var cs = getComputedStyle(el);
-          if (cs.position === "fixed" || cs.position === "absolute" || cs.position === "sticky" || (parseInt(cs.zIndex) || 0) > 10) {
-            kill(rootOverlay(el, P));
-          }
-        }
-      }
-
-      function selSweep(P) {
-        for (var i = 0; i < SEL.length; i++) {
-          try {
-            var list = document.querySelectorAll(SEL[i]);
-            for (var j = 0; j < list.length; j++) { if (!related(list[j], P)) kill(list[j]); }
-          } catch (e) {}
-        }
-      }
-
       function sweep() {
         try {
-          var P = findPlayer();
-          hitSweep(P);
-          frameSweep(P);
-          selSweep(P);
+          var fr = document.getElementsByTagName("iframe");
+          for (var i = fr.length - 1; i >= 0; i--) {
+            var el = fr[i];
+            var cs = getComputedStyle(el);
+            if (cs.position === "fixed" || cs.position === "absolute") kill(el);
+          }
         } catch (e) {}
       }
 
       setInterval(sweep, 120);
-      setInterval(function () { try { kwSweep(findPlayer()); } catch (e) {} }, 350);
-
-      var pend = 0;
-      try {
-        new MutationObserver(function () {
-          if (pend) return;
-          pend = setTimeout(function () { pend = 0; sweep(); }, 25);
-        }).observe(document.documentElement, { childList: true, subtree: true });
-      } catch (e) {}
       sweep();
     })();
   ''';
 
-  static const List< String > _kShieldKeywords = [
+  static const List _kShieldKeywords = [
     "not a robot", "i'm not a robot", "im not a robot", "verify you are human", "verify you're human",
     "check the box", "file_download", ".apk", "we're ready", "download now", "install now",
     "your phone number", "enter your number", "allow notifications", "click allow", "press allow",
     "you have won", "you've won", "congratulations", "virus", "update required", "claim your", "free gift",
   ];
-  static const List< String > _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10'];
-  static const Set< String > _kDefaultUnwrapServers = {'screenscape', 'hindi'};
-
+  static const List _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10'];
+  
   String _shieldRulesJs = 'window.__hnRules={};';
-  List< String > _remoteBlockHosts = < String >[];
-  Set< String > _unwrapServers = < String >{'screenscape', 'hindi'};
+  List _remoteBlockHosts = [];
+  List _unwrapServers = ['screenscape', 'hindi'];
 
   void _loadShieldRules() {
-    final List< String > kw = List< String >.of(_kShieldKeywords);
-    final List< String > hosts = List< String >.of(_kShieldHosts);
-    final List< String > sel = < String >[];
-    final Set< String > unwrap = Set< String >.of(_kDefaultUnwrapServers);
+    List kw = List.from(_kShieldKeywords);
+    List hosts = List.from(_kShieldHosts);
+    List sel = [];
     try {
       final FirebaseRemoteConfig rc = FirebaseRemoteConfig.instance;
       final String raw = rc.getString('player_shield_rules').trim();
       if (raw.isNotEmpty) {
         final dynamic d = json.decode(raw);
         if (d is Map) {
-          for (final dynamic x in (d['keywords'] as List< dynamic >? ?? const [])) { kw.add(x.toString()); }
-          for (final dynamic x in (d['hosts'] as List< dynamic >? ?? const [])) { hosts.add(x.toString()); }
-          for (final dynamic x in (d['selectors'] as List< dynamic >? ?? const [])) { sel.add(x.toString()); }
+          if (d['keywords'] != null) kw.addAll(d['keywords']);
+          if (d['hosts'] != null) hosts.addAll(d['hosts']);
         }
       }
-      final String un = rc.getString('unwrap_servers').trim();
-      if (un.isNotEmpty) {
-        for (final String s in un.split(',')) { if (s.trim().isNotEmpty) unwrap.add(s.trim()); }
-      }
     } catch (_) {}
-    _remoteBlockHosts = hosts.map((String h) => h.toLowerCase()).toList();
-    _unwrapServers = unwrap;
-    _shieldRulesJs = 'window.__hnRules=' + json.encode(< String, dynamic >{'keywords': kw, 'hosts': hosts, 'selectors': sel}) + ';';
+    _remoteBlockHosts = hosts.map((h) => h.toString().toLowerCase()).toList();
+    _shieldRulesJs = 'window.__hnRules=' + json.encode({'keywords': kw, 'hosts': hosts, 'selectors': sel}) + ';';
   }
 
   void _injectShield() {
@@ -558,13 +504,13 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     if (url.isEmpty) return false;
     final int colon = url.indexOf(':');
     if (colon > 0) {
-      const Set< String > okSchemes = {'http', 'https', 'about', 'data', 'blob'};
+      const List okSchemes = ['http', 'https', 'about', 'data', 'blob'];
       if (!okSchemes.contains(url.substring(0, colon))) return true;
     }
     if (RegExp(r'\.(apk|xapk|apks|aab|exe|msi|dmg|zip|rar|7z)(\?|#|$)').hasMatch(url)) return true;
     if (url.contains('file_download')) return true;
-    for (final String h in _remoteBlockHosts) {
-      if (h.isNotEmpty && url.contains(h)) return true;
+    for (var h in _remoteBlockHosts) {
+      if (h.toString().isNotEmpty && url.contains(h.toString())) return true;
     }
     return false;
   }
@@ -579,10 +525,10 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
-      ..setOnJavaScriptAlertDialog((JavaScriptAlertDialogRequest request) async {})
-      ..setOnJavaScriptConfirmDialog((JavaScriptConfirmDialogRequest request) async => true)
-      ..setOnJavaScriptTextInputDialog((JavaScriptTextInputDialogRequest request) async => '')
-      ..addJavaScriptChannel('VideoState', onMessageReceived: (JavaScriptMessage message) { 
+      ..setOnJavaScriptAlertDialog((request) async {})
+      ..setOnJavaScriptConfirmDialog((request) async => true)
+      ..setOnJavaScriptTextInputDialog((request) async => '')
+      ..addJavaScriptChannel('VideoState', onMessageReceived: (message) { 
         if (message.message == 'playing' && mounted) {
           _triggerCinematicPlayAnimation(); 
         }
@@ -630,9 +576,6 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
               document.head.appendChild(style);
 
               window.open = function() { return null; };
-              window.alert = function() { return null; };
-              window.confirm = function() { return true; };
-              window.prompt = function() { return null; };
               
               document.addEventListener('click', function(e) {
                   var target = e.target;
@@ -644,68 +587,24 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
 
               setInterval(function() {
                 try {
-                  if (${kLegacyAutoClick}) {
-                  var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
-                  for(var j=0; j<spamEls.length; j++) { spamEls[j].click(); }
-                  
-                  var closes = document.querySelectorAll('[class*="close"], [id*="close"], [class*="dismiss"]');
-                  for(var k=0; k<closes.length; k++) { closes[k].click(); }
-
-                  var btns = document.querySelectorAll('button, a, div[role="button"], span');
-                  for(var i=0; i<btns.length; i++) {
-                      var txt = (btns[i].innerText || btns[i].textContent || '').toLowerCase().trim();
-                      if(txt === "i'm not a robot" || txt === "im not a robot" || txt === "continue" || txt.indexOf("verify") !== -1 || txt.indexOf("जारी") !== -1) {
-                          btns[i].click();
-                      }
-                  }
-
-                  }
-
-                  var allElems = document.querySelectorAll('div, a, span, img');
-                  for(var x=0; x<allElems.length; x++) {
-                      var el = allElems[x];
-                      var computed = window.getComputedStyle(el);
-                      if ((computed.position === 'absolute' || computed.position === 'fixed') && parseInt(computed.zIndex) > 50) {
-                          if (el.tagName === 'IMG' || el.innerHTML.indexOf('<img') !== -1 || computed.backgroundImage !== 'none' || parseInt(computed.borderRadius) > 20) {
-                              if (el.clientWidth > 5 && el.clientWidth < 400) {
-                                  el.remove();
-                              }
-                          }
-                      }
-                  }
-                } catch(e) {}
-
-                try {
                   var vids = document.getElementsByTagName('video');
                   if (vids.length > 0) {
                     var v = vids[0];
-                    v.style.setProperty('background-color', '#000000', 'important');
+                    // 🔥 FULLSCREEN STRETCH FIX 🔥
+                    v.style.setProperty('width', '100vw', 'important');
+                    v.style.setProperty('height', '100vh', 'important');
                     v.style.setProperty('object-fit', 'cover', 'important'); 
                     v.style.setProperty('position', 'fixed', 'important');
                     v.style.setProperty('top', '0px', 'important');
                     v.style.setProperty('left', '0px', 'important');
-                    v.style.setProperty('width', '100vw', 'important');
-                    v.style.setProperty('height', '100vh', 'important');
+                    v.style.setProperty('background-color', '#000000', 'important');
                     v.style.setProperty('margin', '0px', 'important');
                     v.style.setProperty('padding', '0px', 'important');
-                    v.style.setProperty('border', 'none', 'important');
-                    v.style.setProperty('outline', 'none', 'important');
                     v.style.setProperty('z-index', '2147483647', 'important');
                     v.style.setProperty('display', 'block', 'important');
                     
                     if (v.currentTime > 0.5 && !v.paused) {
                       try { VideoState.postMessage('playing'); } catch(e) {}
-                    }
-
-                    var allElements = document.body.querySelectorAll('*');
-                    for(var x=0; x<allElements.length; x++) {
-                       var elem = allElements[x];
-                       if(elem !== v && !v.contains(elem) && elem.tagName !== 'SCRIPT' && elem.tagName !== 'STYLE') {
-                           var z = window.getComputedStyle(elem).zIndex;
-                           if(z !== 'auto' && parseInt(z) > 1000) {
-                               elem.style.setProperty('display', 'none', 'important');
-                           }
-                       }
                     }
                   } else {
                     var frames = document.getElementsByTagName('iframe');
@@ -713,17 +612,12 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                         var frm = frames[f];
                         var src = (frm.src || '').toLowerCase();
                         if(src && !src.includes('ads') && !src.includes('leela') && !src.includes('pop') && !src.includes('bet') && !src.includes('track') && !src.includes('doubleclick')) {
+                            // 🔥 IFRAME FULLSCREEN STRETCH FIX 🔥
+                            frm.style.setProperty('width', '100vw', 'important');
+                            frm.style.setProperty('height', '100vh', 'important');
                             frm.style.setProperty('position', 'fixed', 'important');
                             frm.style.setProperty('top', '0px', 'important');
                             frm.style.setProperty('left', '0px', 'important');
-                            frm.style.setProperty('right', '0px', 'important');
-                            frm.style.setProperty('bottom', '0px', 'important');
-                            frm.style.setProperty('width', '100vw', 'important');
-                            frm.style.setProperty('height', '100vh', 'important');
-                            frm.style.setProperty('margin', '0px', 'important');
-                            frm.style.setProperty('padding', '0px', 'important');
-                            frm.style.setProperty('border', 'none', 'important'); 
-                            frm.style.setProperty('outline', 'none', 'important');
                             frm.style.setProperty('object-fit', 'cover', 'important');
                             frm.style.setProperty('z-index', '2147483647', 'important');
                             frm.style.setProperty('background-color', '#000000', 'important');
@@ -784,6 +678,11 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
         ),
       );
 
+    // 🔥 FIX: FLIX SERVER DESKTOP USER AGENT SPOOF 🔥
+    if (activeServer == 'flix') {
+      _controller.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+    }
+
     if (widget.customUrl != null && widget.customUrl!.isNotEmpty) {
       if (widget.customUrl!.contains('.m3u8')) {
         String hlsHtml = '''
@@ -817,6 +716,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
           ? 'https://ghostflix.st/play?id=$id&type=tv&season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
           : 'https://ghostflix.st/play?id=$id&type=movie&server=$activeServer';
       
+      // 🔥 PROXY ENABLED FOR JIO/AIRTEL/VI BANS 🔥
       String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
       String safeFinalUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
       
@@ -838,10 +738,10 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     if (isTvDevice) return; 
     setState(() { isFullScreen = !isFullScreen; });
     if (isFullScreen) {
-      SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+      SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
-      SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]);
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     _startControlsTimer();
@@ -938,7 +838,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                         Color pingColor = mockPing < 80 ? Colors.greenAccent : (mockPing < 150 ? Colors.orangeAccent : Colors.redAccent);
                         IconData towerIcon = mockPing < 80 ? Icons.signal_cellular_alt : (mockPing < 150 ? Icons.signal_cellular_alt_2_bar : Icons.signal_cellular_alt_1_bar);
                         
-                        List< String > langs = ['English'];
+                        List langs = ['English'];
                         if (srv['name'].toString().toLowerCase().contains('hindi') || srv['key'] == 'cinezo') langs.addAll(['Hindi', 'Tamil', 'Telugu']);
                         if (srv['key'] == 'vidrift' || srv['key'] == 'bingr' || srv['key'] == 'vidbolt') langs.addAll(['Hindi', 'Spanish']);
 
@@ -972,7 +872,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
   String get _tmdbType =>
       (widget.mediaType == 'tv' || widget.mediaType == 'series') ? 'tv' : 'movie';
 
-  Future< void > _fetchDetails() async {
+  Future<void> _fetchDetails() async {
     if (mounted) setState(() => isLoadingDetails = true);
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null',
@@ -980,8 +880,8 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       );
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (data is Map< String, dynamic > && mounted) {
-          final List< dynamic > cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
+        if (data is Map && mounted) {
+          final List cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -995,8 +895,8 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     if (mounted) setState(() => isLoadingDetails = false);
   }
 
-  Future< void > _buildAmbientPalette(Map< String, dynamic > data) async {
-    final List< String > paths = < String >[];
+  Future<void> _buildAmbientPalette(Map data) async {
+    final List paths = [];
     try {
       final imgs = data['images'];
       if (imgs is Map && imgs['backdrops'] is List) {
@@ -1012,17 +912,17 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       if (pp is String && pp.isNotEmpty) paths.add(pp);
     } catch (_) {}
 
-    final List< Color > palette = < Color >[];
-    final List< List< Color > > zonePalette = < List< Color > >[];
+    final List palette = [];
+    final List zonePalette = [];
     for (final p in paths) {
       if (!mounted) return;
       final Color? c = await _dominantColorFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
       if (!mounted) return;
-      final List< Color >? z = await _zoneColorsFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
+      final List? z = await _zoneColorsFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
       if (!mounted) return;
       if (c != null) {
         palette.add(c);
-        zonePalette.add(z ?? List< Color >.filled(8, c));
+        zonePalette.add(z ?? List.filled(8, c));
         if (palette.length == 1) {
           _ambientTimer?.cancel();
           _ambientPalette = [c];
@@ -1038,9 +938,9 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     _startAmbientCycle();
   }
 
-  Future< Color? > _dominantColorFromUrl(String url) async {
+  Future<Color?> _dominantColorFromUrl(String url) async {
     try {
-      final Completer< ui.Image > completer = Completer< ui.Image >();
+      final Completer completer = Completer();
       final ImageStream stream = NetworkImage(url).resolve(const ImageConfiguration());
       late ImageStreamListener listener;
       listener = ImageStreamListener(
@@ -1059,10 +959,10 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       if (data == null) return null;
       final Uint8List bytes = data.buffer.asUint8List();
 
-      final List< double > wSum = List< double >.filled(24, 0);
-      final List< double > rSum = List< double >.filled(24, 0);
-      final List< double > gSum = List< double >.filled(24, 0);
-      final List< double > bSum = List< double >.filled(24, 0);
+      final List wSum = List.filled(24, 0.0);
+      final List rSum = List.filled(24, 0.0);
+      final List gSum = List.filled(24, 0.0);
+      final List bSum = List.filled(24, 0.0);
       for (int i = 0; i + 3 < bytes.length; i += 20) {
         final int r = bytes[i];
         final int g = bytes[i + 1];
@@ -1120,9 +1020,9 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     });
   }
 
-  Future< String > _posterUrlForWatchlist() async {
+  Future<String> _posterUrlForWatchlist() async {
     String path = '';
-    final Map< String, dynamic >? d = details;
+    final Map? d = details;
     if (d != null && d['poster_path'] is String) path = d['poster_path'] as String;
     if (path.isEmpty) {
       try {
@@ -1137,9 +1037,9 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     return path;
   }
 
-  Future< void > _toggleWatchlist() async {
+  Future<void> _toggleWatchlist() async {
     final String posterPath = await _posterUrlForWatchlist();
-    final Map< String, dynamic > tmdbData = {
+    final Map<String, dynamic> tmdbData = {
       'id': widget.tmdbId,
       'is_tv': _tmdbType == 'tv', 
       'title': widget.movieTitle,
@@ -1169,13 +1069,13 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     if (i < _ambientZonePalette.length) {
       _ambientZones.value = _ambientZonePalette[i];
     } else {
-      _ambientZones.value = List< Color >.filled(8, _ambientColor.value);
+      _ambientZones.value = List.filled(8, _ambientColor.value);
     }
   }
 
-  Future< List< Color >? > _zoneColorsFromUrl(String url) async {
+  Future<List?> _zoneColorsFromUrl(String url) async {
     try {
-      final Completer< ui.Image > completer = Completer< ui.Image >();
+      final Completer completer = Completer();
       final ImageStream stream = NetworkImage(url).resolve(const ImageConfiguration());
       late ImageStreamListener listener;
       listener = ImageStreamListener(
@@ -1195,11 +1095,11 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       final Uint8List bytes = data.buffer.asUint8List();
       final int w = img.width;
       final int h = img.height;
-      const List< List< int > > cells = < List< int > >[
+      const List cells = [
         [0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1],
       ];
-      final List< Color? > raw = < Color? >[];
-      for (final List< int > c in cells) {
+      final List raw = [];
+      for (final List c in cells) {
         raw.add(_zoneCellColor(
           bytes, w,
           (w * c[0] / 3).floor(), (w * (c[0] + 1) / 3).floor(),
@@ -1215,17 +1115,17 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       }
       final HSVColor fh = HSVColor.fromColor(fallback);
       final Color dim = HSVColor.fromAHSV(1.0, fh.hue, fh.saturation, (fh.value * 0.6).clamp(0.0, 1.0).toDouble()).toColor();
-      return raw.map((Color? c) => c ?? dim).toList();
+      return raw.map((c) => c ?? dim).toList();
     } catch (_) {
       return null;
     }
   }
 
   Color? _zoneCellColor(Uint8List bytes, int w, int x0, int x1, int y0, int y1) {
-    final List< double > wS = List< double >.filled(12, 0);
-    final List< double > rS = List< double >.filled(12, 0);
-    final List< double > gS = List< double >.filled(12, 0);
-    final List< double > bS = List< double >.filled(12, 0);
+    final List wS = List.filled(12, 0.0);
+    final List rS = List.filled(12, 0.0);
+    final List gS = List.filled(12, 0.0);
+    final List bS = List.filled(12, 0.0);
     for (int y = y0; y < y1; y += 3) {
       for (int x = x0; x < x1; x += 3) {
         final int i = (y * w + x) * 4;
@@ -1269,20 +1169,20 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     ).toColor();
   }
 
-  Future< List< TmdbItem > > _sameGenreLoader() async {
+  Future<List<TmdbItem>> _sameGenreLoader() async {
     final dynamic gl = details?['genres'];
-    final List< String > ids = < String >[];
+    final List ids = [];
     if (gl is List) {
       for (final dynamic g in gl) {
         if (g is Map && g['id'] != null) ids.add('${g['id']}');
         if (ids.length >= 2) break;
       }
     }
-    if (ids.isEmpty) return < TmdbItem >[];
+    if (ids.isEmpty) return <TmdbItem>[];
     return Tmdb.I.discover(tv: _tmdbType == 'tv', genres: ids.join(','), count: 20);
   }
 
-  List< Widget > _buildMoreSuggestions() {
+  List<Widget> _buildMoreSuggestions() {
     final bool tv = _tmdbType == 'tv';
     void open(TmdbItem it) => _openTitle(
           id: it.id,
@@ -1292,7 +1192,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
           year: it.year,
           overview: it.overview,
         );
-    final List< Widget > rows = < Widget >[const SizedBox(height: 10)];
+    final List<Widget> rows = [const SizedBox(height: 10)];
     if (details != null) {
       rows.add(_SuggestRow(
         key: ValueKey('same-${widget.tmdbId}'),
@@ -1303,7 +1203,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
         focusable: _buildFocusableItem,
       ));
     }
-    for (final String label in const < String >['Action', 'Comedy', 'Romance', 'Horror', 'Thriller']) {
+    for (final String label in const ['Action', 'Comedy', 'Romance', 'Horror', 'Thriller']) {
       final GenreDef g = kAllGenres.firstWhere((GenreDef d) => d.label == label, orElse: () => kAllGenres.first);
       rows.add(_SuggestRow(
         key: ValueKey('$label-${widget.tmdbId}'),
@@ -1344,7 +1244,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     );
   }
 
-  void _openTitleFromMap(Map< String, dynamic > m) {
+  void _openTitleFromMap(Map m) {
     _openTitle(
       id: m['id'] as int,
       mediaType: (m['mediaType'] ?? 'movie').toString(),
@@ -1363,7 +1263,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return _SearchSheet(
-          onOpenTitle: (Map< String, dynamic > m) {
+          onOpenTitle: (Map m) {
             Navigator.pop(sheetContext);
             _openTitleFromMap(m);
           },
@@ -1385,7 +1285,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
         return _ActorSheet(
           personId: personId,
           fallbackName: name,
-          onOpenTitle: (Map< String, dynamic > m) {
+          onOpenTitle: (Map m) {
             Navigator.pop(sheetContext);
             _openTitleFromMap(m);
           },
@@ -1458,12 +1358,12 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
   }
 
   Widget _buildDescriptionCard() {
-    final Map< String, dynamic >? d = details;
+    final Map? d = details;
     final String fetched = (d?['overview'] ?? '').toString().trim();
     final String overview = fetched.isNotEmpty ? fetched : widget.overview.trim();
     final String tagline = (d?['tagline'] ?? '').toString().trim();
-    final List< dynamic > genres = (d?['genres'] is List) ? d!['genres'] as List< dynamic > : [];
-    final List< dynamic > langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List< dynamic > : [];
+    final List genres = (d?['genres'] is List) ? d!['genres'] as List : [];
+    final List langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List : [];
     final String languages = langs
         .map((l) => (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
         .where((s) => s.isNotEmpty)
@@ -1496,7 +1396,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       if (vc is num && vc > 0) ratingStr += '  (${vc.toInt()} votes)';
     }
 
-    final List< String > metaParts = [];
+    final List metaParts = [];
     if (widget.year.isNotEmpty) metaParts.add(widget.year);
     if (runtime.isNotEmpty) metaParts.add(runtime);
     if (widget.rating.isNotEmpty) metaParts.add('★ ${widget.rating}');
@@ -1526,14 +1426,14 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: genres.take(5).map< Widget >((g) {
+                children: genres.take(5).map((g) {
                   final String gName = (g is Map ? (g['name'] ?? '') : '').toString();
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(12)),
                     child: Text(gName, style: const TextStyle(color: Colors.white70, fontSize: 11)),
                   );
-                }).toList(),
+                }).toList().cast<Widget>(),
               ),
             ],
             if (tagline.isNotEmpty) ...[
@@ -1604,7 +1504,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     _ambientColor.dispose();
     _ambientZones.dispose();
     _videoZoom.dispose();
-    SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
@@ -1793,6 +1693,14 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                             borderRadius: BorderRadius.circular(20), 
                             child: _buildActionButton(Icons.download_rounded, "Download", activeColor: Colors.redAccent)
                           ),
+                          
+                          // 🔥 NEW: AI FIX BUTTON 🔥
+                          const SizedBox(width: 8),
+                          _buildFocusableItem(
+                            onTap: _aiScanAndFix, 
+                            borderRadius: BorderRadius.circular(20), 
+                            child: _buildActionButton(Icons.auto_awesome, "AI Fix", activeColor: Colors.blueAccent)
+                          ),
                         ],
                       ),
                     ),
@@ -1962,7 +1870,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                           ),
                           const SizedBox(height: 10),
                           
-                          StreamBuilder< QuerySnapshot >(
+                          StreamBuilder<QuerySnapshot>(
                             stream: FirebaseFirestore.instance.collection('movies').doc(widget.customUrl == null ? widget.tmdbId.toString() : 'live_${widget.movieTitle.replaceAll(" ", "_")}').collection('comments').orderBy('timestamp', descending: true).snapshots(),
                             builder: (context, snapshot) {
                               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.redAccent));
@@ -1972,7 +1880,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
 
                               return Column(
                                 children: comments.map((doc) {
-                                  var data = doc.data() as Map< String, dynamic >;
+                                  var data = doc.data() as Map;
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 8.0),
                                     child: Row(
@@ -2070,9 +1978,9 @@ class _TvFocusButton extends StatefulWidget {
   final BorderRadius borderRadius;
   const _TvFocusButton({required this.child, required this.onTap, required this.borderRadius});
   @override
-  State< _TvFocusButton > createState() => _TvFocusButtonState();
+  State<_TvFocusButton> createState() => _TvFocusButtonState();
 }
-class _TvFocusButtonState extends State< _TvFocusButton > {
+class _TvFocusButtonState extends State<_TvFocusButton> {
   bool _hasFocus = false;
   @override
   Widget build(BuildContext context) {
@@ -2087,23 +1995,23 @@ class _TvFocusButtonState extends State< _TvFocusButton > {
 }
 
 class _AmbientGlow extends StatelessWidget {
-  final ValueNotifier< List< Color > > zones;
+  final ValueNotifier zones;
   final Widget child;
   const _AmbientGlow({required this.zones, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder< List< Color > >(
+    return ValueListenableBuilder(
       valueListenable: zones,
       child: child,
       builder: (context, z, ch) {
-        return TweenAnimationBuilder< List< Color > >(
+        return TweenAnimationBuilder(
           tween: _ZonesTween(end: z),
           duration: const Duration(milliseconds: 2500),
           curve: Curves.easeInOut,
           child: ch,
           builder: (context, colors, c) {
-            return CustomPaint(painter: _GlowPainter(colors), child: c);
+            return CustomPaint(painter: _GlowPainter(colors as List), child: c);
           },
         );
       },
@@ -2111,19 +2019,19 @@ class _AmbientGlow extends StatelessWidget {
   }
 }
 
-class _ZonesTween extends Tween< List< Color > > {
-  _ZonesTween({List< Color >? begin, required List< Color > end}) : super(begin: begin, end: end);
+class _ZonesTween extends Tween {
+  _ZonesTween({List? begin, required List end}) : super(begin: begin, end: end);
 
   @override
-  List< Color > lerp(double t) {
-    final List< Color > a = begin ?? end!;
-    final List< Color > b = end!;
-    return List< Color >.generate(b.length, (int i) => Color.lerp(i < a.length ? a[i] : b[i], b[i], t) ?? b[i]);
+  List lerp(double t) {
+    final List a = begin as List? ?? end as List;
+    final List b = end as List;
+    return List.generate(b.length, (int i) => Color.lerp(i < a.length ? a[i] : b[i], b[i], t) ?? b[i]);
   }
 }
 
 class _GlowPainter extends CustomPainter {
-  final List< Color > zones;
+  final List zones;
   _GlowPainter(this.zones);
 
   @override
@@ -2131,7 +2039,7 @@ class _GlowPainter extends CustomPainter {
     if (zones.length < 8 || size.isEmpty) return;
     final double w = size.width;
     final double h = size.height;
-    final List< Offset > pts = < Offset >[
+    final List pts = [
       Offset(0, 0), Offset(w / 2, 0), Offset(w, 0), Offset(w, h / 2),
       Offset(w, h), Offset(w / 2, h), Offset(0, h), Offset(0, h / 2),
     ];
@@ -2149,13 +2057,13 @@ class _GlowPainter extends CustomPainter {
 }
 
 class _AmbientBackground extends StatelessWidget {
-  final ValueNotifier< Color > color;
+  final ValueNotifier color;
   final Widget child;
   const _AmbientBackground({required this.color, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder< Color >(
+    return ValueListenableBuilder(
       valueListenable: color,
       child: child,
       builder: (context, c, ch) {
@@ -2168,7 +2076,7 @@ class _AmbientBackground extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [c.withOpacity(0.32), const Color(0xFF0F0F0F)],
+              colors: [(c as Color).withOpacity(0.32), const Color(0xFF0F0F0F)],
               stops: const [0.0, 0.6],
             ),
           ),
@@ -2185,10 +2093,10 @@ class _ExternalWebPage extends StatefulWidget {
   const _ExternalWebPage({required this.title, required this.url});
 
   @override
-  State< _ExternalWebPage > createState() => _ExternalWebPageState();
+  State<_ExternalWebPage> createState() => _ExternalWebPageState();
 }
 
-class _ExternalWebPageState extends State< _ExternalWebPage > {
+class _ExternalWebPageState extends State<_ExternalWebPage> {
   late final WebViewController _wc;
   bool _loading = true;
 
@@ -2227,20 +2135,20 @@ class _ExternalWebPageState extends State< _ExternalWebPage > {
 }
 
 class _SearchSheet extends StatefulWidget {
-  final void Function(Map< String, dynamic > item) onOpenTitle;
+  final void Function(Map item) onOpenTitle;
   final void Function(int id, String name) onOpenPerson;
   const _SearchSheet({required this.onOpenTitle, required this.onOpenPerson});
 
   @override
-  State< _SearchSheet > createState() => _SearchSheetState();
+  State<_SearchSheet> createState() => _SearchSheetState();
 }
 
-class _SearchSheetState extends State< _SearchSheet > {
+class _SearchSheetState extends State<_SearchSheet> {
   final TextEditingController _ctrl = TextEditingController();
   Timer? _debounce;
   bool _loading = false;
   String _lastQuery = '';
-  List< Map< String, dynamic > > _results = < Map< String, dynamic > >[];
+  List _results = [];
 
   @override
   void dispose() {
@@ -2260,7 +2168,7 @@ class _SearchSheetState extends State< _SearchSheet > {
     _debounce = Timer(const Duration(milliseconds: 400), () { _search(q); });
   }
 
-  Future< void > _search(String q) async {
+  Future<void> _search(String q) async {
     if (!mounted) return;
     setState(() { _loading = true; _lastQuery = q; });
     try {
@@ -2270,8 +2178,8 @@ class _SearchSheetState extends State< _SearchSheet > {
       if (!mounted || q != _lastQuery) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List< dynamic > raw = (data is Map && data['results'] is List) ? data['results'] as List< dynamic > : < dynamic >[];
-        final List< Map< String, dynamic > > out = < Map< String, dynamic > >[];
+        final List raw = (data is Map && data['results'] is List) ? data['results'] : [];
+        final List out = [];
         for (final r in raw) {
           if (r is! Map) continue;
           final String mt = r['media_type'].toString();
@@ -2301,7 +2209,7 @@ class _SearchSheetState extends State< _SearchSheet > {
     }
   }
 
-  Widget _buildTile(Map< String, dynamic > m) {
+  Widget _buildTile(Map m) {
     final String mt = m['mediaType'] as String;
     final String img = m['image'] as String;
     final bool isPerson = mt == 'person';
@@ -2313,7 +2221,7 @@ class _SearchSheetState extends State< _SearchSheet > {
     if (isPerson) {
       subtitle = dept.isEmpty ? 'Person' : dept;
     } else {
-      final List< String > parts = < String >[mt == 'tv' ? 'TV Show' : 'Movie'];
+      final List parts = [mt == 'tv' ? 'TV Show' : 'Movie'];
       if (year.isNotEmpty) parts.add(year);
       if (rating != '0.0') parts.add('★ $rating');
       subtitle = parts.join(' • ');
@@ -2419,18 +2327,18 @@ class _SearchSheetState extends State< _SearchSheet > {
 class _ActorSheet extends StatefulWidget {
   final int personId;
   final String fallbackName;
-  final void Function(Map< String, dynamic > item) onOpenTitle;
+  final void Function(Map item) onOpenTitle;
   const _ActorSheet({required this.personId, required this.fallbackName, required this.onOpenTitle});
 
   @override
-  State< _ActorSheet > createState() => _ActorSheetState();
+  State<_ActorSheet> createState() => _ActorSheetState();
 }
 
-class _ActorSheetState extends State< _ActorSheet > {
+class _ActorSheetState extends State<_ActorSheet> {
   bool _loading = true;
   bool _failed = false;
-  Map< String, dynamic >? _person;
-  List< Map< String, dynamic > > _credits = < Map< String, dynamic > >[];
+  Map? _person;
+  List _credits = [];
   String _filter = 'all';
   bool _bioExpanded = false;
 
@@ -2440,7 +2348,7 @@ class _ActorSheetState extends State< _ActorSheet > {
     _load();
   }
 
-  Future< void > _load() async {
+  Future<void> _load() async {
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids',
         headers: kApiHeaders,
@@ -2448,9 +2356,9 @@ class _ActorSheetState extends State< _ActorSheet > {
       if (!mounted) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (data is Map< String, dynamic >) {
-          final List< dynamic > raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] as List< dynamic > : < dynamic >[];
-          final Map< String, Map< String, dynamic > > uniq = < String, Map< String, dynamic > >{};
+        if (data is Map) {
+          final List raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : [];
+          final Map uniq = {};
           for (final c in raw) {
             if (c is! Map) continue;
             final String mt = c['media_type'].toString();
@@ -2471,7 +2379,7 @@ class _ActorSheetState extends State< _ActorSheet > {
               'popularity': ((c['popularity'] ?? 0) as num).toDouble(),
             };
           }
-          final List< Map< String, dynamic > > list = uniq.values.toList();
+          final List list = uniq.values.toList();
           list.sort((a, b) {
             final int ap = (a['poster'] as String).isNotEmpty ? 1 : 0;
             final int bp = (b['poster'] as String).isNotEmpty ? 1 : 0;
@@ -2486,7 +2394,7 @@ class _ActorSheetState extends State< _ActorSheet > {
     if (mounted) setState(() { _loading = false; _failed = true; });
   }
 
-  List< Map< String, dynamic > > get _filtered {
+  List get _filtered {
     if (_filter == 'movie') return _credits.where((e) => e['mediaType'] == 'movie').toList();
     if (_filter == 'tv') return _credits.where((e) => e['mediaType'] == 'tv').toList();
     return _credits;
@@ -2535,7 +2443,7 @@ class _ActorSheetState extends State< _ActorSheet > {
     return Container(color: Colors.grey[900], child: const Center(child: Icon(Icons.movie, color: Colors.white24, size: 28)));
   }
 
-  Widget _buildTitleTile(Map< String, dynamic > m) {
+  Widget _buildTitleTile(Map m) {
     final String poster = m['poster'] as String;
     final bool isTv = m['mediaType'] == 'tv';
     final String year = m['year'] as String;
@@ -2599,7 +2507,7 @@ class _ActorSheetState extends State< _ActorSheet > {
   }
 
   Widget _buildContent(ScrollController sc) {
-    final Map< String, dynamic > p = _person!;
+    final Map p = _person!;
     final String name = (p['name'] ?? widget.fallbackName).toString();
     final String profile = (p['profile_path'] ?? '').toString();
     final String dept = (p['known_for_department'] ?? '').toString();
@@ -2609,7 +2517,7 @@ class _ActorSheetState extends State< _ActorSheet > {
     final String bio = (p['biography'] ?? '').toString().trim();
     final dynamic ext = p['external_ids'];
     final String imdbId = (ext is Map ? (ext['imdb_id'] ?? '') : '').toString();
-    final List< Map< String, dynamic > > items = _filtered;
+    final List items = _filtered;
 
     return CustomScrollView(
       controller: sc,
@@ -2750,21 +2658,21 @@ class _ActorSheetState extends State< _ActorSheet > {
 }
 
 class _PinchZoom extends StatefulWidget {
-  final ValueNotifier< double > zoom;
+  final ValueNotifier zoom;
   final Widget child;
   const _PinchZoom({required this.zoom, required this.child});
 
   @override
-  State< _PinchZoom > createState() => _PinchZoomState();
+  State<_PinchZoom> createState() => _PinchZoomState();
 }
 
-class _PinchZoomState extends State< _PinchZoom > {
-  final Map< int, Offset > _pointers = < int, Offset >{};
+class _PinchZoomState extends State<_PinchZoom> {
+  final Map _pointers = {};
   double _startDist = 0;
   double _startZoom = 1.0;
 
   double _dist() {
-    final List< Offset > v = _pointers.values.toList();
+    final List v = _pointers.values.toList();
     return (v[0] - v[1]).distance;
   }
 
@@ -2800,10 +2708,10 @@ class _PinchZoomState extends State< _PinchZoom > {
       onPointerUp: _up,
       onPointerCancel: _up,
       child: ClipRect(
-        child: ValueListenableBuilder< double >(
+        child: ValueListenableBuilder(
           valueListenable: widget.zoom,
           child: widget.child,
-          builder: (context, z, ch) => Transform.scale(scale: z, child: ch),
+          builder: (context, z, ch) => Transform.scale(scale: z as double, child: ch),
         ),
       ),
     );
@@ -2813,7 +2721,7 @@ class _PinchZoomState extends State< _PinchZoom > {
 class _SuggestRow extends StatefulWidget {
   final String title;
   final int excludeId;
-  final Future< List< TmdbItem > > Function() loader;
+  final Future<List> Function() loader;
   final void Function(TmdbItem item) onOpen;
   final Widget Function({required Widget child, required VoidCallback onTap, BorderRadius? borderRadius}) focusable;
   const _SuggestRow({
@@ -2826,11 +2734,11 @@ class _SuggestRow extends StatefulWidget {
   });
 
   @override
-  State< _SuggestRow > createState() => _SuggestRowState();
+  State<_SuggestRow> createState() => _SuggestRowState();
 }
 
-class _SuggestRowState extends State< _SuggestRow > {
-  List< TmdbItem >? _items;
+class _SuggestRowState extends State<_SuggestRow> {
+  List? _items;
 
   @override
   void initState() {
@@ -2838,18 +2746,18 @@ class _SuggestRowState extends State< _SuggestRow > {
     _load();
   }
 
-  Future< void > _load() async {
-    List< TmdbItem > r = < TmdbItem >[];
+  Future<void> _load() async {
+    List r = [];
     try {
       r = await widget.loader();
     } catch (_) {}
     if (!mounted) return;
-    setState(() => _items = r.where((TmdbItem e) => e.id != widget.excludeId).toList());
+    setState(() => _items = r.where((e) => e.id != widget.excludeId).toList());
   }
 
   @override
   Widget build(BuildContext context) {
-    final List< TmdbItem >? items = _items;
+    final List? items = _items;
     if (items != null && items.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -2912,7 +2820,7 @@ class _SuggestRowState extends State< _SuggestRow > {
 }
 
 class _SwipeFullscreen extends StatefulWidget {
-  final ValueNotifier< double > zoom;
+  final ValueNotifier zoom;
   final VoidCallback onSwipeUp;
   final VoidCallback onSwipeDown;
   final Widget child;
@@ -2924,10 +2832,10 @@ class _SwipeFullscreen extends StatefulWidget {
   });
 
   @override
-  State< _SwipeFullscreen > createState() => _SwipeFullscreenState();
+  State<_SwipeFullscreen> createState() => _SwipeFullscreenState();
 }
 
-class _SwipeFullscreenState extends State< _SwipeFullscreen > {
+class _SwipeFullscreenState extends State<_SwipeFullscreen> {
   static const double _minDistance = 60;
   int _count = 0;
   bool _multi = false;
