@@ -1,3 +1,6 @@
+// ═══════════════════════════════════════════════════════════════════════════
+//  HANNUTV  •  video_player_page.dart  (v1.4.0)
+// ═══════════════════════════════════════════════════════════════════════════
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
@@ -19,6 +22,7 @@ import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
 import 'tmdb_service.dart';
 import 'config.dart' show kAllGenres, GenreDef;
+
 import 'download_sheet.dart'; 
 
 const String kTmdbToken =
@@ -72,11 +76,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool isFullScreen = false;
   bool isPageLoading = true;
   
-  String activeServer = 'vidrift'; 
+  String activeServer = 'orion'; 
 
   static const bool kHindiUnwrap = true;
   static const bool kLegacyAutoClick = false;
-
+  
   String _unwrapUrl = '';
   String _unwrapHost = '';
   int _unwrapTries = 0;
@@ -99,13 +103,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   final TextEditingController commentInputController = TextEditingController();
 
   Map<String, dynamic>? details;
-  List castList = [];
+  List<dynamic> castList = [];
   bool isLoadingDetails = false;
   bool descExpanded = false;
+  
   final ValueNotifier<Color> _ambientColor = ValueNotifier<Color>(const Color(0xFF5B2A86));
   List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
+  
   final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
   List<List<Color>> _ambientZonePalette = <List<Color>>[];
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
@@ -126,12 +132,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     {'key': 'alpha', 'name': 'Alpha'},
   ];
 
-  List similarMovies = [];
+  List<dynamic> similarMovies = [];
   bool isLoadingSimilar = false;
   bool isTvDevice = false;
 
   int totalSeasons = 1;
-  List episodesList = [];
+  List<dynamic> episodesList = [];
 
   @override
   void initState() {
@@ -233,7 +239,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List results = data['results'] ?? [];
+        final List<dynamic> results = data['results'] ?? [];
         if (mounted) {
           setState(() {
             similarMovies = results.map((m) => {
@@ -526,9 +532,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (raw.isNotEmpty) {
         final dynamic d = json.decode(raw);
         if (d is Map) {
-          for (final dynamic x in (d['keywords'] as List? ?? const [])) { kw.add(x.toString()); }
-          for (final dynamic x in (d['hosts'] as List? ?? const [])) { hosts.add(x.toString()); }
-          for (final dynamic x in (d['selectors'] as List? ?? const [])) { sel.add(x.toString()); }
+          for (final dynamic x in (d['keywords'] as List<dynamic>? ?? const [])) { kw.add(x.toString()); }
+          for (final dynamic x in (d['hosts'] as List<dynamic>? ?? const [])) { hosts.add(x.toString()); }
+          for (final dynamic x in (d['selectors'] as List<dynamic>? ?? const [])) { sel.add(x.toString()); }
         }
       }
       final String un = rc.getString('unwrap_servers').trim();
@@ -652,6 +658,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           btns[i].click();
                       }
                   }
+
                   }
 
                   var allElems = document.querySelectorAll('div, a, span, img');
@@ -730,7 +737,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             _controller.runJavaScript(jsCode);
             _controller.runJavaScript(_kPopupKillerJs);
             
-            // Force disable Ads button on ghostflix.st 
             _controller.runJavaScript("try{localStorage.setItem('adsEnabled', 'false');}catch(e){}");
 
             _injectShield();
@@ -975,7 +981,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic> && mounted) {
-          final List cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
+          final List<dynamic> cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -1456,8 +1462,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final String fetched = (d?['overview'] ?? '').toString().trim();
     final String overview = fetched.isNotEmpty ? fetched : widget.overview.trim();
     final String tagline = (d?['tagline'] ?? '').toString().trim();
-    final List genres = (d?['genres'] is List) ? d!['genres'] as List : [];
-    final List langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List : [];
+    final List<dynamic> genres = (d?['genres'] is List) ? d!['genres'] as List<dynamic> : [];
+    final List<dynamic> langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List<dynamic> : [];
     final String languages = langs
         .map((l) => (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
         .where((s) => s.isNotEmpty)
@@ -2264,7 +2270,7 @@ class _SearchSheetState extends State<_SearchSheet> {
       if (!mounted || q != _lastQuery) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List raw = (data is Map && data['results'] is List) ? data['results'] : [];
+        final List<dynamic> raw = (data is Map && data['results'] is List) ? data['results'] : [];
         final List> out = [];
         for (final r in raw) {
           if (r is! Map) continue;
@@ -2443,7 +2449,7 @@ class _ActorSheetState extends State<_ActorSheet> {
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic>) {
-          final List raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : [];
+          final List<dynamic> raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : [];
           final Map<String, Map<String, dynamic>> uniq = {};
           for (final c in raw) {
             if (c is! Map) continue;
