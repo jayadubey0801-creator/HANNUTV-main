@@ -60,7 +60,7 @@ class VideoPlayerPage extends StatefulWidget {
   });
 
   @override
-  State createState() => _VideoPlayerPageState();
+  State<VideoPlayerPage> createState() => _VideoPlayerPageState();
 }
 
 class _VideoPlayerPageState extends State<VideoPlayerPage>
@@ -74,6 +74,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   String activeServer = 'vidrift'; 
 
   static const bool kHindiUnwrap = true;
+  static const bool kLegacyAutoClick = false;
   
   String _unwrapUrl = '';
   String _unwrapHost = '';
@@ -96,7 +97,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   final TextEditingController commentInputController = TextEditingController();
 
-  var details;
+  Map? details;
   List castList = [];
   bool isLoadingDetails = false;
   bool descExpanded = false;
@@ -110,7 +111,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List _ambientZonePalette = [];
   final _videoZoom = ValueNotifier(1.0);
 
-  // SERVER ORDER UPDATED ACCORDING TO YOUR DEMAND
+  // SERVER ORDER UPDATED ACCORDING TO YOUR DEMAND (NO TYPE BRACKETS TO PREVENT BUGS)
   final List servers = const [
     {'key': 'vidrift', 'name': 'VidRift'},          
     {'key': 'fast', 'name': 'Fast'},
@@ -401,6 +402,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
       try { window.open = function () { return null; }; } catch (e) {}
       try { if (window.Notification) { Notification.requestPermission = function () { return Promise.resolve("denied"); }; } } catch (e) {}
+      try {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText = function () { return Promise.resolve(); };
+          navigator.clipboard.readText = function () { return Promise.resolve(""); };
+        }
+      } catch (e) {}
       try {
         var _ec = document.execCommand;
         document.execCommand = function (c) {
@@ -2083,7 +2090,7 @@ class _AmbientGlow extends StatelessWidget {
       child: child,
       builder: (context, z, ch) {
         return TweenAnimationBuilder(
-          tween: _ZonesTween(end: z),
+          tween: _ZonesTween(end: z as List),
           duration: const Duration(milliseconds: 2500),
           curve: Curves.easeInOut,
           child: ch,
