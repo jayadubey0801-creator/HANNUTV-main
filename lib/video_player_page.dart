@@ -117,18 +117,17 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
   final ValueNotifier< double > _videoZoom = ValueNotifier< double >(1.0);
 
   final List< Map< String, String > > servers = const [
-    {'key': 'vidrift', 'name': 'VidRift'},
-    {'key': 'bolt', 'name': 'vidbolt'},
-    {'key': 'fast', 'name': 'Fast'},
-    {'key': 'premium', 'name': 'Premium'},
-    {'key': 'orion', 'name': 'Orion'},          
+    {'key': 'orion', 'name': 'Orion'},
+    {'key': 'vidrift', 'name': 'VidRift'},          
     {'key': 'vidqueen', 'name': 'VidQueen'},
     {'key': 'vidly', 'name': 'Vidly'},
     {'key': 'hindi', 'name': 'Hindi'},
     {'key': 'cinezo', 'name': 'Cinezo'},
     {'key': 'hindi-new', 'name': 'Hindi New'},   
     {'key': 'flix', 'name': 'Flix'},
+    {'key': 'fast', 'name': 'Fast'},
     {'key': 'nflix', 'name': 'Nflix'},
+    {'key': 'premium', 'name': 'Premium'},
     {'key': 'mega', 'name': 'Mega'},
     {'key': 'alpha', 'name': 'Alpha'},
   ];
@@ -577,7 +576,16 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     _unwrapTries = 0;
     setState(() { isPageLoading = true; isVideoPlaying = false; showIntroAnimation = false; });
 
-    _controller = WebViewController()
+    _controller = WebViewController();
+    
+    // 🔥 ANDROID TV AUTO-PLAY PERMISSION 🔥
+    try {
+      if (_controller.platform is AndroidWebViewController) {
+        (_controller.platform as AndroidWebViewController).setMediaPlaybackRequiresUserGesture(false);
+      }
+    } catch (_) {}
+
+    _controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
       ..setOnJavaScriptAlertDialog((JavaScriptAlertDialogRequest request) async {})
@@ -693,6 +701,12 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                     v.style.setProperty('outline', 'none', 'important');
                     v.style.setProperty('z-index', '2147483647', 'important');
                     v.style.setProperty('display', 'block', 'important');
+                    
+                    // 🔥 TV AUTO-PLAY JS FIX 🔥
+                    if (v.paused && v.currentTime < 1) {
+                        var p = v.play();
+                        if (p !== undefined) { p.catch(function(e) {}); }
+                    }
                     
                     if (v.currentTime > 0.5 && !v.paused) {
                       try { VideoState.postMessage('playing'); } catch(e) {}
@@ -1613,70 +1627,103 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
+  // 🔥 TV PLAYER LAYOUT REWRITTEN EXACTLY FOR ANDROID TV REMOTE 🔥
   Widget _buildTVLayout() {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
-          if (isPageLoading && !isVideoPlaying)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black,
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)),
-                      SizedBox(height: 10),
-                      Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                    ],
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.pop(context);
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Focus(
+          autofocus: true,
+          onKeyEvent: (FocusNode node, KeyEvent event) {
+            if (event is KeyDownEvent) {
+              final key = event.logicalKey;
+              // Intercept TV remote "OK/Select/Play/Pause"
+              if (key == LogicalKeyboardKey.select || 
+                  key == LogicalKeyboardKey.enter || 
+                  key == LogicalKeyboardKey.space || 
+                  key == LogicalKeyboardKey.mediaPlayPause || 
+                  key == LogicalKeyboardKey.mediaPlay || 
+                  key == LogicalKeyboardKey.mediaPause) {
+                
+                _controller.runJavaScript("try{var v=document.querySelector('video');if(v){if(v.paused){v.play();}else{v.pause();}}else{var f=document.querySelector('iframe');if(f){f.contentWindow.postMessage('{\"event\":\"command\",\"func\":\"togglePause\"}','*');}}}catch(e){}");
+                _startControlsTimer();
+                return KeyEventResult.handled;
+              } else if (key == LogicalKeyboardKey.arrowUp || 
+                         key == LogicalKeyboardKey.arrowDown || 
+                         key == LogicalKeyboardKey.arrowLeft || 
+                         key == LogicalKeyboardKey.arrowRight) {
+                _startControlsTimer();
+              }
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Stack(
+            children: [
+              Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+              if (isPageLoading && !isVideoPlaying)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)),
+                          SizedBox(height: 10),
+                          Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 14,
+                right: 20,
+                child: SafeArea(
+                  child: _buildFocusableItem(
+                    onTap: _startControlsTimer,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Opacity(
+                      opacity: 0.9,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          Positioned(
-            top: 14,
-            right: 20,
-            child: SafeArea(
-              child: _buildFocusableItem(
-                onTap: _startControlsTimer,
-                borderRadius: BorderRadius.circular(12),
-                child: Opacity(
-                  opacity: 0.9,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))),
+              if (showControls) ...[
+                Positioned(
+                  top: 20,
+                  left: 20,
+                  child: SafeArea(
+                    child: _buildFocusableItem(
+                      onTap: () => Navigator.pop(context),
+                      borderRadius: BorderRadius.circular(22),
+                      child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 26)),
+                    ),
                   ),
                 ),
-              ),
-            ),
+                Positioned(
+                  bottom: 20,
+                  right: 20,
+                  child: SafeArea(
+                    child: _buildFocusableItem(
+                      onTap: _cycleAspectRatio,
+                      borderRadius: BorderRadius.circular(22),
+                      child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.aspect_ratio, color: Colors.white, size: 24)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-          if (showControls) ...[
-            Positioned(
-              top: 20,
-              left: 20,
-              child: SafeArea(
-                child: _buildFocusableItem(
-                  onTap: () => Navigator.pop(context),
-                  borderRadius: BorderRadius.circular(22),
-                  child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 26)),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 20,
-              right: 20,
-              child: SafeArea(
-                child: _buildFocusableItem(
-                  onTap: _cycleAspectRatio,
-                  borderRadius: BorderRadius.circular(22),
-                  child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.aspect_ratio, color: Colors.white, size: 24)),
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -1787,12 +1834,18 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                           ],
                           _buildFocusableItem(onTap: _showSearchSheet, borderRadius: BorderRadius.circular(20), child: _buildActionButton(Icons.search, "Search")),
                           
-                          // 🔥 NEW: AI DOWNLOAD BUTTON 🔥
                           const SizedBox(width: 8),
                           _buildFocusableItem(
                             onTap: _openDownloadSheet, 
                             borderRadius: BorderRadius.circular(20), 
                             child: _buildActionButton(Icons.download_rounded, "Download", activeColor: Colors.redAccent)
+                          ),
+                          
+                          const SizedBox(width: 8),
+                          _buildFocusableItem(
+                            onTap: _aiScanAndFix, 
+                            borderRadius: BorderRadius.circular(20), 
+                            child: _buildActionButton(Icons.auto_awesome, "AI Fix", activeColor: Colors.blueAccent)
                           ),
                         ],
                       ),
