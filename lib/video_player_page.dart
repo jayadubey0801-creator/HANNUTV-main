@@ -105,24 +105,24 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   Map<String, dynamic>? details;
   
   // FIXED SYNTAX ERRORS HERE
-  List<dynamic> castList = []; 
+  List<dynamic> castList = <dynamic>[]; 
   bool isLoadingDetails = false;
   bool descExpanded = false;
   
   final ValueNotifier<Color> _ambientColor = ValueNotifier<Color>(const Color(0xFF5B2A86));
-  List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)]; 
+  List<Color> _ambientPalette = const <Color>[Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)]; 
   int _ambientIndex = 0;
   Timer? _ambientTimer;
   
-  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>([
-    const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86),
-    const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86)
+  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(<Color>[
+    Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86),
+    Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86)
   ]); 
   List<List<Color>> _ambientZonePalette = <List<Color>>[]; 
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
   // 🔥 NEW GHOSTFLIX SERVERS LIST 🔥
-  final List> servers = const [
+  final List> servers = const >[
     {'key': 'orion', 'name': 'Orion'},
     {'key': 'vidrift', 'name': 'VidRift'},
     {'key': 'vidqueen', 'name': 'VidQueen'},
@@ -138,12 +138,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     {'key': 'alpha', 'name': 'Alpha'},
   ];
 
-  List<dynamic> similarMovies = []; 
+  List<dynamic> similarMovies = <dynamic>[]; 
   bool isLoadingSimilar = false;
   bool isTvDevice = false;
 
   int totalSeasons = 1;
-  List<dynamic> episodesList = []; 
+  List<dynamic> episodesList = <dynamic>[]; 
 
   @override
   void initState() {
@@ -206,7 +206,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
+        if (mounted) setState(() { episodesList = data['episodes'] ?? <dynamic>[]; });
       }
     } catch (e) {}
   }
@@ -245,7 +245,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> results = data['results'] ?? []; 
+        final List<dynamic> results = data['results'] ?? <dynamic>[]; 
         if (mounted) {
           setState(() {
             similarMovies = results.map((m) => {
@@ -376,11 +376,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     })();
   ''';
 
-  static const List<String> _kShieldKeywords = [
+  static const List<String> _kShieldKeywords = <String>[ 
     "not a robot", "i'm not a robot", "verify you are human", "file_download", ".apk", "download now",
   ];
-  static const List<String> _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10']; 
-  static const Set<String> _kDefaultUnwrapServers = {'screenscape'};
+  static const List<String> _kShieldHosts = <String>['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10']; 
+  static const Set<String> _kDefaultUnwrapServers = <String>{'screenscape'};
 
   List<String> _remoteBlockHosts = <String>[]; 
   Set<String> _unwrapServers = <String>{'screenscape'};
@@ -761,7 +761,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic> && mounted) {
-          final List<dynamic> cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] as List<dynamic> : [];
+          final List<dynamic> cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] as List<dynamic> : <dynamic>[]; 
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -776,7 +776,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<void> _buildAmbientPalette(Map<String, dynamic> data) async {
-    final List<String> paths = []; 
+    final List<String> paths = <String>[]; 
     try {
       final imgs = data['images'];
       if (imgs is Map && imgs['backdrops'] is List) {
@@ -792,8 +792,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (pp is String && pp.isNotEmpty) paths.add(pp);
     } catch (_) {}
 
-    final List<Color> palette = []; 
-    final List<List<Color>> zonePalette = []; 
+    final List<Color> palette = <Color>[]; 
+    final List<List<Color>> zonePalette = <List<Color>>[]; 
     for (final p in paths) {
       if (!mounted) return;
       final Color? c = await _dominantColorFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
@@ -1242,8 +1242,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final String fetched = (d?['overview'] ?? '').toString().trim();
     final String overview = fetched.isNotEmpty ? fetched : widget.overview.trim();
     final String tagline = (d?['tagline'] ?? '').toString().trim();
-    final List<dynamic> genres = (d?['genres'] is List) ? d!['genres'] as List<dynamic> : []; 
-    final List<dynamic> langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List<dynamic> : []; 
+    final List<dynamic> genres = (d?['genres'] is List) ? d!['genres'] as List<dynamic> : <dynamic>[]; 
+    final List<dynamic> langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List<dynamic> : <dynamic>[]; 
     final String languages = langs
         .map((l) => (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
         .where((s) => s.isNotEmpty)
@@ -1276,7 +1276,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (vc is num && vc > 0) ratingStr += '  (${vc.toInt()} votes)';
     }
 
-    final List<String> metaParts = []; 
+    final List<String> metaParts = <String>[]; 
     if (widget.year.isNotEmpty) metaParts.add(widget.year);
     if (runtime.isNotEmpty) metaParts.add(runtime);
     if (widget.rating.isNotEmpty) metaParts.add('★ ${widget.rating}');
@@ -2016,7 +2016,7 @@ class _SearchSheetState extends State<_SearchSheet> {
   Timer? _debounce;
   bool _loading = false;
   String _lastQuery = '';
-  List> _results = []; 
+  List> _results = >[]; 
 
   @override
   void dispose() {
@@ -2029,7 +2029,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     _debounce?.cancel();
     final String q = v.trim();
     if (q.isEmpty) {
-      setState(() { _results = []; _loading = false; _lastQuery = ''; });
+      setState(() { _results = >[]; _loading = false; _lastQuery = ''; });
       return;
     }
     setState(() {});
@@ -2046,8 +2046,8 @@ class _SearchSheetState extends State<_SearchSheet> {
       if (!mounted || q != _lastQuery) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> raw = (data is Map && data['results'] is List) ? data['results'] : []; 
-        final List> out = []; 
+        final List<dynamic> raw = (data is Map && data['results'] is List) ? data['results'] as List<dynamic> : <dynamic>[]; 
+        final List> out = >[]; 
         for (final r in raw) {
           if (r is! Map) continue;
           final String mt = r['media_type'].toString();
@@ -2089,7 +2089,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     if (isPerson) {
       subtitle = dept.isEmpty ? 'Person' : dept;
     } else {
-      final List<String> parts = [mt == 'tv' ? 'TV Show' : 'Movie']; 
+      final List<String> parts = <String>[mt == 'tv' ? 'TV Show' : 'Movie']; 
       if (year.isNotEmpty) parts.add(year);
       if (rating != '0.0') parts.add('★ $rating');
       subtitle = parts.join(' • ');
@@ -2206,7 +2206,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   bool _loading = true;
   bool _failed = false;
   Map<String, dynamic>? _person;
-  List> _credits = []; 
+  List> _credits = >[]; 
   String _filter = 'all';
   bool _bioExpanded = false;
 
@@ -2225,7 +2225,7 @@ class _ActorSheetState extends State<_ActorSheet> {
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic>) {
-          final List<dynamic> raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : []; 
+          final List<dynamic> raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] as List<dynamic> : <dynamic>[]; 
           final Map<String, Map<String, dynamic>> uniq = {};
           for (final c in raw) {
             if (c is! Map) continue;
