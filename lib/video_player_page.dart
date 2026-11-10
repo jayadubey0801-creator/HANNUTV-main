@@ -76,7 +76,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
   bool isFullScreen = false;
   bool isPageLoading = true;
   
-  String activeServer = 'flix'; // Changed default to flix
+  String activeServer = 'orion'; 
 
   static const bool kHindiUnwrap = true;
   static const bool kLegacyAutoClick = false;
@@ -598,15 +598,18 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 UPDATED JAVASCRIPT: PRESREVES GHOSTFLIX EMBED UI & KILLS ADS TOGGLE 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
               
               var style = document.createElement('style');
               style.innerHTML = `
-                * { outline: none !important; }
-                .ad-container, .ads-banner, [class*="ad-"], a[target="_blank"], 
+                * {
+                    box-shadow: none !important;
+                    outline: none !important;
+                    border: none !important;
+                }
+                .ad-container, .ads, [class*="ad-"], a[target="_blank"], 
                 iframe[src*="ads"], iframe[src*="bet"], iframe[src*="leela"], 
                 iframe[src*="pop"], iframe[src*="track"], iframe[src*="doubleclick"] { 
                     display: none !important; 
@@ -621,56 +624,121 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                     padding: 0px !important; 
                     width: 100vw !important;
                     height: 100vh !important;
+                    border: none !important;
                 }
               `;
               document.head.appendChild(style);
 
               window.open = function() { return null; };
+              window.alert = function() { return null; };
+              window.confirm = function() { return true; };
+              window.prompt = function() { return null; };
               
               document.addEventListener('click', function(e) {
                   var target = e.target;
                   if(target.tagName === 'A' || target.closest('a')) {
-                      e.preventDefault(); e.stopPropagation();
+                      e.preventDefault();
+                      e.stopPropagation();
                   }
               }, true);
 
               setInterval(function() {
                 try {
                   if (${kLegacyAutoClick}) {
-                    var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
-                    for(var j=0; j<spamEls.length; j++) { spamEls[j].click(); }
-                  }
+                  var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
+                  for(var j=0; j<spamEls.length; j++) { spamEls[j].click(); }
+                  
+                  var closes = document.querySelectorAll('[class*="close"], [id*="close"], [class*="dismiss"]');
+                  for(var k=0; k<closes.length; k++) { closes[k].click(); }
 
-                  // Force the "Ads" toggle switch to be OFF and Hidden
-                  localStorage.setItem('ads', 'false');
-                  var switches = document.querySelectorAll('button[role="switch"], input[type="checkbox"]');
-                  for(var i=0; i<switches.length; i++) {
-                      var p = switches[i].parentElement;
-                      if(p && p.innerText && (p.innerText.includes('Ads') || p.innerText.includes('Ad'))) {
-                          // Turn it off if it's currently on
-                          if(switches[i].getAttribute('aria-checked') === 'true' || switches[i].checked) { 
-                              switches[i].click(); 
-                          }
-                          // Make it vanish completely from the app
-                          p.style.display = 'none';
-                          p.style.pointerEvents = 'none';
-                          switches[i].style.display = 'none';
+                  var btns = document.querySelectorAll('button, a, div[role="button"], span');
+                  for(var i=0; i<btns.length; i++) {
+                      var txt = (btns[i].innerText || btns[i].textContent || '').toLowerCase().trim();
+                      if(txt === "i'm not a robot" || txt === "im not a robot" || txt === "continue" || txt.indexOf("verify") !== -1 || txt.indexOf("जारी") !== -1) {
+                          btns[i].click();
                       }
                   }
-                  
-                  // Trigger Cinematic animation when video starts playing
+
+                  }
+
+                  var allElems = document.querySelectorAll('div, a, span, img');
+                  for(var x=0; x<allElems.length; x++) {
+                      var el = allElems[x];
+                      var computed = window.getComputedStyle(el);
+                      if ((computed.position === 'absolute' || computed.position === 'fixed') && parseInt(computed.zIndex) > 50) {
+                          if (el.tagName === 'IMG' || el.innerHTML.indexOf('<img') !== -1 || computed.backgroundImage !== 'none' || parseInt(computed.borderRadius) > 20) {
+                              if (el.clientWidth > 5 && el.clientWidth < 400) {
+                                  el.remove();
+                              }
+                          }
+                      }
+                  }
+                } catch(e) {}
+
+                try {
                   var vids = document.getElementsByTagName('video');
                   if (vids.length > 0) {
                     var v = vids[0];
+                    v.style.setProperty('background-color', '#000000', 'important');
+                    v.style.setProperty('object-fit', 'cover', 'important'); 
+                    v.style.setProperty('position', 'fixed', 'important');
+                    v.style.setProperty('top', '0px', 'important');
+                    v.style.setProperty('left', '0px', 'important');
+                    v.style.setProperty('width', '100vw', 'important');
+                    v.style.setProperty('height', '100vh', 'important');
+                    v.style.setProperty('margin', '0px', 'important');
+                    v.style.setProperty('padding', '0px', 'important');
+                    v.style.setProperty('border', 'none', 'important');
+                    v.style.setProperty('outline', 'none', 'important');
+                    v.style.setProperty('z-index', '2147483647', 'important');
+                    v.style.setProperty('display', 'block', 'important');
+                    
                     if (v.currentTime > 0.5 && !v.paused) {
                       try { VideoState.postMessage('playing'); } catch(e) {}
                     }
+
+                    var allElements = document.body.querySelectorAll('*');
+                    for(var x=0; x<allElements.length; x++) {
+                       var elem = allElements[x];
+                       if(elem !== v && !v.contains(elem) && elem.tagName !== 'SCRIPT' && elem.tagName !== 'STYLE') {
+                           var z = window.getComputedStyle(elem).zIndex;
+                           if(z !== 'auto' && parseInt(z) > 1000) {
+                               elem.style.setProperty('display', 'none', 'important');
+                           }
+                       }
+                    }
+                  } else {
+                    var frames = document.getElementsByTagName('iframe');
+                    for(var f=0; f<frames.length; f++) {
+                        var frm = frames[f];
+                        var src = (frm.src || '').toLowerCase();
+                        if(src && !src.includes('ads') && !src.includes('leela') && !src.includes('pop') && !src.includes('bet') && !src.includes('track') && !src.includes('doubleclick')) {
+                            frm.style.setProperty('position', 'fixed', 'important');
+                            frm.style.setProperty('top', '0px', 'important');
+                            frm.style.setProperty('left', '0px', 'important');
+                            frm.style.setProperty('right', '0px', 'important');
+                            frm.style.setProperty('bottom', '0px', 'important');
+                            frm.style.setProperty('width', '100vw', 'important');
+                            frm.style.setProperty('height', '100vh', 'important');
+                            frm.style.setProperty('margin', '0px', 'important');
+                            frm.style.setProperty('padding', '0px', 'important');
+                            frm.style.setProperty('border', 'none', 'important'); 
+                            frm.style.setProperty('outline', 'none', 'important');
+                            frm.style.setProperty('object-fit', 'cover', 'important');
+                            frm.style.setProperty('z-index', '2147483647', 'important');
+                            frm.style.setProperty('background-color', '#000000', 'important');
+                            frm.style.setProperty('display', 'block', 'important');
+                        }
+                    }
                   }
                 } catch(e) {}
-              }, 150);
+              }, 50);
             ''';
             _controller.runJavaScript(jsCode);
             _controller.runJavaScript(_kPopupKillerJs);
+            
+            _controller.runJavaScript("try{localStorage.setItem('adsEnabled', 'false');}catch(e){}");
+
             _injectShield();
             _tryUnwrapHindi();
           },
@@ -745,8 +813,9 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       final id = widget.tmdbId;
       final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
       
-      // 🔥 EXACT GHOSTFLIX.ST URL STRUCTURE AS PER YOUR SCREENSHOT 🔥
-      String originalTargetUrl = 'https://ghostflix.st/play?id=$id&type=${isTv ? 'tv' : 'movie'}&season=$currentSeason&episode=$currentEpisode&server=$activeServer';
+      String originalTargetUrl = isTv 
+          ? 'https://ghostflix.st/play?id=$id&type=tv&season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
+          : 'https://ghostflix.st/play?id=$id&type=movie&server=$activeServer';
       
       String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
       String safeFinalUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
@@ -912,7 +981,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map< String, dynamic > && mounted) {
-          final List< dynamic > cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] as List< dynamic > : < dynamic >[];
+          final List< dynamic > cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -1629,7 +1698,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
               if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
               Positioned(top: 14, right: 20, child: SafeArea(child: GestureDetector(onTap: _toggleFullScreen, child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
               if (showControls) ...[
-                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.transparent))),
+                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
                 Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
                 Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
               ],
@@ -1667,7 +1736,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                   ),
                   if (showIntroAnimation) Positioned.fill(child: IgnorePointer(child: Center(child: AnimatedBuilder(animation: _introAnimController, builder: (context, child) { return Opacity(opacity: _introOpacityAnimation.value, child: Transform.scale(scale: _introScaleAnimation.value, child: Image.asset('assets/logo.png', height: 60, errorBuilder: (_, __, ___) => const Icon(Icons.play_circle_fill, color: Colors.red, size: 60)))); })))),
                   if (showControls) ...[
-                    Positioned.fill(child: IgnorePointer(child: Container(color: Colors.transparent))),
+                    Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
                     Positioned(top: 10, left: 10, child: _buildFocusableItem(onTap: () => Navigator.pop(context), borderRadius: BorderRadius.circular(18), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 18, child: Icon(Icons.chevron_left, color: Colors.white, size: 28)))),
                     Positioned(bottom: 8, right: 48, child: _buildFocusableItem(onTap: _cycleAspectRatio, borderRadius: BorderRadius.circular(16), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 16, child: Icon(Icons.aspect_ratio, color: Colors.white, size: 18)))),
                     Positioned(bottom: 8, right: 8, child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(16), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 16, child: Icon(Icons.fullscreen, color: Colors.white, size: 22)))),
@@ -1696,6 +1765,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                     ),
                     const SizedBox(height: 14),
 
+                    // 🔥 WATCHLIST, SEARCH, AND NEW AI DOWNLOAD BUTTON ROW 🔥
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -1716,6 +1786,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                           ],
                           _buildFocusableItem(onTap: _showSearchSheet, borderRadius: BorderRadius.circular(20), child: _buildActionButton(Icons.search, "Search")),
                           
+                          // 🔥 NEW: AI DOWNLOAD BUTTON 🔥
                           const SizedBox(width: 8),
                           _buildFocusableItem(
                             onTap: _openDownloadSheet, 
@@ -1743,6 +1814,8 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                       const SizedBox(height: 10),
                       const Text("Sponsored Ads", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
+                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                      const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                       const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
