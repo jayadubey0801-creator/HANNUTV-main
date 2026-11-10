@@ -103,20 +103,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   final TextEditingController commentInputController = TextEditingController();
 
   Map<String, dynamic>? details;
-  List<dynamic> castList = [];
+  List<dynamic> castList = <dynamic>[];
   bool isLoadingDetails = false;
   bool descExpanded = false;
   
   final ValueNotifier<Color> _ambientColor = ValueNotifier<Color>(const Color(0xFF5B2A86));
-  List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
+  List<Color> _ambientPalette = const <Color>[Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
   
   final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
-  List<List<Color>> _ambientZonePalette = <List<Color>>[];
+  List<dynamic> _ambientZonePalette = <dynamic>[];
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
-  final List> servers = const [
+  // CHANGED FROM List> TO List<dynamic> TO PREVENT GENERICS ISSUES IN OLDER DART VERSIONS
+  final List<dynamic> servers = const [
     {'key': 'orion', 'name': 'Orion'},
     {'key': 'vidrift', 'name': 'VidRift'},          
     {'key': 'vidqueen', 'name': 'VidQueen'},
@@ -132,12 +133,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     {'key': 'alpha', 'name': 'Alpha'},
   ];
 
-  List<dynamic> similarMovies = [];
+  List<dynamic> similarMovies = <dynamic>[];
   bool isLoadingSimilar = false;
   bool isTvDevice = false;
 
   int totalSeasons = 1;
-  List<dynamic> episodesList = [];
+  List<dynamic> episodesList = <dynamic>[];
 
   @override
   void initState() {
@@ -200,7 +201,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
+        if (mounted) setState(() { episodesList = (data['episodes'] as List<dynamic>?) ?? []; });
       }
     } catch (e) {}
   }
@@ -239,13 +240,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> results = data['results'] ?? [];
+        final List<dynamic> results = (data['results'] as List<dynamic>?) ?? [];
         if (mounted) {
           setState(() {
             similarMovies = results.map((m) => {
               'id': m['id'], 'title': m['title'] ?? m['name'] ?? 'Unknown',
               'posterUrl': m['poster_path'] != null ? proxyImg('https://image.tmdb.org/t/p/w500${m['poster_path']}') : '',
-              'rating': (m['vote_average'] ?? 0).toStringAsFixed(1),
+              'rating': ((m['vote_average'] ?? 0) as num).toStringAsFixed(1),
               'year': (m['release_date'] ?? m['first_air_date'] ?? '').toString().split('-').first,
               'mediaType': type,
             }).toList();
@@ -933,19 +934,19 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     child: ListView.builder(
                       itemCount: servers.length,
                       itemBuilder: (context, index) {
-                        final srv = servers[index];
+                        final dynamic srv = servers[index];
                         int mockPing = Random().nextInt(250) + 15; 
                         Color pingColor = mockPing < 80 ? Colors.greenAccent : (mockPing < 150 ? Colors.orangeAccent : Colors.redAccent);
                         IconData towerIcon = mockPing < 80 ? Icons.signal_cellular_alt : (mockPing < 150 ? Icons.signal_cellular_alt_2_bar : Icons.signal_cellular_alt_1_bar);
                         
                         List<String> langs = ['English'];
-                        if (srv['name']!.toLowerCase().contains('hindi') || srv['key'] == 'cinezo') langs.addAll(['Hindi', 'Tamil', 'Telugu']);
+                        if (srv['name'].toString().toLowerCase().contains('hindi') || srv['key'] == 'cinezo') langs.addAll(['Hindi', 'Tamil', 'Telugu']);
                         if (srv['key'] == 'vidrift' || srv['key'] == 'bingr' || srv['key'] == 'vidbolt') langs.addAll(['Hindi', 'Spanish']);
 
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(vertical: 4),
                           leading: Icon(towerIcon, color: pingColor, size: 28),
-                          title: Text(srv['name']!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          title: Text(srv['name'].toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           subtitle: Text("Audio: ${langs.join(', ')}", style: const TextStyle(color: Colors.grey, fontSize: 11)),
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -954,7 +955,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           ),
                           onTap: () {
                             Navigator.pop(context);
-                            if (activeServer != srv['key']) { setState(() => activeServer = srv['key']!); _initStream(); }
+                            if (activeServer != srv['key']) { setState(() => activeServer = srv['key'].toString()); _initStream(); }
                           },
                         );
                       },
@@ -1850,15 +1851,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
-                                children: servers.map((srv) {
+                                children: servers.map((dynamic srv) {
                                   final isSelected = activeServer == srv['key'];
                                   return _buildFocusableItem(
-                                    onTap: () { if (activeServer != srv['key']) { setState(() => activeServer = srv['key']!); _initStream(); } },
+                                    onTap: () { if (activeServer != srv['key']) { setState(() => activeServer = srv['key'].toString()); _initStream(); } },
                                     borderRadius: BorderRadius.circular(20),
                                     child: Container(
                                       margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                       decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.grey[900], borderRadius: BorderRadius.circular(20)),
-                                      child: Text(srv['name']!, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                      child: Text(srv['name'].toString(), style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                                     ),
                                   );
                                 }).toList(),
