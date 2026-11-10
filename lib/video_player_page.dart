@@ -117,17 +117,18 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
   final ValueNotifier< double > _videoZoom = ValueNotifier< double >(1.0);
 
   final List< Map< String, String > > servers = const [
-    {'key': 'orion', 'name': 'Orion'},
-    {'key': 'vidrift', 'name': 'VidRift'},          
+    {'key': 'vidrift', 'name': 'VidRift'},
+    {'key': 'bolt', 'name': 'vidbolt'},
+    {'key': 'fast', 'name': 'Fast'},
+    {'key': 'premium', 'name': 'Premium'},
+    {'key': 'orion', 'name': 'Orion'},          
     {'key': 'vidqueen', 'name': 'VidQueen'},
     {'key': 'vidly', 'name': 'Vidly'},
     {'key': 'hindi', 'name': 'Hindi'},
     {'key': 'cinezo', 'name': 'Cinezo'},
     {'key': 'hindi-new', 'name': 'Hindi New'},   
     {'key': 'flix', 'name': 'Flix'},
-    {'key': 'fast', 'name': 'Fast'},
     {'key': 'nflix', 'name': 'Nflix'},
-    {'key': 'premium', 'name': 'Premium'},
     {'key': 'mega', 'name': 'Mega'},
     {'key': 'alpha', 'name': 'Alpha'},
   ];
