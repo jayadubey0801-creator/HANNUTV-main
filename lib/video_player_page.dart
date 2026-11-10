@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-//  HANNUTV  •  video_player_page.dart  (v1.4.0)
+//  HANNUTV  •  video_player_page.dart  (Android TV & Mobile Universal Fix)
 // ═══════════════════════════════════════════════════════════════════════════
 import 'dart:async';
 import 'dart:math';
@@ -76,7 +76,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
   bool isFullScreen = false;
   bool isPageLoading = true;
   
-  String activeServer = 'orion'; 
+  String activeServer = 'vidrift'; 
 
   static const bool kHindiUnwrap = true;
   static const bool kLegacyAutoClick = false;
@@ -209,6 +209,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final size = MediaQuery.of(context).size;
       setState(() {
+        // Android TV typically has a wide screen format
         isTvDevice = size.width > size.height && size.width > 600; 
         if (isTvDevice) isFullScreen = true; 
         else { SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); }
@@ -578,7 +579,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
 
     _controller = WebViewController();
     
-    // 🔥 ANDROID TV AUTO-PLAY PERMISSION 🔥
+    // 🔥 TV AUTO-PLAY PERMISSION OVERRIDE 🔥
     try {
       if (_controller.platform is AndroidWebViewController) {
         (_controller.platform as AndroidWebViewController).setMediaPlaybackRequiresUserGesture(false);
@@ -702,12 +703,12 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                     v.style.setProperty('z-index', '2147483647', 'important');
                     v.style.setProperty('display', 'block', 'important');
                     
-                    // 🔥 TV AUTO-PLAY JS FIX 🔥
+                    // 🔥 TV JS AUTOPLAY HOOK 🔥
                     if (v.paused && v.currentTime < 1) {
                         var p = v.play();
                         if (p !== undefined) { p.catch(function(e) {}); }
                     }
-                    
+
                     if (v.currentTime > 0.5 && !v.paused) {
                       try { VideoState.postMessage('playing'); } catch(e) {}
                     }
@@ -945,19 +946,19 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                     child: ListView.builder(
                       itemCount: servers.length,
                       itemBuilder: (context, index) {
-                        final dynamic srv = servers[index];
+                        final Map< String, String > srv = servers[index];
                         int mockPing = Random().nextInt(250) + 15; 
                         Color pingColor = mockPing < 80 ? Colors.greenAccent : (mockPing < 150 ? Colors.orangeAccent : Colors.redAccent);
                         IconData towerIcon = mockPing < 80 ? Icons.signal_cellular_alt : (mockPing < 150 ? Icons.signal_cellular_alt_2_bar : Icons.signal_cellular_alt_1_bar);
                         
                         List< String > langs = ['English'];
-                        if (srv['name'].toString().toLowerCase().contains('hindi') || srv['key'] == 'cinezo') langs.addAll(['Hindi', 'Tamil', 'Telugu']);
+                        if (srv['name']!.toLowerCase().contains('hindi') || srv['key'] == 'cinezo') langs.addAll(['Hindi', 'Tamil', 'Telugu']);
                         if (srv['key'] == 'vidrift' || srv['key'] == 'bingr' || srv['key'] == 'vidbolt') langs.addAll(['Hindi', 'Spanish']);
 
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(vertical: 4),
                           leading: Icon(towerIcon, color: pingColor, size: 28),
-                          title: Text(srv['name'].toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          title: Text(srv['name']!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           subtitle: Text("Audio: ${langs.join(', ')}", style: const TextStyle(color: Colors.grey, fontSize: 11)),
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -966,7 +967,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                           ),
                           onTap: () {
                             Navigator.pop(context);
-                            if (activeServer != srv['key']) { setState(() => activeServer = srv['key'].toString()); _initStream(); }
+                            if (activeServer != srv['key']) { setState(() => activeServer = srv['key']!); _initStream(); }
                           },
                         );
                       },
@@ -1624,7 +1625,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
-  // 🔥 TV D-PAD SUPPORT WRAPPER 🔥
+  // 🔥 ANDROID TV EXACT FIX D-PAD SUPPORT 🔥
   Widget _buildTVLayout() {
     return WillPopScope(
       onWillPop: () async {
