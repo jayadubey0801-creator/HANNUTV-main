@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-//  HANNUTV  •  video_player_page.dart  (AI Auto-Fix & Brave AdBlock Edition)
+//  HANNUTV  •  video_player_page.dart  (Ghostflix Native Integration)
 // ═══════════════════════════════════════════════════════════════════════════
 import 'dart:async';
 import 'dart:math';
@@ -60,7 +60,7 @@ class VideoPlayerPage extends StatefulWidget {
   });
 
   @override
-  State<VideoPlayerPage> createState() => _VideoPlayerPageState();
+  State createState() => _VideoPlayerPageState();
 }
 
 class _VideoPlayerPageState extends State<VideoPlayerPage>
@@ -74,7 +74,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   String activeServer = 'vidrift'; 
 
   static const bool kHindiUnwrap = true;
-  static const bool kLegacyAutoClick = false;
   
   String _unwrapUrl = '';
   String _unwrapHost = '';
@@ -111,7 +110,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   List _ambientZonePalette = [];
   final _videoZoom = ValueNotifier(1.0);
 
-  // SERVER ORDER UPDATED ACCORDING TO YOUR DEMAND (NO TYPE BRACKETS TO PREVENT BUGS)
+  // 🔥 SERVER ORDER EXACTLY AS REQUESTED
   final List servers = const [
     {'key': 'vidrift', 'name': 'VidRift'},          
     {'key': 'fast', 'name': 'Fast'},
@@ -179,7 +178,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _startAmbientCycle(); 
   }
 
-  // 🤖 AI SCAN & FIX BUTTON LOGIC
   void _aiScanAndFix() {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('AI is scanning & fixing network issues...'),
@@ -187,13 +185,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       duration: Duration(seconds: 2),
     ));
     
-    // Clear caches to fix any loaded bad ads
     _controller.clearCache();
     _controller.clearLocalStorage();
     
     Future.delayed(const Duration(seconds: 2), () {
        if (!mounted) return;
-       // Switch to next server automatically
        int idx = servers.indexWhere((s) => s['key'] == activeServer);
        int nextIdx = (idx + 1) % servers.length;
        setState(() { activeServer = servers[nextIdx]['key']; });
@@ -334,7 +330,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
   }
 
-  // 🔥 1000000000% BYPASS - BRAVE BROWSER LEVEL POPUP KILLER 🔥
+  // 🔥 100% BRAVE AD BLOCKER LEVEL KILLER JS 🔥
   static const String _kPopupKillerJs = r'''
     (function () {
       if (window.__hnPk) return;
@@ -344,25 +340,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
       function aggressiveKill() {
         try {
-          // Nuke high z-index sticky overlays (Ads/Stickers/Popups)
           var all = document.querySelectorAll('div, iframe, section, article, img, a, span');
           for(var i=0; i<all.length; i++) {
              var el = all[i];
              
-             // Keep video safe
+             // Keep main player alive
              if(el.tagName === 'VIDEO' || el.querySelector('video') || el.closest('.jwplayer, .plyr, .vjs, .html5-video-player')) continue;
              
              var style = window.getComputedStyle(el);
              var z = parseInt(style.zIndex);
              var pos = style.position;
              
-             // Nuke absolute/fixed elements above the player
              if ((pos === 'absolute' || pos === 'fixed') && z > 50) {
                  el.remove();
                  continue;
              }
 
-             // Nuke elements containing bad words (like "Confirm you're over 18")
              var text = (el.innerText || '').toLowerCase();
              if (text.length > 0 && text.length < 300) {
                  for(var k=0; k<BAD_WORDS.length; k++) {
@@ -402,66 +395,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
       try { window.open = function () { return null; }; } catch (e) {}
       try { if (window.Notification) { Notification.requestPermission = function () { return Promise.resolve("denied"); }; } } catch (e) {}
-      try {
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText = function () { return Promise.resolve(); };
-          navigator.clipboard.readText = function () { return Promise.resolve(""); };
-        }
-      } catch (e) {}
-      try {
-        var _ec = document.execCommand;
-        document.execCommand = function (c) {
-          var k = String(c).toLowerCase();
-          if (k === "copy" || k === "cut") return false;
-          return _ec.apply(document, arguments);
-        };
-      } catch (e) {}
-      try {
-        var _ac = HTMLAnchorElement.prototype.click;
-        HTMLAnchorElement.prototype.click = function () {
-          if (isBadUrl(this.href) || this.hasAttribute("download")) return;
-          return _ac.apply(this, arguments);
-        };
-      } catch (e) {}
-      try {
-        document.addEventListener("click", function (e) {
-          var a = e.target && e.target.closest ? e.target.closest("a") : null;
-          if (a && (a.hasAttribute("download") || isBadUrl(a.href))) { e.preventDefault(); e.stopPropagation(); }
-        }, true);
-      } catch (e) {}
-
-      function area(el) { var r = el.getBoundingClientRect(); return r.width * r.height; }
-
-      function findPlayer() {
-        var best = null, ba = 0, i, a, el;
-        var fr = document.getElementsByTagName("iframe");
-        for (i = 0; i < fr.length; i++) {
-          el = fr[i];
-          var src = (el.src || "").toLowerCase();
-          if (src && (isBadUrl(src) || AD_RE.test(src))) continue;
-          a = area(el);
-          if (a > ba) { ba = a; best = el; }
-        }
-        var vs = document.getElementsByTagName("video");
-        for (i = 0; i < vs.length; i++) { a = area(vs[i]); if (a > ba) { ba = a; best = vs[i]; } }
-        if (ba < window.innerWidth * window.innerHeight * 0.2) return null;
-        return best;
-      }
-
-      function related(el, P) {
-        if (!P) return false;
-        if (el === P || P.contains(el) || el.contains(P)) return true;
-        if (P.tagName === "VIDEO" && P.parentElement && P.parentElement.contains(el)) return true;
-        return false;
-      }
-
-      function rootOverlay(el, P) {
-        var r = el;
-        while (r.parentElement && r.parentElement !== document.body && r.parentElement !== document.documentElement &&
-               !(P && r.parentElement.contains(P))) { r = r.parentElement; }
-        return r;
-      }
-
+      
       function kill(el) {
         try {
           if (el && el.parentNode && !SKIP[el.tagName]) el.parentNode.removeChild(el);
@@ -469,80 +403,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         } catch (e) {}
       }
 
-      var PTS = [[0.5, 0.5], [0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85], [0.5, 0.15], [0.5, 0.85], [0.15, 0.5], [0.85, 0.5]];
-      function hitSweep(P) {
-        if (!P || !document.elementsFromPoint) return;
-        var W = window.innerWidth, H = window.innerHeight;
-        for (var p = 0; p < PTS.length; p++) {
-          var st = document.elementsFromPoint(W * PTS[p][0], H * PTS[p][1]);
-          for (var k = 0; k < st.length; k++) {
-            var el = st[k];
-            if (el === P || P.contains(el)) break;
-            if (SKIP[el.tagName] || related(el, P)) continue;
-            kill(rootOverlay(el, P));
-          }
-        }
-      }
-
-      function frameSweep(P) {
+      function frameSweep() {
         var fr = document.getElementsByTagName("iframe");
         for (var i = fr.length - 1; i >= 0; i--) {
           var el = fr[i];
-          if (el === P || (P && (P.contains(el) || el.contains(P)))) continue;
           var cs = getComputedStyle(el);
-          if (cs.position === "fixed" || cs.position === "absolute") kill(rootOverlay(el, P));
+          if (cs.position === "fixed" || cs.position === "absolute") kill(el);
         }
       }
 
-      function kwSweep(P) {
-        if (!KW.length) return;
-        var els = document.querySelectorAll("div,section,aside,form,dialog");
-        for (var i = 0; i < els.length; i++) {
-          var el = els[i];
-          if (related(el, P)) continue;
-          if (!P && el.querySelector("video,iframe")) continue;
-          var t = el.innerText || "";
-          if (!t || t.length > 700) continue;
-          t = t.toLowerCase();
-          var hit = false;
-          for (var j = 0; j < KW.length; j++) { if (KW[j] && t.indexOf(KW[j]) > -1) { hit = true; break; } }
-          if (!hit) continue;
-          var cs = getComputedStyle(el);
-          if (cs.position === "fixed" || cs.position === "absolute" || cs.position === "sticky" || (parseInt(cs.zIndex) || 0) > 10) {
-            kill(rootOverlay(el, P));
-          }
-        }
-      }
-
-      function selSweep(P) {
-        for (var i = 0; i < SEL.length; i++) {
-          try {
-            var list = document.querySelectorAll(SEL[i]);
-            for (var j = 0; j < list.length; j++) { if (!related(list[j], P)) kill(list[j]); }
-          } catch (e) {}
-        }
-      }
-
-      function sweep() {
-        try {
-          var P = findPlayer();
-          hitSweep(P);
-          frameSweep(P);
-          selSweep(P);
-        } catch (e) {}
-      }
-
-      setInterval(sweep, 120);
-      setInterval(function () { try { kwSweep(findPlayer()); } catch (e) {} }, 350);
-
-      var pend = 0;
-      try {
-        new MutationObserver(function () {
-          if (pend) return;
-          pend = setTimeout(function () { pend = 0; sweep(); }, 25);
-        }).observe(document.documentElement, { childList: true, subtree: true });
-      } catch (e) {}
-      sweep();
+      setInterval(frameSweep, 120);
+      frameSweep();
     })();
   ''';
 
@@ -674,7 +545,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   var vids = document.getElementsByTagName('video');
                   if (vids.length > 0) {
                     var v = vids[0];
-                    // 🔥 FULLSCREEN STRETCH FIX 🔥
+                    // 🔥 FULLSCREEN STRETCH FIX (NO BLACK BORDERS) 🔥
                     v.style.setProperty('width', '100vw', 'important');
                     v.style.setProperty('height', '100vh', 'important');
                     v.style.setProperty('object-fit', 'cover', 'important'); 
@@ -696,7 +567,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         var frm = frames[f];
                         var src = (frm.src || '').toLowerCase();
                         if(src && !src.includes('ads') && !src.includes('leela') && !src.includes('pop') && !src.includes('bet') && !src.includes('track') && !src.includes('doubleclick')) {
-                            // 🔥 IFRAME FULLSCREEN STRETCH FIX 🔥
                             frm.style.setProperty('width', '100vw', 'important');
                             frm.style.setProperty('height', '100vh', 'important');
                             frm.style.setProperty('position', 'fixed', 'important');
@@ -715,6 +585,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             _controller.runJavaScript(jsCode);
             _controller.runJavaScript(_kPopupKillerJs);
             
+            // Force Ads to False in internal local storage
             _controller.runJavaScript("try{localStorage.setItem('adsEnabled', 'false');}catch(e){}");
 
             _injectShield();
@@ -765,6 +636,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     // 🔥 FIX: FLIX SERVER DESKTOP USER AGENT SPOOF 🔥
     if (activeServer == 'flix') {
       _controller.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+    } else {
+      _controller.setUserAgent("Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36");
     }
 
     if (widget.customUrl != null && widget.customUrl!.isNotEmpty) {
@@ -796,9 +669,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final id = widget.tmdbId;
       final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
       
+      // 🔥 FORCING EMBED MODE URL 🔥
       String originalTargetUrl = isTv 
-          ? 'https://ghostflix.st/play?id=$id&type=tv&season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
-          : 'https://ghostflix.st/play?id=$id&type=movie&server=$activeServer';
+          ? 'https://ghostflix.st/play?id=$id&type=tv&season=$currentSeason&episode=$currentEpisode&server=$activeServer&mode=embed' 
+          : 'https://ghostflix.st/play?id=$id&type=movie&server=$activeServer&mode=embed';
       
       // 🔥 PROXY ENABLED FOR JIO/AIRTEL/VI BANS 🔥
       String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
@@ -1601,7 +1475,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Positioned.fill(child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))),
+          Positioned.fill(
+            child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller))
+          ),
           if (isPageLoading && !isVideoPlaying)
             Positioned.fill(
               child: Container(
@@ -1678,7 +1554,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           backgroundColor: Colors.black,
           body: Stack(
             children: [
-              Positioned.fill(child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))),
+              Positioned.fill(
+                child: _SwipeFullscreen(zoom: _videoZoom, onSwipeUp: () => _onVideoSwipe(up: true), onSwipeDown: () => _onVideoSwipe(up: false), child: _PinchZoom(zoom: _videoZoom, child: WebViewWidget(controller: _controller)))
+              ),
               if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
               Positioned(top: 14, right: 20, child: SafeArea(child: GestureDetector(onTap: _toggleFullScreen, child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
               if (showControls) ...[
@@ -1749,7 +1627,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     ),
                     const SizedBox(height: 14),
 
-                    // 🔥 WATCHLIST, SEARCH, AND NEW AI DOWNLOAD BUTTON ROW 🔥
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -1770,7 +1647,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           ],
                           _buildFocusableItem(onTap: _showSearchSheet, borderRadius: BorderRadius.circular(20), child: _buildActionButton(Icons.search, "Search")),
                           
-                          // 🔥 NEW: AI DOWNLOAD BUTTON 🔥
                           const SizedBox(width: 8),
                           _buildFocusableItem(
                             onTap: _openDownloadSheet, 
@@ -1778,7 +1654,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                             child: _buildActionButton(Icons.download_rounded, "Download", activeColor: Colors.redAccent)
                           ),
                           
-                          // 🔥 NEW: AI FIX BUTTON 🔥
                           const SizedBox(width: 8),
                           _buildFocusableItem(
                             onTap: _aiScanAndFix, 
