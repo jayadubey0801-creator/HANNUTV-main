@@ -751,9 +751,6 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
             ''';
             _controller.runJavaScript(jsCode);
             _controller.runJavaScript(_kPopupKillerJs);
-            
-            _controller.runJavaScript("try{localStorage.setItem('adsEnabled', 'false');}catch(e){}");
-
             _injectShield();
             _tryUnwrapHindi();
           },
@@ -1627,7 +1624,7 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
     return _TvFocusButton(onTap: onTap, borderRadius: borderRadius ?? BorderRadius.circular(8), child: child);
   }
 
-  // 🔥 TV PLAYER LAYOUT REWRITTEN EXACTLY FOR ANDROID TV REMOTE 🔥
+  // 🔥 TV D-PAD SUPPORT WRAPPER 🔥
   Widget _buildTVLayout() {
     return WillPopScope(
       onWillPop: () async {
@@ -1641,7 +1638,6 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
           onKeyEvent: (FocusNode node, KeyEvent event) {
             if (event is KeyDownEvent) {
               final key = event.logicalKey;
-              // Intercept TV remote "OK/Select/Play/Pause"
               if (key == LogicalKeyboardKey.select || 
                   key == LogicalKeyboardKey.enter || 
                   key == LogicalKeyboardKey.space || 
@@ -1839,13 +1835,6 @@ class _VideoPlayerPageState extends State< VideoPlayerPage >
                             onTap: _openDownloadSheet, 
                             borderRadius: BorderRadius.circular(20), 
                             child: _buildActionButton(Icons.download_rounded, "Download", activeColor: Colors.redAccent)
-                          ),
-                          
-                          const SizedBox(width: 8),
-                          _buildFocusableItem(
-                            onTap: _aiScanAndFix, 
-                            borderRadius: BorderRadius.circular(20), 
-                            child: _buildActionButton(Icons.auto_awesome, "AI Fix", activeColor: Colors.blueAccent)
                           ),
                         ],
                       ),
