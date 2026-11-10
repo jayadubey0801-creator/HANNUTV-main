@@ -28,7 +28,7 @@ import 'download_sheet.dart';
 const String kTmdbToken =
     'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzZDJkOTExNmM5ZGU3MjA5ZWUyNzdiYjhjYzlhZWVkOCIsIm5iZiI6MTc5MDI2OTE4NC42MjksInN1YiI6IjZhYjU1NzAwNzZiMTg1ODU3MGFjNDM4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.xZJX8fowhVhVJsgl-5wOW6Y7ZfUr9Zu_Ey1qMkhnPd0';
 
-const Map<String, String> kApiHeaders = {
+const Map< String, String > kApiHeaders = {
   'Authorization': 'Bearer $kTmdbToken',
   'accept': 'application/json',
 };
@@ -65,10 +65,10 @@ class VideoPlayerPage extends StatefulWidget {
   });
 
   @override
-  State<VideoPlayerPage> createState() => _VideoPlayerPageState();
+  State< VideoPlayerPage > createState() => _VideoPlayerPageState();
 }
 
-class _VideoPlayerPageState extends State<VideoPlayerPage>
+class _VideoPlayerPageState extends State< VideoPlayerPage >
     with SingleTickerProviderStateMixin {
   late WebViewController _controller;
 
@@ -97,27 +97,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   bool showIntroAnimation = false;
   late AnimationController _introAnimController;
-  late Animation<double> _introScaleAnimation;
-  late Animation<double> _introOpacityAnimation;
+  late Animation< double > _introScaleAnimation;
+  late Animation< double > _introOpacityAnimation;
 
   final TextEditingController commentInputController = TextEditingController();
 
-  Map<String, dynamic>? details;
-  List<dynamic> castList = <dynamic>[];
+  Map< String, dynamic >? details;
+  List< dynamic > castList = < dynamic >[];
   bool isLoadingDetails = false;
   bool descExpanded = false;
   
-  final ValueNotifier<Color> _ambientColor = ValueNotifier<Color>(const Color(0xFF5B2A86));
-  List<Color> _ambientPalette = const <Color>[Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
+  final ValueNotifier< Color > _ambientColor = ValueNotifier< Color >(const Color(0xFF5B2A86));
+  List< Color > _ambientPalette = const < Color >[Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
   
-  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
-  List<dynamic> _ambientZonePalette = <dynamic>[];
-  final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
+  final ValueNotifier< List< Color > > _ambientZones = ValueNotifier< List< Color > >(List< Color >.filled(8, const Color(0xFF5B2A86)));
+  List< List< Color > > _ambientZonePalette = < List< Color > >[];
+  final ValueNotifier< double > _videoZoom = ValueNotifier< double >(1.0);
 
-  // CHANGED FROM List> TO List<dynamic> TO PREVENT GENERICS ISSUES IN OLDER DART VERSIONS
-  final List<dynamic> servers = const [
+  final List< Map< String, String > > servers = const [
     {'key': 'orion', 'name': 'Orion'},
     {'key': 'vidrift', 'name': 'VidRift'},          
     {'key': 'vidqueen', 'name': 'VidQueen'},
@@ -133,12 +132,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     {'key': 'alpha', 'name': 'Alpha'},
   ];
 
-  List<dynamic> similarMovies = <dynamic>[];
+  List< dynamic > similarMovies = < dynamic >[];
   bool isLoadingSimilar = false;
   bool isTvDevice = false;
 
   int totalSeasons = 1;
-  List<dynamic> episodesList = <dynamic>[];
+  List< dynamic > episodesList = < dynamic >[];
 
   @override
   void initState() {
@@ -147,8 +146,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     currentEpisode = widget.episode;
 
     _introAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
-    _introScaleAnimation = Tween<double>(begin: 0.7, end: 1.3).animate(CurvedAnimation(parent: _introAnimController, curve: Curves.easeOutBack));
-    _introOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
+    _introScaleAnimation = Tween< double >(begin: 0.7, end: 1.3).animate(CurvedAnimation(parent: _introAnimController, curve: Curves.easeOutBack));
+    _introOpacityAnimation = Tween< double >(begin: 1.0, end: 0.0).animate(CurvedAnimation(parent: _introAnimController, curve: const Interval(0.65, 1.0, curve: Curves.easeIn)));
 
     if (widget.customUrl == null) {
       _fetchSimilarMovies();
@@ -158,7 +157,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       _liveTvAdTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
         if (mounted) {
           try { _controller.loadRequest(Uri.parse('about:blank')); } catch(_) {}
-          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+          SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]);
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
           Navigator.pushReplacement(
             context,
@@ -183,7 +182,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _startAmbientCycle(); 
   }
 
-  Future<void> _fetchTvDetails() async {
+  Future< void > _fetchTvDetails() async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}?language=en-US', headers: kApiHeaders);
@@ -195,13 +194,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (e) {}
   }
 
-  Future<void> _fetchEpisodes(int seasonNum) async {
+  Future< void > _fetchEpisodes(int seasonNum) async {
     if (widget.mediaType != 'tv' && widget.mediaType != 'series') return;
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (mounted) setState(() { episodesList = (data['episodes'] as List<dynamic>?) ?? []; });
+        if (mounted) setState(() { episodesList = (data['episodes'] as List< dynamic >?) ?? []; });
       }
     } catch (e) {}
   }
@@ -212,7 +211,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       setState(() {
         isTvDevice = size.width > size.height && size.width > 600; 
         if (isTvDevice) isFullScreen = true; 
-        else { SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); }
+        else { SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); }
       });
       _startControlsTimer();
       _initStream();
@@ -233,14 +232,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _introAnimController.forward().then((_) { if (mounted) setState(() => showIntroAnimation = false); });
   }
 
-  Future<void> _fetchSimilarMovies() async {
+  Future< void > _fetchSimilarMovies() async {
     setState(() => isLoadingSimilar = true);
     try {
       final type = widget.mediaType == 'tv' || widget.mediaType == 'series' ? 'tv' : 'movie';
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> results = (data['results'] as List<dynamic>?) ?? [];
+        final List< dynamic > results = (data['results'] as List< dynamic >?) ?? [];
         if (mounted) {
           setState(() {
             similarMovies = results.map((m) => {
@@ -257,7 +256,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) { if (mounted) setState(() => isLoadingSimilar = false); }
   }
 
-  Future<void> _openDownloadSheet() async {
+  Future< void > _openDownloadSheet() async {
     if (widget.customUrl != null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Live TV cannot be downloaded.'),
@@ -289,7 +288,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  Future<void> _tryUnwrapHindi() async {
+  Future< void > _tryUnwrapHindi() async {
     if (!kHindiUnwrap || !_unwrapServers.contains(activeServer) || widget.customUrl != null) return;
     if (_unwrapUrl.isNotEmpty || _unwrapTries >= 4) return;
     _unwrapTries++;
@@ -509,33 +508,33 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     })();
   ''';
 
-  static const List<String> _kShieldKeywords = [
+  static const List< String > _kShieldKeywords = [
     "not a robot", "i'm not a robot", "im not a robot", "verify you are human", "verify you're human",
     "check the box", "file_download", ".apk", "we're ready", "download now", "install now",
     "your phone number", "enter your number", "allow notifications", "click allow", "press allow",
     "you have won", "you've won", "congratulations", "virus", "update required", "claim your", "free gift",
   ];
-  static const List<String> _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10'];
-  static const Set<String> _kDefaultUnwrapServers = {'screenscape', 'hindi'};
+  static const List< String > _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10'];
+  static const Set< String > _kDefaultUnwrapServers = {'screenscape', 'hindi'};
 
   String _shieldRulesJs = 'window.__hnRules={};';
-  List<String> _remoteBlockHosts = <String>[];
-  Set<String> _unwrapServers = <String>{'screenscape', 'hindi'};
+  List< String > _remoteBlockHosts = < String >[];
+  Set< String > _unwrapServers = < String >{'screenscape', 'hindi'};
 
   void _loadShieldRules() {
-    final List<String> kw = List<String>.of(_kShieldKeywords);
-    final List<String> hosts = List<String>.of(_kShieldHosts);
-    final List<String> sel = <String>[];
-    final Set<String> unwrap = Set<String>.of(_kDefaultUnwrapServers);
+    final List< String > kw = List< String >.of(_kShieldKeywords);
+    final List< String > hosts = List< String >.of(_kShieldHosts);
+    final List< String > sel = < String >[];
+    final Set< String > unwrap = Set< String >.of(_kDefaultUnwrapServers);
     try {
       final FirebaseRemoteConfig rc = FirebaseRemoteConfig.instance;
       final String raw = rc.getString('player_shield_rules').trim();
       if (raw.isNotEmpty) {
         final dynamic d = json.decode(raw);
         if (d is Map) {
-          for (final dynamic x in (d['keywords'] as List<dynamic>? ?? const [])) { kw.add(x.toString()); }
-          for (final dynamic x in (d['hosts'] as List<dynamic>? ?? const [])) { hosts.add(x.toString()); }
-          for (final dynamic x in (d['selectors'] as List<dynamic>? ?? const [])) { sel.add(x.toString()); }
+          for (final dynamic x in (d['keywords'] as List< dynamic >? ?? const [])) { kw.add(x.toString()); }
+          for (final dynamic x in (d['hosts'] as List< dynamic >? ?? const [])) { hosts.add(x.toString()); }
+          for (final dynamic x in (d['selectors'] as List< dynamic >? ?? const [])) { sel.add(x.toString()); }
         }
       }
       final String un = rc.getString('unwrap_servers').trim();
@@ -545,7 +544,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     } catch (_) {}
     _remoteBlockHosts = hosts.map((String h) => h.toLowerCase()).toList();
     _unwrapServers = unwrap;
-    _shieldRulesJs = 'window.__hnRules=' + json.encode(<String, dynamic>{'keywords': kw, 'hosts': hosts, 'selectors': sel}) + ';';
+    _shieldRulesJs = 'window.__hnRules=' + json.encode(< String, dynamic >{'keywords': kw, 'hosts': hosts, 'selectors': sel}) + ';';
   }
 
   void _injectShield() {
@@ -559,7 +558,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (url.isEmpty) return false;
     final int colon = url.indexOf(':');
     if (colon > 0) {
-      const Set<String> okSchemes = {'http', 'https', 'about', 'data', 'blob'};
+      const Set< String > okSchemes = {'http', 'https', 'about', 'data', 'blob'};
       if (!okSchemes.contains(url.substring(0, colon))) return true;
     }
     if (RegExp(r'\.(apk|xapk|apks|aab|exe|msi|dmg|zip|rar|7z)(\?|#|$)').hasMatch(url)) return true;
@@ -839,10 +838,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (isTvDevice) return; 
     setState(() { isFullScreen = !isFullScreen; });
     if (isFullScreen) {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+      SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     _startControlsTimer();
@@ -939,7 +938,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                         Color pingColor = mockPing < 80 ? Colors.greenAccent : (mockPing < 150 ? Colors.orangeAccent : Colors.redAccent);
                         IconData towerIcon = mockPing < 80 ? Icons.signal_cellular_alt : (mockPing < 150 ? Icons.signal_cellular_alt_2_bar : Icons.signal_cellular_alt_1_bar);
                         
-                        List<String> langs = ['English'];
+                        List< String > langs = ['English'];
                         if (srv['name'].toString().toLowerCase().contains('hindi') || srv['key'] == 'cinezo') langs.addAll(['Hindi', 'Tamil', 'Telugu']);
                         if (srv['key'] == 'vidrift' || srv['key'] == 'bingr' || srv['key'] == 'vidbolt') langs.addAll(['Hindi', 'Spanish']);
 
@@ -973,7 +972,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   String get _tmdbType =>
       (widget.mediaType == 'tv' || widget.mediaType == 'series') ? 'tv' : 'movie';
 
-  Future<void> _fetchDetails() async {
+  Future< void > _fetchDetails() async {
     if (mounted) setState(() => isLoadingDetails = true);
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$_tmdbType/${widget.tmdbId}?language=en-US&append_to_response=credits,images&include_image_language=en,null',
@@ -981,8 +980,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       );
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (data is Map<String, dynamic> && mounted) {
-          final List<dynamic> cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
+        if (data is Map< String, dynamic > && mounted) {
+          final List< dynamic > cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -996,8 +995,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (mounted) setState(() => isLoadingDetails = false);
   }
 
-  Future<void> _buildAmbientPalette(Map<String, dynamic> data) async {
-    final List<String> paths = [];
+  Future< void > _buildAmbientPalette(Map< String, dynamic > data) async {
+    final List< String > paths = < String >[];
     try {
       final imgs = data['images'];
       if (imgs is Map && imgs['backdrops'] is List) {
@@ -1013,17 +1012,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (pp is String && pp.isNotEmpty) paths.add(pp);
     } catch (_) {}
 
-    final List<Color> palette = [];
-    final List<List<Color>> zonePalette = [];
+    final List< Color > palette = < Color >[];
+    final List< List< Color > > zonePalette = < List< Color > >[];
     for (final p in paths) {
       if (!mounted) return;
       final Color? c = await _dominantColorFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
       if (!mounted) return;
-      final List<Color>? z = await _zoneColorsFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
+      final List< Color >? z = await _zoneColorsFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
       if (!mounted) return;
       if (c != null) {
         palette.add(c);
-        zonePalette.add(z ?? List<Color>.filled(8, c));
+        zonePalette.add(z ?? List< Color >.filled(8, c));
         if (palette.length == 1) {
           _ambientTimer?.cancel();
           _ambientPalette = [c];
@@ -1039,9 +1038,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _startAmbientCycle();
   }
 
-  Future<Color?> _dominantColorFromUrl(String url) async {
+  Future< Color? > _dominantColorFromUrl(String url) async {
     try {
-      final Completer<ui.Image> completer = Completer<ui.Image>();
+      final Completer< ui.Image > completer = Completer< ui.Image >();
       final ImageStream stream = NetworkImage(url).resolve(const ImageConfiguration());
       late ImageStreamListener listener;
       listener = ImageStreamListener(
@@ -1060,10 +1059,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (data == null) return null;
       final Uint8List bytes = data.buffer.asUint8List();
 
-      final List<double> wSum = List<double>.filled(24, 0);
-      final List<double> rSum = List<double>.filled(24, 0);
-      final List<double> gSum = List<double>.filled(24, 0);
-      final List<double> bSum = List<double>.filled(24, 0);
+      final List< double > wSum = List< double >.filled(24, 0);
+      final List< double > rSum = List< double >.filled(24, 0);
+      final List< double > gSum = List< double >.filled(24, 0);
+      final List< double > bSum = List< double >.filled(24, 0);
       for (int i = 0; i + 3 < bytes.length; i += 20) {
         final int r = bytes[i];
         final int g = bytes[i + 1];
@@ -1121,9 +1120,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     });
   }
 
-  Future<String> _posterUrlForWatchlist() async {
+  Future< String > _posterUrlForWatchlist() async {
     String path = '';
-    final Map<String, dynamic>? d = details;
+    final Map< String, dynamic >? d = details;
     if (d != null && d['poster_path'] is String) path = d['poster_path'] as String;
     if (path.isEmpty) {
       try {
@@ -1138,9 +1137,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     return path;
   }
 
-  Future<void> _toggleWatchlist() async {
+  Future< void > _toggleWatchlist() async {
     final String posterPath = await _posterUrlForWatchlist();
-    final Map<String, dynamic> tmdbData = {
+    final Map< String, dynamic > tmdbData = {
       'id': widget.tmdbId,
       'is_tv': _tmdbType == 'tv', 
       'title': widget.movieTitle,
@@ -1170,13 +1169,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (i < _ambientZonePalette.length) {
       _ambientZones.value = _ambientZonePalette[i];
     } else {
-      _ambientZones.value = List<Color>.filled(8, _ambientColor.value);
+      _ambientZones.value = List< Color >.filled(8, _ambientColor.value);
     }
   }
 
-  Future<List<Color>?> _zoneColorsFromUrl(String url) async {
+  Future< List< Color >? > _zoneColorsFromUrl(String url) async {
     try {
-      final Completer<ui.Image> completer = Completer<ui.Image>();
+      final Completer< ui.Image > completer = Completer< ui.Image >();
       final ImageStream stream = NetworkImage(url).resolve(const ImageConfiguration());
       late ImageStreamListener listener;
       listener = ImageStreamListener(
@@ -1196,11 +1195,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final Uint8List bytes = data.buffer.asUint8List();
       final int w = img.width;
       final int h = img.height;
-      const List<List<int>> cells = <List<int>>[
+      const List< List< int > > cells = < List< int > >[
         [0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1],
       ];
-      final List<Color?> raw = <Color?>[];
-      for (final List<int> c in cells) {
+      final List< Color? > raw = < Color? >[];
+      for (final List< int > c in cells) {
         raw.add(_zoneCellColor(
           bytes, w,
           (w * c[0] / 3).floor(), (w * (c[0] + 1) / 3).floor(),
@@ -1223,10 +1222,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Color? _zoneCellColor(Uint8List bytes, int w, int x0, int x1, int y0, int y1) {
-    final List<double> wS = List<double>.filled(12, 0);
-    final List<double> rS = List<double>.filled(12, 0);
-    final List<double> gS = List<double>.filled(12, 0);
-    final List<double> bS = List<double>.filled(12, 0);
+    final List< double > wS = List< double >.filled(12, 0);
+    final List< double > rS = List< double >.filled(12, 0);
+    final List< double > gS = List< double >.filled(12, 0);
+    final List< double > bS = List< double >.filled(12, 0);
     for (int y = y0; y < y1; y += 3) {
       for (int x = x0; x < x1; x += 3) {
         final int i = (y * w + x) * 4;
@@ -1270,20 +1269,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     ).toColor();
   }
 
-  Future<List<TmdbItem>> _sameGenreLoader() async {
+  Future< List< TmdbItem > > _sameGenreLoader() async {
     final dynamic gl = details?['genres'];
-    final List<String> ids = <String>[];
+    final List< String > ids = < String >[];
     if (gl is List) {
       for (final dynamic g in gl) {
         if (g is Map && g['id'] != null) ids.add('${g['id']}');
         if (ids.length >= 2) break;
       }
     }
-    if (ids.isEmpty) return <TmdbItem>[];
+    if (ids.isEmpty) return < TmdbItem >[];
     return Tmdb.I.discover(tv: _tmdbType == 'tv', genres: ids.join(','), count: 20);
   }
 
-  List<Widget> _buildMoreSuggestions() {
+  List< Widget > _buildMoreSuggestions() {
     final bool tv = _tmdbType == 'tv';
     void open(TmdbItem it) => _openTitle(
           id: it.id,
@@ -1293,7 +1292,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           year: it.year,
           overview: it.overview,
         );
-    final List<Widget> rows = <Widget>[const SizedBox(height: 10)];
+    final List< Widget > rows = < Widget >[const SizedBox(height: 10)];
     if (details != null) {
       rows.add(_SuggestRow(
         key: ValueKey('same-${widget.tmdbId}'),
@@ -1304,7 +1303,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         focusable: _buildFocusableItem,
       ));
     }
-    for (final String label in const <String>['Action', 'Comedy', 'Romance', 'Horror', 'Thriller']) {
+    for (final String label in const < String >['Action', 'Comedy', 'Romance', 'Horror', 'Thriller']) {
       final GenreDef g = kAllGenres.firstWhere((GenreDef d) => d.label == label, orElse: () => kAllGenres.first);
       rows.add(_SuggestRow(
         key: ValueKey('$label-${widget.tmdbId}'),
@@ -1345,7 +1344,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     );
   }
 
-  void _openTitleFromMap(Map<String, dynamic> m) {
+  void _openTitleFromMap(Map< String, dynamic > m) {
     _openTitle(
       id: m['id'] as int,
       mediaType: (m['mediaType'] ?? 'movie').toString(),
@@ -1364,7 +1363,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return _SearchSheet(
-          onOpenTitle: (Map<String, dynamic> m) {
+          onOpenTitle: (Map< String, dynamic > m) {
             Navigator.pop(sheetContext);
             _openTitleFromMap(m);
           },
@@ -1386,7 +1385,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
         return _ActorSheet(
           personId: personId,
           fallbackName: name,
-          onOpenTitle: (Map<String, dynamic> m) {
+          onOpenTitle: (Map< String, dynamic > m) {
             Navigator.pop(sheetContext);
             _openTitleFromMap(m);
           },
@@ -1459,12 +1458,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Widget _buildDescriptionCard() {
-    final Map<String, dynamic>? d = details;
+    final Map< String, dynamic >? d = details;
     final String fetched = (d?['overview'] ?? '').toString().trim();
     final String overview = fetched.isNotEmpty ? fetched : widget.overview.trim();
     final String tagline = (d?['tagline'] ?? '').toString().trim();
-    final List<dynamic> genres = (d?['genres'] is List) ? d!['genres'] as List<dynamic> : [];
-    final List<dynamic> langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List<dynamic> : [];
+    final List< dynamic > genres = (d?['genres'] is List) ? d!['genres'] as List< dynamic > : [];
+    final List< dynamic > langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List< dynamic > : [];
     final String languages = langs
         .map((l) => (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
         .where((s) => s.isNotEmpty)
@@ -1497,7 +1496,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (vc is num && vc > 0) ratingStr += '  (${vc.toInt()} votes)';
     }
 
-    final List<String> metaParts = [];
+    final List< String > metaParts = [];
     if (widget.year.isNotEmpty) metaParts.add(widget.year);
     if (runtime.isNotEmpty) metaParts.add(runtime);
     if (widget.rating.isNotEmpty) metaParts.add('★ ${widget.rating}');
@@ -1527,7 +1526,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: genres.take(5).map<Widget>((g) {
+                children: genres.take(5).map< Widget >((g) {
                   final String gName = (g is Map ? (g['name'] ?? '') : '').toString();
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1605,7 +1604,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     _ambientColor.dispose();
     _ambientZones.dispose();
     _videoZoom.dispose();
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+    SystemChrome.setPreferredOrientations(< DeviceOrientation >[DeviceOrientation.portraitUp]); SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
@@ -1963,7 +1962,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           ),
                           const SizedBox(height: 10),
                           
-                          StreamBuilder<QuerySnapshot>(
+                          StreamBuilder< QuerySnapshot >(
                             stream: FirebaseFirestore.instance.collection('movies').doc(widget.customUrl == null ? widget.tmdbId.toString() : 'live_${widget.movieTitle.replaceAll(" ", "_")}').collection('comments').orderBy('timestamp', descending: true).snapshots(),
                             builder: (context, snapshot) {
                               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.redAccent));
@@ -1973,7 +1972,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
                               return Column(
                                 children: comments.map((doc) {
-                                  var data = doc.data() as Map<String, dynamic>;
+                                  var data = doc.data() as Map< String, dynamic >;
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 8.0),
                                     child: Row(
@@ -2071,9 +2070,9 @@ class _TvFocusButton extends StatefulWidget {
   final BorderRadius borderRadius;
   const _TvFocusButton({required this.child, required this.onTap, required this.borderRadius});
   @override
-  State<_TvFocusButton> createState() => _TvFocusButtonState();
+  State< _TvFocusButton > createState() => _TvFocusButtonState();
 }
-class _TvFocusButtonState extends State<_TvFocusButton> {
+class _TvFocusButtonState extends State< _TvFocusButton > {
   bool _hasFocus = false;
   @override
   Widget build(BuildContext context) {
@@ -2088,17 +2087,17 @@ class _TvFocusButtonState extends State<_TvFocusButton> {
 }
 
 class _AmbientGlow extends StatelessWidget {
-  final ValueNotifier<List<Color>> zones;
+  final ValueNotifier< List< Color > > zones;
   final Widget child;
   const _AmbientGlow({required this.zones, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<Color>>(
+    return ValueListenableBuilder< List< Color > >(
       valueListenable: zones,
       child: child,
       builder: (context, z, ch) {
-        return TweenAnimationBuilder<List<Color>>(
+        return TweenAnimationBuilder< List< Color > >(
           tween: _ZonesTween(end: z),
           duration: const Duration(milliseconds: 2500),
           curve: Curves.easeInOut,
@@ -2112,19 +2111,19 @@ class _AmbientGlow extends StatelessWidget {
   }
 }
 
-class _ZonesTween extends Tween<List<Color>> {
-  _ZonesTween({List<Color>? begin, required List<Color> end}) : super(begin: begin, end: end);
+class _ZonesTween extends Tween< List< Color > > {
+  _ZonesTween({List< Color >? begin, required List< Color > end}) : super(begin: begin, end: end);
 
   @override
-  List<Color> lerp(double t) {
-    final List<Color> a = begin ?? end!;
-    final List<Color> b = end!;
-    return List<Color>.generate(b.length, (int i) => Color.lerp(i < a.length ? a[i] : b[i], b[i], t) ?? b[i]);
+  List< Color > lerp(double t) {
+    final List< Color > a = begin ?? end!;
+    final List< Color > b = end!;
+    return List< Color >.generate(b.length, (int i) => Color.lerp(i < a.length ? a[i] : b[i], b[i], t) ?? b[i]);
   }
 }
 
 class _GlowPainter extends CustomPainter {
-  final List<Color> zones;
+  final List< Color > zones;
   _GlowPainter(this.zones);
 
   @override
@@ -2132,7 +2131,7 @@ class _GlowPainter extends CustomPainter {
     if (zones.length < 8 || size.isEmpty) return;
     final double w = size.width;
     final double h = size.height;
-    final List<Offset> pts = <Offset>[
+    final List< Offset > pts = < Offset >[
       Offset(0, 0), Offset(w / 2, 0), Offset(w, 0), Offset(w, h / 2),
       Offset(w, h), Offset(w / 2, h), Offset(0, h), Offset(0, h / 2),
     ];
@@ -2150,13 +2149,13 @@ class _GlowPainter extends CustomPainter {
 }
 
 class _AmbientBackground extends StatelessWidget {
-  final ValueNotifier<Color> color;
+  final ValueNotifier< Color > color;
   final Widget child;
   const _AmbientBackground({required this.color, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Color>(
+    return ValueListenableBuilder< Color >(
       valueListenable: color,
       child: child,
       builder: (context, c, ch) {
@@ -2186,10 +2185,10 @@ class _ExternalWebPage extends StatefulWidget {
   const _ExternalWebPage({required this.title, required this.url});
 
   @override
-  State<_ExternalWebPage> createState() => _ExternalWebPageState();
+  State< _ExternalWebPage > createState() => _ExternalWebPageState();
 }
 
-class _ExternalWebPageState extends State<_ExternalWebPage> {
+class _ExternalWebPageState extends State< _ExternalWebPage > {
   late final WebViewController _wc;
   bool _loading = true;
 
@@ -2228,20 +2227,20 @@ class _ExternalWebPageState extends State<_ExternalWebPage> {
 }
 
 class _SearchSheet extends StatefulWidget {
-  final void Function(Map<String, dynamic> item) onOpenTitle;
+  final void Function(Map< String, dynamic > item) onOpenTitle;
   final void Function(int id, String name) onOpenPerson;
   const _SearchSheet({required this.onOpenTitle, required this.onOpenPerson});
 
   @override
-  State<_SearchSheet> createState() => _SearchSheetState();
+  State< _SearchSheet > createState() => _SearchSheetState();
 }
 
-class _SearchSheetState extends State<_SearchSheet> {
+class _SearchSheetState extends State< _SearchSheet > {
   final TextEditingController _ctrl = TextEditingController();
   Timer? _debounce;
   bool _loading = false;
   String _lastQuery = '';
-  List> _results = [];
+  List< Map< String, dynamic > > _results = < Map< String, dynamic > >[];
 
   @override
   void dispose() {
@@ -2261,7 +2260,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     _debounce = Timer(const Duration(milliseconds: 400), () { _search(q); });
   }
 
-  Future<void> _search(String q) async {
+  Future< void > _search(String q) async {
     if (!mounted) return;
     setState(() { _loading = true; _lastQuery = q; });
     try {
@@ -2271,8 +2270,8 @@ class _SearchSheetState extends State<_SearchSheet> {
       if (!mounted || q != _lastQuery) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> raw = (data is Map && data['results'] is List) ? data['results'] : [];
-        final List> out = [];
+        final List< dynamic > raw = (data is Map && data['results'] is List) ? data['results'] as List< dynamic > : < dynamic >[];
+        final List< Map< String, dynamic > > out = < Map< String, dynamic > >[];
         for (final r in raw) {
           if (r is! Map) continue;
           final String mt = r['media_type'].toString();
@@ -2302,7 +2301,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     }
   }
 
-  Widget _buildTile(Map<String, dynamic> m) {
+  Widget _buildTile(Map< String, dynamic > m) {
     final String mt = m['mediaType'] as String;
     final String img = m['image'] as String;
     final bool isPerson = mt == 'person';
@@ -2314,7 +2313,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     if (isPerson) {
       subtitle = dept.isEmpty ? 'Person' : dept;
     } else {
-      final List<String> parts = [mt == 'tv' ? 'TV Show' : 'Movie'];
+      final List< String > parts = < String >[mt == 'tv' ? 'TV Show' : 'Movie'];
       if (year.isNotEmpty) parts.add(year);
       if (rating != '0.0') parts.add('★ $rating');
       subtitle = parts.join(' • ');
@@ -2420,18 +2419,18 @@ class _SearchSheetState extends State<_SearchSheet> {
 class _ActorSheet extends StatefulWidget {
   final int personId;
   final String fallbackName;
-  final void Function(Map<String, dynamic> item) onOpenTitle;
+  final void Function(Map< String, dynamic > item) onOpenTitle;
   const _ActorSheet({required this.personId, required this.fallbackName, required this.onOpenTitle});
 
   @override
-  State<_ActorSheet> createState() => _ActorSheetState();
+  State< _ActorSheet > createState() => _ActorSheetState();
 }
 
-class _ActorSheetState extends State<_ActorSheet> {
+class _ActorSheetState extends State< _ActorSheet > {
   bool _loading = true;
   bool _failed = false;
-  Map<String, dynamic>? _person;
-  List> _credits = [];
+  Map< String, dynamic >? _person;
+  List< Map< String, dynamic > > _credits = < Map< String, dynamic > >[];
   String _filter = 'all';
   bool _bioExpanded = false;
 
@@ -2441,7 +2440,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future< void > _load() async {
     try {
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/person/${widget.personId}?language=en-US&append_to_response=combined_credits,external_ids',
         headers: kApiHeaders,
@@ -2449,9 +2448,9 @@ class _ActorSheetState extends State<_ActorSheet> {
       if (!mounted) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (data is Map<String, dynamic>) {
-          final List<dynamic> raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : [];
-          final Map<String, Map<String, dynamic>> uniq = {};
+        if (data is Map< String, dynamic >) {
+          final List< dynamic > raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] as List< dynamic > : < dynamic >[];
+          final Map< String, Map< String, dynamic > > uniq = < String, Map< String, dynamic > >{};
           for (final c in raw) {
             if (c is! Map) continue;
             final String mt = c['media_type'].toString();
@@ -2472,7 +2471,7 @@ class _ActorSheetState extends State<_ActorSheet> {
               'popularity': ((c['popularity'] ?? 0) as num).toDouble(),
             };
           }
-          final List> list = uniq.values.toList();
+          final List< Map< String, dynamic > > list = uniq.values.toList();
           list.sort((a, b) {
             final int ap = (a['poster'] as String).isNotEmpty ? 1 : 0;
             final int bp = (b['poster'] as String).isNotEmpty ? 1 : 0;
@@ -2487,7 +2486,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     if (mounted) setState(() { _loading = false; _failed = true; });
   }
 
-  List> get _filtered {
+  List< Map< String, dynamic > > get _filtered {
     if (_filter == 'movie') return _credits.where((e) => e['mediaType'] == 'movie').toList();
     if (_filter == 'tv') return _credits.where((e) => e['mediaType'] == 'tv').toList();
     return _credits;
@@ -2536,7 +2535,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     return Container(color: Colors.grey[900], child: const Center(child: Icon(Icons.movie, color: Colors.white24, size: 28)));
   }
 
-  Widget _buildTitleTile(Map<String, dynamic> m) {
+  Widget _buildTitleTile(Map< String, dynamic > m) {
     final String poster = m['poster'] as String;
     final bool isTv = m['mediaType'] == 'tv';
     final String year = m['year'] as String;
@@ -2600,7 +2599,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   }
 
   Widget _buildContent(ScrollController sc) {
-    final Map<String, dynamic> p = _person!;
+    final Map< String, dynamic > p = _person!;
     final String name = (p['name'] ?? widget.fallbackName).toString();
     final String profile = (p['profile_path'] ?? '').toString();
     final String dept = (p['known_for_department'] ?? '').toString();
@@ -2610,7 +2609,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     final String bio = (p['biography'] ?? '').toString().trim();
     final dynamic ext = p['external_ids'];
     final String imdbId = (ext is Map ? (ext['imdb_id'] ?? '') : '').toString();
-    final List> items = _filtered;
+    final List< Map< String, dynamic > > items = _filtered;
 
     return CustomScrollView(
       controller: sc,
@@ -2751,21 +2750,21 @@ class _ActorSheetState extends State<_ActorSheet> {
 }
 
 class _PinchZoom extends StatefulWidget {
-  final ValueNotifier<double> zoom;
+  final ValueNotifier< double > zoom;
   final Widget child;
   const _PinchZoom({required this.zoom, required this.child});
 
   @override
-  State<_PinchZoom> createState() => _PinchZoomState();
+  State< _PinchZoom > createState() => _PinchZoomState();
 }
 
-class _PinchZoomState extends State<_PinchZoom> {
-  final Map<int, Offset> _pointers = <int, Offset>{};
+class _PinchZoomState extends State< _PinchZoom > {
+  final Map< int, Offset > _pointers = < int, Offset >{};
   double _startDist = 0;
   double _startZoom = 1.0;
 
   double _dist() {
-    final List<Offset> v = _pointers.values.toList();
+    final List< Offset > v = _pointers.values.toList();
     return (v[0] - v[1]).distance;
   }
 
@@ -2801,7 +2800,7 @@ class _PinchZoomState extends State<_PinchZoom> {
       onPointerUp: _up,
       onPointerCancel: _up,
       child: ClipRect(
-        child: ValueListenableBuilder<double>(
+        child: ValueListenableBuilder< double >(
           valueListenable: widget.zoom,
           child: widget.child,
           builder: (context, z, ch) => Transform.scale(scale: z, child: ch),
@@ -2814,7 +2813,7 @@ class _PinchZoomState extends State<_PinchZoom> {
 class _SuggestRow extends StatefulWidget {
   final String title;
   final int excludeId;
-  final Future<List<TmdbItem>> Function() loader;
+  final Future< List< TmdbItem > > Function() loader;
   final void Function(TmdbItem item) onOpen;
   final Widget Function({required Widget child, required VoidCallback onTap, BorderRadius? borderRadius}) focusable;
   const _SuggestRow({
@@ -2827,11 +2826,11 @@ class _SuggestRow extends StatefulWidget {
   });
 
   @override
-  State<_SuggestRow> createState() => _SuggestRowState();
+  State< _SuggestRow > createState() => _SuggestRowState();
 }
 
-class _SuggestRowState extends State<_SuggestRow> {
-  List<TmdbItem>? _items;
+class _SuggestRowState extends State< _SuggestRow > {
+  List< TmdbItem >? _items;
 
   @override
   void initState() {
@@ -2839,8 +2838,8 @@ class _SuggestRowState extends State<_SuggestRow> {
     _load();
   }
 
-  Future<void> _load() async {
-    List<TmdbItem> r = <TmdbItem>[];
+  Future< void > _load() async {
+    List< TmdbItem > r = < TmdbItem >[];
     try {
       r = await widget.loader();
     } catch (_) {}
@@ -2850,7 +2849,7 @@ class _SuggestRowState extends State<_SuggestRow> {
 
   @override
   Widget build(BuildContext context) {
-    final List<TmdbItem>? items = _items;
+    final List< TmdbItem >? items = _items;
     if (items != null && items.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -2913,7 +2912,7 @@ class _SuggestRowState extends State<_SuggestRow> {
 }
 
 class _SwipeFullscreen extends StatefulWidget {
-  final ValueNotifier<double> zoom;
+  final ValueNotifier< double > zoom;
   final VoidCallback onSwipeUp;
   final VoidCallback onSwipeDown;
   final Widget child;
@@ -2925,10 +2924,10 @@ class _SwipeFullscreen extends StatefulWidget {
   });
 
   @override
-  State<_SwipeFullscreen> createState() => _SwipeFullscreenState();
+  State< _SwipeFullscreen > createState() => _SwipeFullscreenState();
 }
 
-class _SwipeFullscreenState extends State<_SwipeFullscreen> {
+class _SwipeFullscreenState extends State< _SwipeFullscreen > {
   static const double _minDistance = 60;
   int _count = 0;
   bool _multi = false;
