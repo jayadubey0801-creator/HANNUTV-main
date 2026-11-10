@@ -103,19 +103,26 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   final TextEditingController commentInputController = TextEditingController();
 
   Map<String, dynamic>? details;
-  List<dynamic> castList = []; // FIXED TYPE
+  
+  // FIXED SYNTAX ERRORS HERE
+  List<dynamic> castList = []; 
   bool isLoadingDetails = false;
   bool descExpanded = false;
+  
   final ValueNotifier<Color> _ambientColor = ValueNotifier<Color>(const Color(0xFF5B2A86));
-  List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)]; // FIXED TYPE
+  List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)]; 
   int _ambientIndex = 0;
   Timer? _ambientTimer;
-  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86))); // FIXED TYPE
-  List<List<Color>> _ambientZonePalette = <List<Color>>[]; // FIXED TYPE
+  
+  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>([
+    const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86),
+    const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86), const Color(0xFF5B2A86)
+  ]); 
+  List<List<Color>> _ambientZonePalette = <List<Color>>[]; 
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
-  // 🔥 NEW GHOSTFLIX SERVERS LIST (Based on your Screenshots) 🔥
-  final List> servers = const [ // FIXED TYPE
+  // 🔥 NEW GHOSTFLIX SERVERS LIST 🔥
+  final List> servers = const [
     {'key': 'orion', 'name': 'Orion'},
     {'key': 'vidrift', 'name': 'VidRift'},
     {'key': 'vidqueen', 'name': 'VidQueen'},
@@ -131,12 +138,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     {'key': 'alpha', 'name': 'Alpha'},
   ];
 
-  List<dynamic> similarMovies = []; // FIXED TYPE
+  List<dynamic> similarMovies = []; 
   bool isLoadingSimilar = false;
   bool isTvDevice = false;
 
   int totalSeasons = 1;
-  List<dynamic> episodesList = []; // FIXED TYPE
+  List<dynamic> episodesList = []; 
 
   @override
   void initState() {
@@ -238,7 +245,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> results = data['results'] ?? []; // FIXED TYPE
+        final List<dynamic> results = data['results'] ?? []; 
         if (mounted) {
           setState(() {
             similarMovies = results.map((m) => {
@@ -369,20 +376,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     })();
   ''';
 
-  static const List<String> _kShieldKeywords = [ // FIXED TYPE
+  static const List<String> _kShieldKeywords = [
     "not a robot", "i'm not a robot", "verify you are human", "file_download", ".apk", "download now",
   ];
-  static const List<String> _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10']; // FIXED TYPE
+  static const List<String> _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10']; 
   static const Set<String> _kDefaultUnwrapServers = {'screenscape'};
 
-  List<String> _remoteBlockHosts = <String>[]; // FIXED TYPE
+  List<String> _remoteBlockHosts = <String>[]; 
   Set<String> _unwrapServers = <String>{'screenscape'};
   String _shieldRulesJs = 'window.__hnRules={};';
 
   void _loadShieldRules() {
-    final List<String> kw = List<String>.of(_kShieldKeywords); // FIXED TYPE
-    final List<String> hosts = List<String>.of(_kShieldHosts); // FIXED TYPE
-    final List<String> sel = <String>[]; // FIXED TYPE
+    final List<String> kw = List<String>.of(_kShieldKeywords); 
+    final List<String> hosts = List<String>.of(_kShieldHosts); 
+    final List<String> sel = <String>[]; 
     _remoteBlockHosts = hosts.map((String h) => h.toLowerCase()).toList();
     _unwrapServers = _kDefaultUnwrapServers;
     _shieldRulesJs = 'window.__hnRules=' + json.encode(<String, dynamic>{'keywords': kw, 'hosts': hosts, 'selectors': sel}) + ';';
@@ -754,7 +761,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic> && mounted) {
-          final List<dynamic> cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : []; // FIXED TYPE
+          final List<dynamic> cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] as List<dynamic> : [];
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -769,7 +776,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<void> _buildAmbientPalette(Map<String, dynamic> data) async {
-    final List<String> paths = []; // FIXED TYPE
+    final List<String> paths = []; 
     try {
       final imgs = data['images'];
       if (imgs is Map && imgs['backdrops'] is List) {
@@ -785,8 +792,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (pp is String && pp.isNotEmpty) paths.add(pp);
     } catch (_) {}
 
-    final List<Color> palette = []; // FIXED TYPE
-    final List<List<Color>> zonePalette = []; // FIXED TYPE
+    final List<Color> palette = []; 
+    final List<List<Color>> zonePalette = []; 
     for (final p in paths) {
       if (!mounted) return;
       final Color? c = await _dominantColorFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
@@ -832,10 +839,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (data == null) return null;
       final Uint8List bytes = data.buffer.asUint8List();
 
-      final List<double> wSum = List<double>.filled(24, 0); // FIXED TYPE
-      final List<double> rSum = List<double>.filled(24, 0); // FIXED TYPE
-      final List<double> gSum = List<double>.filled(24, 0); // FIXED TYPE
-      final List<double> bSum = List<double>.filled(24, 0); // FIXED TYPE
+      final List<double> wSum = List<double>.filled(24, 0); 
+      final List<double> rSum = List<double>.filled(24, 0); 
+      final List<double> gSum = List<double>.filled(24, 0); 
+      final List<double> bSum = List<double>.filled(24, 0); 
       for (int i = 0; i + 3 < bytes.length; i += 20) {
         final int r = bytes[i];
         final int g = bytes[i + 1];
@@ -968,11 +975,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final Uint8List bytes = data.buffer.asUint8List();
       final int w = img.width;
       final int h = img.height;
-      const List<List<int>> cells = <List<int>>[ // FIXED TYPE
+      const List<List<int>> cells = <List<int>>[ 
         [0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1],
       ];
-      final List<Color?> raw = <Color?>[]; // FIXED TYPE
-      for (final List<int> c in cells) { // FIXED TYPE
+      final List<Color?> raw = <Color?>[]; 
+      for (final List<int> c in cells) { 
         raw.add(_zoneCellColor(
           bytes, w,
           (w * c[0] / 3).floor(), (w * (c[0] + 1) / 3).floor(),
@@ -995,10 +1002,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Color? _zoneCellColor(Uint8List bytes, int w, int x0, int x1, int y0, int y1) {
-    final List<double> wS = List<double>.filled(12, 0); // FIXED TYPE
-    final List<double> rS = List<double>.filled(12, 0); // FIXED TYPE
-    final List<double> gS = List<double>.filled(12, 0); // FIXED TYPE
-    final List<double> bS = List<double>.filled(12, 0); // FIXED TYPE
+    final List<double> wS = List<double>.filled(12, 0); 
+    final List<double> rS = List<double>.filled(12, 0); 
+    final List<double> gS = List<double>.filled(12, 0); 
+    final List<double> bS = List<double>.filled(12, 0); 
     for (int y = y0; y < y1; y += 3) {
       for (int x = x0; x < x1; x += 3) {
         final int i = (y * w + x) * 4;
@@ -1044,7 +1051,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   Future<List<TmdbItem>> _sameGenreLoader() async {
     final dynamic gl = details?['genres'];
-    final List<String> ids = <String>[]; // FIXED TYPE
+    final List<String> ids = <String>[]; 
     if (gl is List) {
       for (final dynamic g in gl) {
         if (g is Map && g['id'] != null) ids.add('${g['id']}');
@@ -1065,7 +1072,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           year: it.year,
           overview: it.overview,
         );
-    final List<Widget> rows = <Widget>[const SizedBox(height: 10)]; // FIXED TYPE
+    final List<Widget> rows = <Widget>[const SizedBox(height: 10)]; 
     if (details != null) {
       rows.add(_SuggestRow(
         key: ValueKey('same-${widget.tmdbId}'),
@@ -1235,8 +1242,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final String fetched = (d?['overview'] ?? '').toString().trim();
     final String overview = fetched.isNotEmpty ? fetched : widget.overview.trim();
     final String tagline = (d?['tagline'] ?? '').toString().trim();
-    final List<dynamic> genres = (d?['genres'] is List) ? d!['genres'] as List<dynamic> : []; // FIXED TYPE
-    final List<dynamic> langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List<dynamic> : []; // FIXED TYPE
+    final List<dynamic> genres = (d?['genres'] is List) ? d!['genres'] as List<dynamic> : []; 
+    final List<dynamic> langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List<dynamic> : []; 
     final String languages = langs
         .map((l) => (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
         .where((s) => s.isNotEmpty)
@@ -1269,7 +1276,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (vc is num && vc > 0) ratingStr += '  (${vc.toInt()} votes)';
     }
 
-    final List<String> metaParts = []; // FIXED TYPE
+    final List<String> metaParts = []; 
     if (widget.year.isNotEmpty) metaParts.add(widget.year);
     if (runtime.isNotEmpty) metaParts.add(runtime);
     if (widget.rating.isNotEmpty) metaParts.add('★ ${widget.rating}');
@@ -1585,8 +1592,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       const SizedBox(height: 10),
                       const Text("Sponsored Ads", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
-                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
-                      const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                       const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
@@ -2011,7 +2016,7 @@ class _SearchSheetState extends State<_SearchSheet> {
   Timer? _debounce;
   bool _loading = false;
   String _lastQuery = '';
-  List> _results = []; // FIXED TYPE
+  List> _results = []; 
 
   @override
   void dispose() {
@@ -2041,8 +2046,8 @@ class _SearchSheetState extends State<_SearchSheet> {
       if (!mounted || q != _lastQuery) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> raw = (data is Map && data['results'] is List) ? data['results'] : []; // FIXED TYPE
-        final List> out = []; // FIXED TYPE
+        final List<dynamic> raw = (data is Map && data['results'] is List) ? data['results'] : []; 
+        final List> out = []; 
         for (final r in raw) {
           if (r is! Map) continue;
           final String mt = r['media_type'].toString();
@@ -2084,7 +2089,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     if (isPerson) {
       subtitle = dept.isEmpty ? 'Person' : dept;
     } else {
-      final List<String> parts = [mt == 'tv' ? 'TV Show' : 'Movie']; // FIXED TYPE
+      final List<String> parts = [mt == 'tv' ? 'TV Show' : 'Movie']; 
       if (year.isNotEmpty) parts.add(year);
       if (rating != '0.0') parts.add('★ $rating');
       subtitle = parts.join(' • ');
@@ -2201,7 +2206,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   bool _loading = true;
   bool _failed = false;
   Map<String, dynamic>? _person;
-  List> _credits = []; // FIXED TYPE
+  List> _credits = []; 
   String _filter = 'all';
   bool _bioExpanded = false;
 
@@ -2220,7 +2225,7 @@ class _ActorSheetState extends State<_ActorSheet> {
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic>) {
-          final List<dynamic> raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : []; // FIXED TYPE
+          final List<dynamic> raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : []; 
           final Map<String, Map<String, dynamic>> uniq = {};
           for (final c in raw) {
             if (c is! Map) continue;
@@ -2242,7 +2247,7 @@ class _ActorSheetState extends State<_ActorSheet> {
               'popularity': ((c['popularity'] ?? 0) as num).toDouble(),
             };
           }
-          final List> list = uniq.values.toList(); // FIXED TYPE
+          final List> list = uniq.values.toList(); 
           list.sort((a, b) {
             final int ap = (a['poster'] as String).isNotEmpty ? 1 : 0;
             final int bp = (b['poster'] as String).isNotEmpty ? 1 : 0;
@@ -2257,7 +2262,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     if (mounted) setState(() { _loading = false; _failed = true; });
   }
 
-  List> get _filtered { // FIXED TYPE
+  List> get _filtered { 
     if (_filter == 'movie') return _credits.where((e) => e['mediaType'] == 'movie').toList();
     if (_filter == 'tv') return _credits.where((e) => e['mediaType'] == 'tv').toList();
     return _credits;
@@ -2380,7 +2385,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     final String bio = (p['biography'] ?? '').toString().trim();
     final dynamic ext = p['external_ids'];
     final String imdbId = (ext is Map ? (ext['imdb_id'] ?? '') : '').toString();
-    final List> items = _filtered; // FIXED TYPE
+    final List> items = _filtered; 
 
     return CustomScrollView(
       controller: sc,
