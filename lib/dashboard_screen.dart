@@ -20,11 +20,11 @@ class HannuDashboard extends StatefulWidget {
 class _HannuDashboardState extends State<HannuDashboard> {
   static const List<String> _tabs = <String>[
     'HANNU TRENDING',
+    'Live TV',
     'Anime',
     'Movies',
     'Series',
     'Kids',
-    'Live TV',
   ];
 
   final ScrollController _scroll = ScrollController();
