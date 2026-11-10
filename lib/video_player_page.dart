@@ -19,8 +19,6 @@ import 'skippable_ad_screen.dart';
 import 'stores.dart'; 
 import 'tmdb_service.dart';
 import 'config.dart' show kAllGenres, GenreDef;
-
-// 🔥 TERA ASLI DOWNLOAD SHEET CONNECTED 🔥
 import 'download_sheet.dart'; 
 
 const String kTmdbToken =
@@ -74,13 +72,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   bool isFullScreen = false;
   bool isPageLoading = true;
   
-  // 🔥 Updated Default Server 🔥
-  String activeServer = 'flix'; 
+  String activeServer = 'vidrift'; 
 
-  // Hindi-server popup bypass (set to false to switch the unwrap trick off)
   static const bool kHindiUnwrap = true;
-
   static const bool kLegacyAutoClick = false;
+
   String _unwrapUrl = '';
   String _unwrapHost = '';
   int _unwrapTries = 0;
@@ -103,33 +99,25 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   final TextEditingController commentInputController = TextEditingController();
 
   Map<String, dynamic>? details;
-  
-  // FIXED SYNTAX ERRORS HERE
-  List<dynamic> castList = <dynamic>[]; 
+  List castList = [];
   bool isLoadingDetails = false;
   bool descExpanded = false;
-  
   final ValueNotifier<Color> _ambientColor = ValueNotifier<Color>(const Color(0xFF5B2A86));
-  List<Color> _ambientPalette = const <Color>[Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)]; 
+  List<Color> _ambientPalette = const [Color(0xFF5B2A86), Color(0xFF1E5AA8), Color(0xFFB02A4A)];
   int _ambientIndex = 0;
   Timer? _ambientTimer;
-  
-  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(<Color>[
-    Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86),
-    Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86), Color(0xFF5B2A86)
-  ]); 
-  List<List<Color>> _ambientZonePalette = <List<Color>>[]; 
+  final ValueNotifier<List<Color>> _ambientZones = ValueNotifier<List<Color>>(List<Color>.filled(8, const Color(0xFF5B2A86)));
+  List<List<Color>> _ambientZonePalette = <List<Color>>[];
   final ValueNotifier<double> _videoZoom = ValueNotifier<double>(1.0);
 
-  // 🔥 NEW GHOSTFLIX SERVERS LIST 🔥
-  final List> servers = const >[
+  final List> servers = const [
     {'key': 'orion', 'name': 'Orion'},
-    {'key': 'vidrift', 'name': 'VidRift'},
+    {'key': 'vidrift', 'name': 'VidRift'},          
     {'key': 'vidqueen', 'name': 'VidQueen'},
     {'key': 'vidly', 'name': 'Vidly'},
     {'key': 'hindi', 'name': 'Hindi'},
     {'key': 'cinezo', 'name': 'Cinezo'},
-    {'key': 'hindi-new', 'name': 'Hindi New'},
+    {'key': 'hindi-new', 'name': 'Hindi New'},   
     {'key': 'flix', 'name': 'Flix'},
     {'key': 'fast', 'name': 'Fast'},
     {'key': 'nflix', 'name': 'Nflix'},
@@ -138,12 +126,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     {'key': 'alpha', 'name': 'Alpha'},
   ];
 
-  List<dynamic> similarMovies = <dynamic>[]; 
+  List similarMovies = [];
   bool isLoadingSimilar = false;
   bool isTvDevice = false;
 
   int totalSeasons = 1;
-  List<dynamic> episodesList = <dynamic>[]; 
+  List episodesList = [];
 
   @override
   void initState() {
@@ -206,7 +194,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/tv/${widget.tmdbId}/season/$seasonNum?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (mounted) setState(() { episodesList = data['episodes'] ?? <dynamic>[]; });
+        if (mounted) setState(() { episodesList = data['episodes'] ?? []; });
       }
     } catch (e) {}
   }
@@ -245,7 +233,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final res = await tmdbHttpGet('https://api.themoviedb.org/3/$type/${widget.tmdbId}/recommendations?language=en-US', headers: kApiHeaders);
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> results = data['results'] ?? <dynamic>[]; 
+        final List results = data['results'] ?? [];
         if (mounted) {
           setState(() {
             similarMovies = results.map((m) => {
@@ -264,11 +252,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   Future<void> _openDownloadSheet() async {
     if (widget.customUrl != null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Live TV download nahi ho sakta.'), backgroundColor: Colors.orangeAccent));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Live TV cannot be downloaded.'),
+        backgroundColor: Colors.orangeAccent,
+      ));
       return;
     }
     String posterPath = '';
-    try { posterPath = await _posterUrlForWatchlist(); } catch (_) {}
+    try {
+      posterPath = await _posterUrlForWatchlist();
+    } catch (_) {}
     
     if (!mounted) return;
     
@@ -277,7 +270,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     if (realYear.length >= 4) realYear = realYear.substring(0, 4);
     
     await showDownloadSheet(
-      context, tmdbId: widget.tmdbId, mediaType: _tmdbType, season: currentSeason, episode: currentEpisode, title: realTitle, year: realYear, posterPath: posterPath, server: activeServer,
+      context,
+      tmdbId: widget.tmdbId,
+      mediaType: _tmdbType,
+      season: currentSeason,
+      episode: currentEpisode,
+      title: realTitle,
+      year: realYear,
+      posterPath: posterPath,
+      server: activeServer,
     );
   }
 
@@ -319,6 +320,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             }
             if (tgt && !tgt.querySelector('video')) tgt.remove();
           }
+          var els = document.querySelectorAll('div, section, form, aside');
+          for (var j = 0; j < els.length; j++) {
+            var el = els[j];
+            var t = (el.innerText || '').toLowerCase();
+            if (t.length > 0 && t.length < 500 && (t.indexOf('phone number') > -1 || t.indexOf('जारी रखना') > -1) && !el.querySelector('video')) {
+              var cs2 = getComputedStyle(el);
+              if (cs2.position === 'fixed' || cs2.position === 'absolute' || parseInt(cs2.zIndex) > 100) el.remove();
+            }
+          }
         } catch (e) {}
       }
       setInterval(kill, 100);
@@ -347,7 +357,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       }
 
       try { window.open = function () { return null; }; } catch (e) {}
-      
+      try { if (window.Notification) { Notification.requestPermission = function () { return Promise.resolve("denied"); }; } } catch (e) {}
+      try {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText = function () { return Promise.resolve(); };
+          navigator.clipboard.readText = function () { return Promise.resolve(""); };
+        }
+      } catch (e) {}
+      try {
+        var _ec = document.execCommand;
+        document.execCommand = function (c) {
+          var k = String(c).toLowerCase();
+          if (k === "copy" || k === "cut") return false;
+          return _ec.apply(document, arguments);
+        };
+      } catch (e) {}
       try {
         var _ac = HTMLAnchorElement.prototype.click;
         HTMLAnchorElement.prototype.click = function () {
@@ -355,43 +379,165 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           return _ac.apply(this, arguments);
         };
       } catch (e) {}
+      try {
+        document.addEventListener("click", function (e) {
+          var a = e.target && e.target.closest ? e.target.closest("a") : null;
+          if (a && (a.hasAttribute("download") || isBadUrl(a.href))) { e.preventDefault(); e.stopPropagation(); }
+        }, true);
+      } catch (e) {}
 
       function area(el) { var r = el.getBoundingClientRect(); return r.width * r.height; }
+
+      function findPlayer() {
+        var best = null, ba = 0, i, a, el;
+        var fr = document.getElementsByTagName("iframe");
+        for (i = 0; i < fr.length; i++) {
+          el = fr[i];
+          var src = (el.src || "").toLowerCase();
+          if (src && (isBadUrl(src) || AD_RE.test(src))) continue;
+          a = area(el);
+          if (a > ba) { ba = a; best = el; }
+        }
+        var vs = document.getElementsByTagName("video");
+        for (i = 0; i < vs.length; i++) { a = area(vs[i]); if (a > ba) { ba = a; best = vs[i]; } }
+        if (ba < window.innerWidth * window.innerHeight * 0.2) return null;
+        return best;
+      }
+
+      function related(el, P) {
+        if (!P) return false;
+        if (el === P || P.contains(el) || el.contains(P)) return true;
+        if (P.tagName === "VIDEO" && P.parentElement && P.parentElement.contains(el)) return true;
+        return false;
+      }
+
+      function rootOverlay(el, P) {
+        var r = el;
+        while (r.parentElement && r.parentElement !== document.body && r.parentElement !== document.documentElement &&
+               !(P && r.parentElement.contains(P))) { r = r.parentElement; }
+        return r;
+      }
 
       function kill(el) {
         try {
           if (el && el.parentNode && !SKIP[el.tagName]) el.parentNode.removeChild(el);
+          document.body.style.setProperty("overflow", "hidden", "important");
         } catch (e) {}
       }
 
-      function sweep() {
-        var fr = document.getElementsByTagName("iframe");
-        for (var i = fr.length - 1; i >= 0; i--) {
-          var src = (fr[i].src || "").toLowerCase();
-          if (AD_RE.test(src) || isBadUrl(src)) kill(fr[i]);
+      var PTS = [[0.5, 0.5], [0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85], [0.5, 0.15], [0.5, 0.85], [0.15, 0.5], [0.85, 0.5]];
+      function hitSweep(P) {
+        if (!P || !document.elementsFromPoint) return;
+        var W = window.innerWidth, H = window.innerHeight;
+        for (var p = 0; p < PTS.length; p++) {
+          var st = document.elementsFromPoint(W * PTS[p][0], H * PTS[p][1]);
+          for (var k = 0; k < st.length; k++) {
+            var el = st[k];
+            if (el === P || P.contains(el)) break;
+            if (SKIP[el.tagName] || related(el, P)) continue;
+            kill(rootOverlay(el, P));
+          }
         }
       }
 
+      function frameSweep(P) {
+        var fr = document.getElementsByTagName("iframe");
+        for (var i = fr.length - 1; i >= 0; i--) {
+          var el = fr[i];
+          if (el === P || (P && (P.contains(el) || el.contains(P)))) continue;
+          var cs = getComputedStyle(el);
+          if (cs.position === "fixed" || cs.position === "absolute") kill(rootOverlay(el, P));
+        }
+      }
+
+      function kwSweep(P) {
+        if (!KW.length) return;
+        var els = document.querySelectorAll("div,section,aside,form,dialog");
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i];
+          if (related(el, P)) continue;
+          if (!P && el.querySelector("video,iframe")) continue;
+          var t = el.innerText || "";
+          if (!t || t.length > 700) continue;
+          t = t.toLowerCase();
+          var hit = false;
+          for (var j = 0; j < KW.length; j++) { if (KW[j] && t.indexOf(KW[j]) > -1) { hit = true; break; } }
+          if (!hit) continue;
+          var cs = getComputedStyle(el);
+          if (cs.position === "fixed" || cs.position === "absolute" || cs.position === "sticky" || (parseInt(cs.zIndex) || 0) > 10) {
+            kill(rootOverlay(el, P));
+          }
+        }
+      }
+
+      function selSweep(P) {
+        for (var i = 0; i < SEL.length; i++) {
+          try {
+            var list = document.querySelectorAll(SEL[i]);
+            for (var j = 0; j < list.length; j++) { if (!related(list[j], P)) kill(list[j]); }
+          } catch (e) {}
+        }
+      }
+
+      function sweep() {
+        try {
+          var P = findPlayer();
+          hitSweep(P);
+          frameSweep(P);
+          selSweep(P);
+        } catch (e) {}
+      }
+
       setInterval(sweep, 120);
+      setInterval(function () { try { kwSweep(findPlayer()); } catch (e) {} }, 350);
+
+      var pend = 0;
+      try {
+        new MutationObserver(function () {
+          if (pend) return;
+          pend = setTimeout(function () { pend = 0; sweep(); }, 25);
+        }).observe(document.documentElement, { childList: true, subtree: true });
+      } catch (e) {}
+      sweep();
     })();
   ''';
 
-  static const List<String> _kShieldKeywords = <String>[ 
-    "not a robot", "i'm not a robot", "verify you are human", "file_download", ".apk", "download now",
+  static const List<String> _kShieldKeywords = [
+    "not a robot", "i'm not a robot", "im not a robot", "verify you are human", "verify you're human",
+    "check the box", "file_download", ".apk", "we're ready", "download now", "install now",
+    "your phone number", "enter your number", "allow notifications", "click allow", "press allow",
+    "you have won", "you've won", "congratulations", "virus", "update required", "claim your", "free gift",
   ];
-  static const List<String> _kShieldHosts = <String>['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10']; 
-  static const Set<String> _kDefaultUnwrapServers = <String>{'screenscape'};
+  static const List<String> _kShieldHosts = ['thufd.com', 'popads', 'adsterra', 'highrevenue', 'profitablerate', 'omg10'];
+  static const Set<String> _kDefaultUnwrapServers = {'screenscape', 'hindi'};
 
-  List<String> _remoteBlockHosts = <String>[]; 
-  Set<String> _unwrapServers = <String>{'screenscape'};
   String _shieldRulesJs = 'window.__hnRules={};';
+  List<String> _remoteBlockHosts = <String>[];
+  Set<String> _unwrapServers = <String>{'screenscape', 'hindi'};
 
   void _loadShieldRules() {
-    final List<String> kw = List<String>.of(_kShieldKeywords); 
-    final List<String> hosts = List<String>.of(_kShieldHosts); 
-    final List<String> sel = <String>[]; 
+    final List<String> kw = List<String>.of(_kShieldKeywords);
+    final List<String> hosts = List<String>.of(_kShieldHosts);
+    final List<String> sel = <String>[];
+    final Set<String> unwrap = Set<String>.of(_kDefaultUnwrapServers);
+    try {
+      final FirebaseRemoteConfig rc = FirebaseRemoteConfig.instance;
+      final String raw = rc.getString('player_shield_rules').trim();
+      if (raw.isNotEmpty) {
+        final dynamic d = json.decode(raw);
+        if (d is Map) {
+          for (final dynamic x in (d['keywords'] as List? ?? const [])) { kw.add(x.toString()); }
+          for (final dynamic x in (d['hosts'] as List? ?? const [])) { hosts.add(x.toString()); }
+          for (final dynamic x in (d['selectors'] as List? ?? const [])) { sel.add(x.toString()); }
+        }
+      }
+      final String un = rc.getString('unwrap_servers').trim();
+      if (un.isNotEmpty) {
+        for (final String s in un.split(',')) { if (s.trim().isNotEmpty) unwrap.add(s.trim()); }
+      }
+    } catch (_) {}
     _remoteBlockHosts = hosts.map((String h) => h.toLowerCase()).toList();
-    _unwrapServers = _kDefaultUnwrapServers;
+    _unwrapServers = unwrap;
     _shieldRulesJs = 'window.__hnRules=' + json.encode(<String, dynamic>{'keywords': kw, 'hosts': hosts, 'selectors': sel}) + ';';
   }
 
@@ -446,15 +592,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (mounted) setState(() => isPageLoading = false);
             });
 
-            // 🔥 UPDATED JAVASCRIPT: PRESREVES GHOSTFLIX EMBED UI & KILLS ADS TOGGLE 🔥
             String jsCode = '''
               document.body.style.backgroundColor = '#000000';
               document.documentElement.style.backgroundColor = '#000000';
               
               var style = document.createElement('style');
               style.innerHTML = `
-                * { outline: none !important; }
-                .ad-container, .ads-banner, [class*="ad-"], a[target="_blank"], 
+                * {
+                    box-shadow: none !important;
+                    outline: none !important;
+                    border: none !important;
+                }
+                .ad-container, .ads, [class*="ad-"], a[target="_blank"], 
                 iframe[src*="ads"], iframe[src*="bet"], iframe[src*="leela"], 
                 iframe[src*="pop"], iframe[src*="track"], iframe[src*="doubleclick"] { 
                     display: none !important; 
@@ -469,56 +618,121 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     padding: 0px !important; 
                     width: 100vw !important;
                     height: 100vh !important;
+                    border: none !important;
                 }
               `;
               document.head.appendChild(style);
 
               window.open = function() { return null; };
+              window.alert = function() { return null; };
+              window.confirm = function() { return true; };
+              window.prompt = function() { return null; };
               
               document.addEventListener('click', function(e) {
                   var target = e.target;
                   if(target.tagName === 'A' || target.closest('a')) {
-                      e.preventDefault(); e.stopPropagation();
+                      e.preventDefault();
+                      e.stopPropagation();
                   }
               }, true);
 
               setInterval(function() {
                 try {
                   if (${kLegacyAutoClick}) {
-                    var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
-                    for(var j=0; j<spamEls.length; j++) { spamEls[j].click(); }
-                  }
+                  var spamEls = document.querySelectorAll('.antispam, [class*="robot"], [id*="robot"], .e-captcha, [class*="captcha"]');
+                  for(var j=0; j<spamEls.length; j++) { spamEls[j].click(); }
+                  
+                  var closes = document.querySelectorAll('[class*="close"], [id*="close"], [class*="dismiss"]');
+                  for(var k=0; k<closes.length; k++) { closes[k].click(); }
 
-                  // Force the "Ads" toggle switch to be OFF and Hidden
-                  localStorage.setItem('ads', 'false');
-                  var switches = document.querySelectorAll('button[role="switch"], input[type="checkbox"]');
-                  for(var i=0; i<switches.length; i++) {
-                      var p = switches[i].parentElement;
-                      if(p && p.innerText && (p.innerText.includes('Ads') || p.innerText.includes('Ad'))) {
-                          // Turn it off if it's currently on
-                          if(switches[i].getAttribute('aria-checked') === 'true' || switches[i].checked) { 
-                              switches[i].click(); 
-                          }
-                          // Make it vanish completely from the app
-                          p.style.display = 'none';
-                          p.style.pointerEvents = 'none';
-                          switches[i].style.display = 'none';
+                  var btns = document.querySelectorAll('button, a, div[role="button"], span');
+                  for(var i=0; i<btns.length; i++) {
+                      var txt = (btns[i].innerText || btns[i].textContent || '').toLowerCase().trim();
+                      if(txt === "i'm not a robot" || txt === "im not a robot" || txt === "continue" || txt.indexOf("verify") !== -1 || txt.indexOf("जारी") !== -1) {
+                          btns[i].click();
                       }
                   }
-                  
-                  // Trigger Cinematic animation when video starts playing
+                  }
+
+                  var allElems = document.querySelectorAll('div, a, span, img');
+                  for(var x=0; x<allElems.length; x++) {
+                      var el = allElems[x];
+                      var computed = window.getComputedStyle(el);
+                      if ((computed.position === 'absolute' || computed.position === 'fixed') && parseInt(computed.zIndex) > 50) {
+                          if (el.tagName === 'IMG' || el.innerHTML.indexOf('<img') !== -1 || computed.backgroundImage !== 'none' || parseInt(computed.borderRadius) > 20) {
+                              if (el.clientWidth > 5 && el.clientWidth < 400) {
+                                  el.remove();
+                              }
+                          }
+                      }
+                  }
+                } catch(e) {}
+
+                try {
                   var vids = document.getElementsByTagName('video');
                   if (vids.length > 0) {
                     var v = vids[0];
+                    v.style.setProperty('background-color', '#000000', 'important');
+                    v.style.setProperty('object-fit', 'cover', 'important'); 
+                    v.style.setProperty('position', 'fixed', 'important');
+                    v.style.setProperty('top', '0px', 'important');
+                    v.style.setProperty('left', '0px', 'important');
+                    v.style.setProperty('width', '100vw', 'important');
+                    v.style.setProperty('height', '100vh', 'important');
+                    v.style.setProperty('margin', '0px', 'important');
+                    v.style.setProperty('padding', '0px', 'important');
+                    v.style.setProperty('border', 'none', 'important');
+                    v.style.setProperty('outline', 'none', 'important');
+                    v.style.setProperty('z-index', '2147483647', 'important');
+                    v.style.setProperty('display', 'block', 'important');
+                    
                     if (v.currentTime > 0.5 && !v.paused) {
                       try { VideoState.postMessage('playing'); } catch(e) {}
                     }
+
+                    var allElements = document.body.querySelectorAll('*');
+                    for(var x=0; x<allElements.length; x++) {
+                       var elem = allElements[x];
+                       if(elem !== v && !v.contains(elem) && elem.tagName !== 'SCRIPT' && elem.tagName !== 'STYLE') {
+                           var z = window.getComputedStyle(elem).zIndex;
+                           if(z !== 'auto' && parseInt(z) > 1000) {
+                               elem.style.setProperty('display', 'none', 'important');
+                           }
+                       }
+                    }
+                  } else {
+                    var frames = document.getElementsByTagName('iframe');
+                    for(var f=0; f<frames.length; f++) {
+                        var frm = frames[f];
+                        var src = (frm.src || '').toLowerCase();
+                        if(src && !src.includes('ads') && !src.includes('leela') && !src.includes('pop') && !src.includes('bet') && !src.includes('track') && !src.includes('doubleclick')) {
+                            frm.style.setProperty('position', 'fixed', 'important');
+                            frm.style.setProperty('top', '0px', 'important');
+                            frm.style.setProperty('left', '0px', 'important');
+                            frm.style.setProperty('right', '0px', 'important');
+                            frm.style.setProperty('bottom', '0px', 'important');
+                            frm.style.setProperty('width', '100vw', 'important');
+                            frm.style.setProperty('height', '100vh', 'important');
+                            frm.style.setProperty('margin', '0px', 'important');
+                            frm.style.setProperty('padding', '0px', 'important');
+                            frm.style.setProperty('border', 'none', 'important'); 
+                            frm.style.setProperty('outline', 'none', 'important');
+                            frm.style.setProperty('object-fit', 'cover', 'important');
+                            frm.style.setProperty('z-index', '2147483647', 'important');
+                            frm.style.setProperty('background-color', '#000000', 'important');
+                            frm.style.setProperty('display', 'block', 'important');
+                        }
+                    }
                   }
                 } catch(e) {}
-              }, 150);
+              }, 50);
             ''';
             _controller.runJavaScript(jsCode);
             _controller.runJavaScript(_kPopupKillerJs);
+            
+            // Force disable Ads button on ghostflix.st 
+            _controller.runJavaScript("try{localStorage.setItem('adsEnabled', 'false');}catch(e){}");
+
             _injectShield();
             _tryUnwrapHindi();
           },
@@ -554,7 +768,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
             }
 
             if (request.isMainFrame && widget.customUrl == null) {
-              // 🔥 GHOSTFLIX DOMAIN CHECK 🔥
               if (!url.contains('ghostflix') && !url.contains('vercel.app')) {
                 return NavigationDecision.prevent;
               }
@@ -594,8 +807,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final id = widget.tmdbId;
       final isTv = widget.mediaType == 'tv' || widget.mediaType == 'series';
       
-      // 🔥 EXACT GHOSTFLIX.ST URL STRUCTURE AS PER YOUR SCREENSHOT 🔥
-      String originalTargetUrl = 'https://ghostflix.st/play?id=$id&type=${isTv ? 'tv' : 'movie'}&season=$currentSeason&episode=$currentEpisode&server=$activeServer';
+      String originalTargetUrl = isTv 
+          ? 'https://ghostflix.st/play?id=$id&type=tv&season=$currentSeason&episode=$currentEpisode&server=$activeServer' 
+          : 'https://ghostflix.st/play?id=$id&type=movie&server=$activeServer';
       
       String vercelProxyBase = "https://hannutv-proxy-1.vercel.app/api/proxy?stream=";
       String safeFinalUrl = vercelProxyBase + Uri.encodeComponent(originalTargetUrl);
@@ -761,7 +975,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic> && mounted) {
-          final List<dynamic> cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] as List<dynamic> : <dynamic>[]; 
+          final List cast = (data['credits'] is Map && data['credits']['cast'] is List) ? data['credits']['cast'] : [];
           setState(() {
             details = data;
             castList = cast.take(30).toList();
@@ -776,7 +990,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Future<void> _buildAmbientPalette(Map<String, dynamic> data) async {
-    final List<String> paths = <String>[]; 
+    final List<String> paths = [];
     try {
       final imgs = data['images'];
       if (imgs is Map && imgs['backdrops'] is List) {
@@ -792,8 +1006,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (pp is String && pp.isNotEmpty) paths.add(pp);
     } catch (_) {}
 
-    final List<Color> palette = <Color>[]; 
-    final List<List<Color>> zonePalette = <List<Color>>[]; 
+    final List<Color> palette = [];
+    final List<List<Color>> zonePalette = [];
     for (final p in paths) {
       if (!mounted) return;
       final Color? c = await _dominantColorFromUrl(proxyImg('https://image.tmdb.org/t/p/w300$p'));
@@ -839,10 +1053,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (data == null) return null;
       final Uint8List bytes = data.buffer.asUint8List();
 
-      final List<double> wSum = List<double>.filled(24, 0); 
-      final List<double> rSum = List<double>.filled(24, 0); 
-      final List<double> gSum = List<double>.filled(24, 0); 
-      final List<double> bSum = List<double>.filled(24, 0); 
+      final List<double> wSum = List<double>.filled(24, 0);
+      final List<double> rSum = List<double>.filled(24, 0);
+      final List<double> gSum = List<double>.filled(24, 0);
+      final List<double> bSum = List<double>.filled(24, 0);
       for (int i = 0; i + 3 < bytes.length; i += 20) {
         final int r = bytes[i];
         final int g = bytes[i + 1];
@@ -975,11 +1189,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       final Uint8List bytes = data.buffer.asUint8List();
       final int w = img.width;
       final int h = img.height;
-      const List<List<int>> cells = <List<int>>[ 
+      const List<List<int>> cells = <List<int>>[
         [0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1],
       ];
-      final List<Color?> raw = <Color?>[]; 
-      for (final List<int> c in cells) { 
+      final List<Color?> raw = <Color?>[];
+      for (final List<int> c in cells) {
         raw.add(_zoneCellColor(
           bytes, w,
           (w * c[0] / 3).floor(), (w * (c[0] + 1) / 3).floor(),
@@ -1002,10 +1216,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
   }
 
   Color? _zoneCellColor(Uint8List bytes, int w, int x0, int x1, int y0, int y1) {
-    final List<double> wS = List<double>.filled(12, 0); 
-    final List<double> rS = List<double>.filled(12, 0); 
-    final List<double> gS = List<double>.filled(12, 0); 
-    final List<double> bS = List<double>.filled(12, 0); 
+    final List<double> wS = List<double>.filled(12, 0);
+    final List<double> rS = List<double>.filled(12, 0);
+    final List<double> gS = List<double>.filled(12, 0);
+    final List<double> bS = List<double>.filled(12, 0);
     for (int y = y0; y < y1; y += 3) {
       for (int x = x0; x < x1; x += 3) {
         final int i = (y * w + x) * 4;
@@ -1051,7 +1265,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
 
   Future<List<TmdbItem>> _sameGenreLoader() async {
     final dynamic gl = details?['genres'];
-    final List<String> ids = <String>[]; 
+    final List<String> ids = <String>[];
     if (gl is List) {
       for (final dynamic g in gl) {
         if (g is Map && g['id'] != null) ids.add('${g['id']}');
@@ -1072,7 +1286,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
           year: it.year,
           overview: it.overview,
         );
-    final List<Widget> rows = <Widget>[const SizedBox(height: 10)]; 
+    final List<Widget> rows = <Widget>[const SizedBox(height: 10)];
     if (details != null) {
       rows.add(_SuggestRow(
         key: ValueKey('same-${widget.tmdbId}'),
@@ -1242,8 +1456,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
     final String fetched = (d?['overview'] ?? '').toString().trim();
     final String overview = fetched.isNotEmpty ? fetched : widget.overview.trim();
     final String tagline = (d?['tagline'] ?? '').toString().trim();
-    final List<dynamic> genres = (d?['genres'] is List) ? d!['genres'] as List<dynamic> : <dynamic>[]; 
-    final List<dynamic> langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List<dynamic> : <dynamic>[]; 
+    final List genres = (d?['genres'] is List) ? d!['genres'] as List : [];
+    final List langs = (d?['spoken_languages'] is List) ? d!['spoken_languages'] as List : [];
     final String languages = langs
         .map((l) => (l is Map ? (l['english_name'] ?? l['name'] ?? '') : '').toString())
         .where((s) => s.isNotEmpty)
@@ -1276,7 +1490,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
       if (vc is num && vc > 0) ratingStr += '  (${vc.toInt()} votes)';
     }
 
-    final List<String> metaParts = <String>[]; 
+    final List<String> metaParts = [];
     if (widget.year.isNotEmpty) metaParts.add(widget.year);
     if (runtime.isNotEmpty) metaParts.add(runtime);
     if (widget.rating.isNotEmpty) metaParts.add('★ ${widget.rating}');
@@ -1478,7 +1692,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
               if (isPageLoading && !isVideoPlaying) Positioned.fill(child: Container(color: Colors.black, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [SizedBox(width: 30, height: 30, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2.5)), SizedBox(height: 10), Text("Connecting to Server...", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])))),
               Positioned(top: 14, right: 20, child: SafeArea(child: GestureDetector(onTap: _toggleFullScreen, child: Opacity(opacity: 0.85, child: Image.asset('assets/logo.png', height: 38, errorBuilder: (_, __, ___) => const Text('HANNUTV', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))))))),
               if (showControls) ...[
-                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.transparent))),
+                Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
                 Positioned(top: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.close, color: Colors.white, size: 28))))),
                 Positioned(bottom: 20, right: 20, child: SafeArea(child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(22), child: const CircleAvatar(backgroundColor: Colors.black87, radius: 22, child: Icon(Icons.fullscreen_exit, color: Colors.white, size: 28))))),
               ],
@@ -1516,7 +1730,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                   ),
                   if (showIntroAnimation) Positioned.fill(child: IgnorePointer(child: Center(child: AnimatedBuilder(animation: _introAnimController, builder: (context, child) { return Opacity(opacity: _introOpacityAnimation.value, child: Transform.scale(scale: _introScaleAnimation.value, child: Image.asset('assets/logo.png', height: 60, errorBuilder: (_, __, ___) => const Icon(Icons.play_circle_fill, color: Colors.red, size: 60)))); })))),
                   if (showControls) ...[
-                    Positioned.fill(child: IgnorePointer(child: Container(color: Colors.transparent))),
+                    Positioned.fill(child: IgnorePointer(child: Container(color: Colors.black38))),
                     Positioned(top: 10, left: 10, child: _buildFocusableItem(onTap: () => Navigator.pop(context), borderRadius: BorderRadius.circular(18), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 18, child: Icon(Icons.chevron_left, color: Colors.white, size: 28)))),
                     Positioned(bottom: 8, right: 48, child: _buildFocusableItem(onTap: _cycleAspectRatio, borderRadius: BorderRadius.circular(16), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 16, child: Icon(Icons.aspect_ratio, color: Colors.white, size: 18)))),
                     Positioned(bottom: 8, right: 8, child: _buildFocusableItem(onTap: _toggleFullScreen, borderRadius: BorderRadius.circular(16), child: const CircleAvatar(backgroundColor: Colors.black54, radius: 16, child: Icon(Icons.fullscreen, color: Colors.white, size: 22)))),
@@ -1545,6 +1759,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                     ),
                     const SizedBox(height: 14),
 
+                    // 🔥 WATCHLIST, SEARCH, AND NEW AI DOWNLOAD BUTTON ROW 🔥
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -1565,6 +1780,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                           ],
                           _buildFocusableItem(onTap: _showSearchSheet, borderRadius: BorderRadius.circular(20), child: _buildActionButton(Icons.search, "Search")),
                           
+                          // 🔥 NEW: AI DOWNLOAD BUTTON 🔥
                           const SizedBox(width: 8),
                           _buildFocusableItem(
                             onTap: _openDownloadSheet, 
@@ -1592,6 +1808,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage>
                       const SizedBox(height: 10),
                       const Text("Sponsored Ads", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
+                      const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
+                      const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
                       const SizedBox(height: 16),
                       const CustomBannerAd(htmlBannerCode: _adsterraBannerSnippet),
@@ -2016,7 +2234,7 @@ class _SearchSheetState extends State<_SearchSheet> {
   Timer? _debounce;
   bool _loading = false;
   String _lastQuery = '';
-  List> _results = >[]; 
+  List> _results = [];
 
   @override
   void dispose() {
@@ -2029,7 +2247,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     _debounce?.cancel();
     final String q = v.trim();
     if (q.isEmpty) {
-      setState(() { _results = >[]; _loading = false; _lastQuery = ''; });
+      setState(() { _results = []; _loading = false; _lastQuery = ''; });
       return;
     }
     setState(() {});
@@ -2046,8 +2264,8 @@ class _SearchSheetState extends State<_SearchSheet> {
       if (!mounted || q != _lastQuery) return;
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final List<dynamic> raw = (data is Map && data['results'] is List) ? data['results'] as List<dynamic> : <dynamic>[]; 
-        final List> out = >[]; 
+        final List raw = (data is Map && data['results'] is List) ? data['results'] : [];
+        final List> out = [];
         for (final r in raw) {
           if (r is! Map) continue;
           final String mt = r['media_type'].toString();
@@ -2089,7 +2307,7 @@ class _SearchSheetState extends State<_SearchSheet> {
     if (isPerson) {
       subtitle = dept.isEmpty ? 'Person' : dept;
     } else {
-      final List<String> parts = <String>[mt == 'tv' ? 'TV Show' : 'Movie']; 
+      final List<String> parts = [mt == 'tv' ? 'TV Show' : 'Movie'];
       if (year.isNotEmpty) parts.add(year);
       if (rating != '0.0') parts.add('★ $rating');
       subtitle = parts.join(' • ');
@@ -2206,7 +2424,7 @@ class _ActorSheetState extends State<_ActorSheet> {
   bool _loading = true;
   bool _failed = false;
   Map<String, dynamic>? _person;
-  List> _credits = >[]; 
+  List> _credits = [];
   String _filter = 'all';
   bool _bioExpanded = false;
 
@@ -2225,7 +2443,7 @@ class _ActorSheetState extends State<_ActorSheet> {
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data is Map<String, dynamic>) {
-          final List<dynamic> raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] as List<dynamic> : <dynamic>[]; 
+          final List raw = (data['combined_credits'] is Map && data['combined_credits']['cast'] is List) ? data['combined_credits']['cast'] : [];
           final Map<String, Map<String, dynamic>> uniq = {};
           for (final c in raw) {
             if (c is! Map) continue;
@@ -2247,7 +2465,7 @@ class _ActorSheetState extends State<_ActorSheet> {
               'popularity': ((c['popularity'] ?? 0) as num).toDouble(),
             };
           }
-          final List> list = uniq.values.toList(); 
+          final List> list = uniq.values.toList();
           list.sort((a, b) {
             final int ap = (a['poster'] as String).isNotEmpty ? 1 : 0;
             final int bp = (b['poster'] as String).isNotEmpty ? 1 : 0;
@@ -2262,7 +2480,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     if (mounted) setState(() { _loading = false; _failed = true; });
   }
 
-  List> get _filtered { 
+  List> get _filtered {
     if (_filter == 'movie') return _credits.where((e) => e['mediaType'] == 'movie').toList();
     if (_filter == 'tv') return _credits.where((e) => e['mediaType'] == 'tv').toList();
     return _credits;
@@ -2385,7 +2603,7 @@ class _ActorSheetState extends State<_ActorSheet> {
     final String bio = (p['biography'] ?? '').toString().trim();
     final dynamic ext = p['external_ids'];
     final String imdbId = (ext is Map ? (ext['imdb_id'] ?? '') : '').toString();
-    final List> items = _filtered; 
+    final List> items = _filtered;
 
     return CustomScrollView(
       controller: sc,
